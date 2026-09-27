@@ -5,7 +5,7 @@ import {unfold,across,joined,mapTrack} from '../src/unfold.js';
 import {atlasCamera,localNorth} from '../src/atlas-camera.js';
 import {dot,norm,direction} from '../src/geometry.js';
 import {sampleTrack,MINUTE} from '../src/ephemeris.js';
-import {groundTone,lightPixel} from '../src/atlas-render.js';
+import {groundTone,lightPixel,wallTransition} from '../src/atlas-render.js';
 import {numeral} from '../src/art-render.js';
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 test('Fuller faces form a regular icosahedron in the inherited geographic orientation',()=>{
@@ -65,4 +65,13 @@ test('flat fields are solid; dither is restricted to the lighting transition',()
 test('closed numeral counters stay available for legibility in exaggerated towers',()=>{
   for(const value of ['0','6','8','9','08','18','20'])assert.ok(numeral(value).counters.some(Boolean));
   for(const value of ['1','2','3','5','7'])assert.ok(!numeral(value).counters.some(Boolean));
+});
+test('flat tower walls remain solid; only a wall lighting boundary is halftoned',()=>{
+  const wall=new Map();for(let y=30;y<40;y++)for(let x=30;x<40;x++)wall.set(y*200+x,1);
+  assert.equal(wallTransition(wall,35,35),1);
+  for(const key of wall.keys())wall.set(key,0);
+  assert.equal(wallTransition(wall,35,35),0);
+  for(let y=30;y<40;y++)for(let x=35;x<40;x++)wall.set(y*200+x,1);
+  assert.equal(wallTransition(wall,33,35),0);assert.equal(wallTransition(wall,37,35),1);
+  assert.ok(wallTransition(wall,34,35)>0);assert.ok(wallTransition(wall,35,35)<1);
 });

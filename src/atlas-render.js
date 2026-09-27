@@ -17,6 +17,14 @@ const W=200,H=228,clamp=x=>Math.max(0,Math.min(1,x));
 const rgb=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));
 export const lightPixel=(amount,x,y)=>amount>(dither.ranks[(y&31)*32+(x&31)]+.5)/1024;
 const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a));return t*t*(3-2*t);};
+export function wallTransition(light,x,y){
+  let amount=light.get(y*W+x)*4,weight=4;
+  for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){
+    const adjacent=light.get((y+dy)*W+x+dx);if(adjacent===undefined)continue;
+    amount+=adjacent;weight++;
+  }
+  return amount/weight;
+}
 export function groundTone(land,solar,shadow=false){
   // Posterize the response into broad quiet fields. Halftone belongs around
   // the terminator and the cast shadows, not as static across every ocean.
@@ -162,6 +170,7 @@ export class AtlasRenderer{
       ctx.fillStyle=ink.light;ctx.fillRect(Math.round(p.x),Math.round(p.y),1,1);nightLights++;
     }
     for(const h of this.hours){
+      const wallLight=new Map(h.sculpture.fragments.filter(p=>!p.top).map(p=>[p.y*W+p.x,+(dot(p.normal,sun)>.20)]));
       const back=ctx.getImageData(0,0,W,H).data;
       const caps=h.sculpture.fragments.filter(p=>p.top);
       const lit=caps.reduce((sum,p)=>sum+ +(back[(p.y*W+p.x)*4]===colors[1][0]&&back[(p.y*W+p.x)*4+1]===colors[1][1]),0);
@@ -175,7 +184,7 @@ export class AtlasRenderer{
       // The same two inks and same fixed dither screen shade all surfaces.
       // The roof is clock lettering: use the opposite ink to its ground so
       // a white numeral cannot disappear into a sunlit white continent.
-      const tone=p.top?roof:smooth(.08,.32,dot(p.normal,sun));
+      const tone=p.top?roof:wallTransition(wallLight,p.x,p.y);
       ctx.fillStyle=lightPixel(tone,p.x,p.y)?ink.light:ink.dark;ctx.fillRect(p.x,p.y,1,1);
       }
       // Recessed counters keep 0/6/8/9 readable; an exaggerated extrusion
