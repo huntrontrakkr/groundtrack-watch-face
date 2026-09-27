@@ -14,7 +14,7 @@ try{
   browser=await chromium.launch();
   const page=await browser.newPage({viewport:{width:1280,height:1100},deviceScaleFactor:1});
   const failures=[];page.on('pageerror',e=>failures.push(e.message));page.on('response',r=>{if(r.status()>=400)failures.push(`${r.status()} ${r.url()}`);});
-  await page.goto(url);await page.waitForFunction(()=>window.groundtrackArt?.ready);
+  await page.goto(`${url}/study-02.html`);await page.waitForFunction(()=>window.groundtrackArt?.ready);
   assert.equal(await page.locator('#art-light').count(),0,'There must be no artificial lighting selector');
   assert.equal(await page.locator('#art-time').textContent(),'04:24');
   assert.match(await page.locator('#light-note').textContent(),/above the horizon/);

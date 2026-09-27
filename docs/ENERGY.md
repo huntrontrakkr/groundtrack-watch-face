@@ -68,3 +68,21 @@ The new default page uses an hour-fixed **perspective** camera. Geographic inver
 The browser's shadow-volume rasterizer and lighting pass add work. They have not been profiled as native code; the original storage/interpolation measurements are not battery measurements for this renderer. In particular, the 400px orthographic error bound above is not a bound for the closer perspective camera. A native spike should measure changed pixels/rows, shadow-cache error, minute-update CPU cost, peak allocations, and hourly rebuild cost before choosing a lighting cadence or promising runtime.
 
 Numeral heights are artistic exaggerations, rounded roofs use a stylized normal treatment, and there is no real elevation dataset. Terrain self-shadowing remains a later, separately budgeted feature. See [study 02](STUDY-02.md) for the visual and lighting decisions.
+
+## Study 03: repeated Fuller atlas
+
+The focused atlas is fixed between the current civil hour and the next one.
+Geographic directions, land bits, primary track samples, city placements and
+numeral meshes are cached for that window. Palette proofs share the geometry.
+A minute change recomputes solar lighting/shadows and reading marks; an identical
+scene request returns without drawing. There are no idle timers or sensors.
+
+The nonlinear inverse is used only when building the geographic raster. A
+native implementation should generate a packed per-pixel face/coordinate lookup
+outside its ordinary minute draw, and bound the shadow working set. The browser
+prototype's arrays, triangle search and multiple preview canvases are not a
+proposed watch memory layout. The inset and full shadow raster also require
+native profiling. No electrical saving, native RAM budget or frame-time promise
+has been measured for this study. Restricting the view to two hour stations and
+keeping broad fields solid improves legibility; it does not itself prove energy
+savings on a memory LCD.

@@ -44,38 +44,64 @@ function maskText(value){
     }
     const length=Math.hypot(nx,ny)||1;edgeNormals[y*w+x]={x:nx/length,y:ny/length,distance:Math.sqrt(nearest)};
   }
-  return {w,h,bits,edgeNormals};
+  const exterior=new Uint8Array(w*h),queue=[];
+  const enqueue=(x,y)=>{const i=y*w+x;if(x<0||x>=w||y<0||y>=h||bits[i]||exterior[i])return;exterior[i]=1;queue.push([x,y]);};
+  for(let x=0;x<w;x++){enqueue(x,0);enqueue(x,h-1);}for(let y=0;y<h;y++){enqueue(0,y);enqueue(w-1,y);}
+  for(let i=0;i<queue.length;i++){const [x,y]=queue[i];enqueue(x-1,y);enqueue(x+1,y);enqueue(x,y-1);enqueue(x,y+1);}
+  const counters=bits.map((v,i)=>+(!v&&!exterior[i]));
+  return {w,h,bits,edgeNormals,counters};
 }
 const numeralMasks=new Map();
-function numeral(value){if(!numeralMasks.has(value))numeralMasks.set(value,maskText(value));return numeralMasks.get(value);}
+export function numeral(value){if(!numeralMasks.has(value))numeralMasks.set(value,maskText(value));return numeralMasks.get(value);}
 
 // Render a bitmap glyph onto a physical tangent plane by inverse ray/plane
 // intersection. Texture sampling is nearest-neighbor, at the final resolution.
 // There is no Canvas font antialiasing or fractional-alpha composite.
-function glyphGeometry(camera,dir,value,height){
+export function glyphGeometry(camera,dir,value,height){
   const mask=numeral(value),plane=camera.plane(dir,height),reference=camera.plane(dir,0),origin=camera.projectWorld(reference.origin);
   const probe=camera.projectWorld(reference.at(.01,0)),pixelsPerUnit=Math.hypot(probe.x-origin.x,probe.y-origin.y)/.01;
-  const sx=1/pixelsPerUnit;
+  const sx=(camera.glyphScale||1)/pixelsPerUnit;
   const probeY=camera.projectWorld(reference.at(0,.01)),verticalScale=Math.hypot(probeY.x-origin.x,probeY.y-origin.y)/.01;
   // Modest compensation: keep the numeral recognizable while retaining a
   // visible, physical foreshortening. Never just shear a screen-space label.
-  const sy=1/(verticalScale*1.04);
+  const sy=(camera.glyphScale||1)/(verticalScale*1.04);
   const worldCorners=[[-mask.w/2,-mask.h/2],[mask.w/2,-mask.h/2],[mask.w/2,mask.h/2],[-mask.w/2,mask.h/2]]
     .map(([u,v])=>plane.at(u*sx,v*sy));
   const corners=worldCorners.map(camera.projectWorld);
   const x0=clamp(Math.floor(Math.min(...corners.map(p=>p.x)))-1,0,ART_W-1),x1=clamp(Math.ceil(Math.max(...corners.map(p=>p.x)))+1,0,ART_W-1);
   const y0=clamp(Math.floor(Math.min(...corners.map(p=>p.y)))-1,0,ART_H-1),y1=clamp(Math.ceil(Math.max(...corners.map(p=>p.y)))+1,0,ART_H-1);
-  const pixels=[];
+  const pixels=[],counterPixels=[];
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
     const local=plane.inverse(x+.5,y+.5);if(!local)continue;
     const u=Math.floor(local.x/sx+mask.w/2),v=Math.floor(mask.h/2-local.y/sy);
     if(u>=0&&u<mask.w&&v>=0&&v<mask.h&&mask.bits[v*mask.w+u])pixels.push([x,y,u,v]);
+    if(u>=0&&u<mask.w&&v>=0&&v<mask.h&&mask.counters[v*mask.w+u])counterPixels.push([x,y]);
   }
-  return {pixels,worldCorners,plane,mask,sx,sy,height,contains(local){
+  return {pixels,counterPixels,worldCorners,plane,mask,sx,sy,height,contains(local){
     if(!local)return false;
     const u=Math.floor(local.x/sx+mask.w/2),v=Math.floor(mask.h/2-local.y/sy);
     return u>=0&&u<mask.w&&v>=0&&v<mask.h&&mask.bits[v*mask.w+u]===1;
   }};
+}
+
+export function sculptureGeometry(camera,dir,value,height,getGlyph=glyphGeometry){
+    const base=getGlyph(camera,dir,value,0),cap=getGlyph(camera,dir,value,height);
+    const lower=camera.project(dir),upper=camera.project(dir,height);
+    const steps=Math.max(2,Math.ceil(Math.hypot(upper.x-lower.x,upper.y-lower.y)*2));
+    const fragments=new Map();
+    // Closely spaced horizontal sections rasterize a solid extrusion. Build
+    // once per camera; retain only the final visible surface, not each slice.
+    for(let step=0;step<=steps;step++){
+      const t=step/steps,g=step===0?base:step===steps?cap:glyphGeometry(camera,dir,value,height*t);
+      for(const [x,y,u,v] of g.pixels){
+        const edge=g.mask.edgeNormals[v*g.mask.w+u],side=g.plane.u.map((q,i)=>q*edge.x+g.plane.v[i]*edge.y);
+        const top=step===steps,bevel=top&&edge.distance<=1.5;
+        let normal=top?g.plane.normal:Math.hypot(...side)>0?side:g.plane.normal;
+        if(bevel)normal=norm(normal.map((q,i)=>q*1.8+side[i]));
+        fragments.set(y*ART_W+x,{x,y,normal,height:t,top,bevel});
+      }
+    }
+    return {base,cap,fragments:[...fragments.values()]};
 }
 
 function paintPixels(ctx,pixels,color,dx=0,dy=0){ctx.fillStyle=color;for(const [x,y] of pixels)ctx.fillRect(x+dx,y+dy,1,1);}
@@ -138,23 +164,8 @@ export class ArtRenderer{
   }
   sculpture(camera,dir,value){
     const key=[...dir,value].join('/');if(this.sculptures.has(key))return this.sculptures.get(key);
-    const base=this.glyph(camera,dir,value,0),cap=this.glyph(camera,dir,value,TOWER_HEIGHT);
-    const lower=camera.project(dir),upper=camera.project(dir,TOWER_HEIGHT);
-    const steps=Math.max(2,Math.ceil(Math.hypot(upper.x-lower.x,upper.y-lower.y)*2));
-    const fragments=new Map();
-    // Closely spaced horizontal sections rasterize a solid extrusion. Build
-    // once per camera; retain only the final visible surface, not each slice.
-    for(let step=0;step<=steps;step++){
-      const t=step/steps,g=step===0?base:step===steps?cap:glyphGeometry(camera,dir,value,TOWER_HEIGHT*t);
-      for(const [x,y,u,v] of g.pixels){
-        const edge=g.mask.edgeNormals[v*g.mask.w+u],side=g.plane.u.map((q,i)=>q*edge.x+g.plane.v[i]*edge.y);
-        const top=step===steps,bevel=top&&edge.distance<=1.5;
-        let normal=top?g.plane.normal:Math.hypot(...side)>0?side:g.plane.normal;
-        if(bevel)normal=norm(normal.map((q,i)=>q*1.8+side[i]));
-        fragments.set(y*ART_W+x,{x,y,normal,height:t,top});
-      }
-    }
-    const result={base,cap,fragments:[...fragments.values()]};this.sculptures.set(key,result);return result;
+    const result=sculptureGeometry(camera,dir,value,TOWER_HEIGHT,this.glyph.bind(this));
+    this.sculptures.set(key,result);return result;
   }
   paintSculpture(ctx,sculpture,light,pal){
     const tone=rgb(pal.face);

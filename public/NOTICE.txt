@@ -293,3 +293,20 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+Study 03 projection and city data
+--------------------------------
+The Gray–Fuller forward triangle transform in src/fuller.js is adapted from
+Philippe Riviere's (2018) free/libre implementation, expressly dedicated to
+the public domain (CC0) in his notebook:
+https://observablehq.com/@fil/buckminster-fullers-triangle-transformation
+The transformation implements the equations described by Robert W. Gray,
+"Exact Transformation Equations For Fuller's World Map," Cartographica,
+32(3), 1995. No source code from Gray's restricted implementation is used.
+Icosahedral orientation follows Gray's published geographic coordinates.
+
+The 243-place city catalog in data/cities.json is derived from Natural Earth
+1:110m populated places, public-domain geographic data:
+https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_populated_places.geojson
+https://www.naturalearthdata.com/about/terms-of-use/
+Population values are used only to limit marker density, not as current estimates.
