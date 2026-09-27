@@ -1,0 +1,10 @@
+{
+  "name": "ISS",
+  "source": "https://github.com/shashwatak/satellite-js/blob/develop/README.md",
+  "description": "Historical example from the Satellite.js README. Used only near its 2019-06-05 epoch; never presented as a live ISS position.",
+  "tle": [
+    "1 25544U 98067A   19156.50900463  .00003075  00000-0  59442-4 0  9992",
+    "2 25544  51.6433  59.2583 0008217  16.4489 347.6017 15.51174618173442"
+  ],
+  "epoch": "2019-06-05T12:12:58.000Z"
+}
