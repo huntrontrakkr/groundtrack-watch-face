@@ -1,12 +1,12 @@
 # Groundtrack
 
-**A clock drawn across the Earth.** A body's ground track becomes the time scale: hours sit on the landscape, smaller ticks mark the intervals, and the body identifies the present minute.
+**A little landscape that tells time.** Two hour numerals rise from the Earth like towers. A body's ground track runs upward between them, with five-minute marks and a small current-minute marker. The actual Sun lights the scene and casts the towers' shadows; a tiny map compass keeps the rotated landscape oriented.
 
-An independent Pebble Time 2 concept, following the battery and pixel-rendering work in [Dymaxion](https://github.com/huntrontrakkr/dymaxion-watch-face). Groundtrack is a working title. This repository currently contains a **browser design study and a trajectory-cache experiment**, not an installable watchface.
+An independent Pebble Time 2 concept, following the pixel-rendering and battery work in [Dymaxion](https://github.com/huntrontrakkr/dymaxion-watch-face). Groundtrack is a working title. This repository currently contains **browser design studies and a trajectory-cache experiment**, not an installable watchface.
 
-![Sun, Moon and ISS in three projections](docs/screenshots/contact-sheet.png)
+![Sculpted and inlaid watchface studies](docs/screenshots/study-02-contact-sheet.png)
 
-## Try the study
+## Try the studies
 
 Use Node 22.12 or newer:
 
@@ -15,24 +15,19 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. Choose Sun, Moon, or the archived ISS orbit; compare the close landscape, oblique, and globe views; scrub one hour either side of the study time. There are three RGB222 palettes, optional day/night shading, three texture choices, city/home marks, and a second independently positioned Sun/Moon marker. Home is an explicit Norfolk example. Nothing requests your location.
+Open the URL printed by Vite. **Study 02** is the default: sculpted or inlaid numerals, three materials, three camera angles, Sun or Moon tracks, and dated afternoon/sunset/night observations. Scrub through the selected civil hour. Optional stipple, a map compass, 24-hour numerals, and a small full-time readout let us compare readability. No location request or motion sensor is used.
 
-The normal hour labels and the exact-time callout always share the selected civil time zone. ISS views add quarter-hour labels because most of a 90-minute orbit is hidden on the far side of a globe. Crowded minute ticks are thinned rather than merged. The study is frozen until you interact with it.
+**Study 01** remains at `/study-01.html`: a broader orbital exploration with Sun, Moon, and an archived ISS orbit; landscape, oblique, and globe views; three palettes; home/city marks; and a second independently calculated Sun/Moon marker. Home is an explicit Norfolk example. Both studies remain frozen until you interact.
 
-**Data is explicit:** Sun and Moon use Astronomy Engine. ISS uses Satellite.js with its published June 5, 2019 example TLE, is visibly labeled `ARCHIVE`, and refuses to extrapolate more than a day from that epoch. The live CelesTrak endpoint timed out during the initial study. There is no live satellite catalog or background network polling yet.
+Read [the sculptural design notes](docs/STUDY-02.md), [the first study's research](docs/DESIGN.md), and [the battery architecture](docs/ENERGY.md).
 
-## Direction
+## Data and light
 
-- Let geography be the face, with one fully annotated primary track.
-- Keep the camera steady between page changes. Advance the marker once per minute.
-- Support a broad phone-side satellite catalog eventually; begin with up to two secondary markers, with distinct shapes as well as colors.
-- Treat Sun/Moon ground points separately from artificial satellite propagation. A ground point is not the object's apparent location in your local sky.
-- Prefer measured, subtle texture. Dither the surface, leave every time label and marker crisp.
-- Add real elevation contours only after the basic face has a measured native rendering budget. Terrain shadows are a later experiment, not a current feature.
+Sun and Moon positions use Astronomy Engine. In study 02 the same calculated Sun supplies the only directional lighting. Towers cast shadows as volumes onto a spherical Earth; ambient display tones keep the night side readable. The structures are deliberately exaggerated artwork. Coastlines are real map data, but they contain no terrain elevations. The compass indicates geographic north within the map, not the wearer's magnetic heading.
 
-Read [the design and research notes](docs/DESIGN.md) and [the battery architecture](docs/ENERGY.md) for the important tradeoffs, including fast orbits, nearly stationary satellites, horizon occlusion, and data expiry.
+ISS uses Satellite.js with its published June 5, 2019 example TLE, is labeled `ARCHIVE`, and refuses to extrapolate more than a day from that epoch. There is no live satellite catalog or background network polling yet. The close hour-to-hour sculptural view is currently for the Sun and Moon; a fast satellite needs a different time-window treatment.
 
-## Measurement and verification
+## Verification and measurement
 
 ```sh
 npm test
@@ -42,25 +37,27 @@ npm run test:browser
 npm run build
 ```
 
-On Linux, Playwright may also need `npx playwright install-deps chromium`. Browser tests start and stop their own preview server; `GROUNDTRACK_URL` can point them at an already-running dev or production preview.
+On Linux, Playwright may also need `npx playwright install-deps chromium`. Browser tests start and stop their own servers; `GROUNDTRACK_URL` can point them at an existing dev or production preview. CI checks both pages and produces a downloadable static preview. It does not publish a watchface.
 
-The initial 6-hour cache study uses signed 16-bit XYZ knots and normalized interpolation. Two-minute ISS knots use **1,106 bytes**; ten-minute Sun and Moon knots use **242 bytes each**. The largest sampled projected error is **0.098 pixel** at a 400-pixel globe radius. That is additional interpolation/quantization error against the same model, **not total orbital accuracy**, and says nothing by itself about electrical power consumption. Results and caveats are saved in [trajectory-measurements.json](docs/trajectory-measurements.json).
+Tests cover projection and horizon behavior, time-zone transitions, compass direction, sunlight and volume shadows, 153 rendering combinations across both studies, all 24 hour numerals, RGB222 pixels, cache reuse, controls, and 320/390-pixel mobile layouts.
 
-Tests cover geographic roundtrips, horizon clipping, dateline interpolation, solar cross-checks, lunar phase, packet corruption/expiry, time-zone transitions, coastlines, 81 rendering combinations, RGB222/monochrome pixels, deterministic drawing, cache reuse, actual controls, and 320/390-pixel mobile layouts. CI runs these checks and produces a downloadable static preview; it does not publish a watchface.
+The initial six-hour trajectory-cache experiment uses **1,106 bytes** for two-minute ISS knots and **242 bytes each** for ten-minute Sun/Moon knots. The largest sampled extra interpolation/quantization error was **0.098 pixel at a 400-pixel orthographic globe radius**. This is neither total orbital accuracy nor a bound for the new perspective camera. See [the recorded measurements](docs/trajectory-measurements.json).
+
+Study 02 caches geography and tower geometry within an hour, then uses the selected minute for solar lighting and shadows. It performs no idle redraws. Native CPU cost, memory use, and electrical battery savings have **not** been measured. The larger shadows need profiling before being part of an installable face.
 
 ## Repository map
 
 | Location | Purpose |
 | --- | --- |
+| `src/art-camera.js` | Track-aligned perspective and geographic north |
+| `src/art-light.js` | Solar rays and solid-numeral shadow intersections |
+| `src/art-render.js` | Native-pixel sculptural rendering and geometry caches |
 | `src/ephemeris.js` | Sun/Moon astronomy and bounded historical ISS propagation |
-| `src/geometry.js` | Globe projection and safe direction interpolation |
-| `src/render.js` | Native-resolution watch studies; browser caches |
-| `src/trajectory.js` | Packed trajectory experiment, with expired-cache rejection |
-| `tools/measure.mjs` | Repeatable accuracy and storage measurement |
-| `tools/generate-land.mjs` | Offline Natural Earth raster generation |
-| `tools/generate-dither.mjs` | Deterministic periodic void-and-cluster threshold tile |
-| `docs/` | Research, architecture, measured results and visual proofs |
+| `src/render.js` | Original orbital study and shared bitmap utilities |
+| `src/trajectory.js` | Packed trajectory experiment with expiry handling |
+| `tools/` | Reproducible land, dither, font, and trajectory generators |
+| `docs/` | Research, architecture, measurements, and visual proofs |
 
-The 0.25-degree land atlas is a 129,600-byte **flash/resource candidate**; it must not be loaded wholesale into watch RAM. There is no native Pebble renderer yet, and browser timing/memory cannot validate one. No Dymaxion app identity, publishing credentials, or store release workflow is reused.
+The quarter-degree land atlas is a 129,600-byte flash/resource candidate; a native port must not load it wholesale into watch RAM. No Dymaxion app identity, credentials, or store release workflow is reused.
 
-Apache-2.0. Natural Earth data is public domain. Dependency and reused Dymaxion code/type notices are in [NOTICE](NOTICE).
+Project code: Apache-2.0. Natural Earth: public domain. Fira Sans and its derived numeral masks: SIL OFL 1.1. Other dependency and reused Dymaxion notices are in [NOTICE](NOTICE).

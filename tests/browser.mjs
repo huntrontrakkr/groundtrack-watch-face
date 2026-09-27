@@ -14,7 +14,7 @@ try{
   browser=await chromium.launch();
   const page=await browser.newPage({viewport:{width:1280,height:1100},deviceScaleFactor:1});
   const failures=[];page.on('pageerror',e=>failures.push(e.message));page.on('response',r=>{if(r.status()>=400)failures.push(`${r.status()} ${r.url()}`);});
-  await page.goto(url);await page.waitForFunction(()=>window.groundtrack?.ready);
+  await page.goto(`${url}/study-01.html`);await page.waitForFunction(()=>window.groundtrack?.ready);
   assert.equal(await page.locator('vite-error-overlay').count(),0);
   assert.equal(await page.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(242, 241, 233)');
   await page.screenshot({path:'test-results/desktop.png',fullPage:true});

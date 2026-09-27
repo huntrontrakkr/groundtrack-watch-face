@@ -60,3 +60,11 @@ This is arithmetic, not measured native allocation. CPU projection costs, palett
 6. Then run a multi-day device comparison under similar backlight, notification and activity conditions. Only that can support a useful battery-runtime claim.
 
 Terrain, cast shadows, continuous camera movement and additional detailed tracks stay behind this measurement gate. A subtle face that sleeps between minutes is the design target.
+
+## Study 02: sculpted hour towers
+
+The new default page uses an hour-fixed **perspective** camera. Geographic inverse rays, the land mask, glyph planes, and visible tower surface fragments are cached. The selected minute supplies the actual solar vector, ground shading, and complete tower shadows. A map-relative compass uses geographic projection and needs no physical heading sensor. There is no idle render loop.
+
+The browser's shadow-volume rasterizer and lighting pass add work. They have not been profiled as native code; the original storage/interpolation measurements are not battery measurements for this renderer. In particular, the 400px orthographic error bound above is not a bound for the closer perspective camera. A native spike should measure changed pixels/rows, shadow-cache error, minute-update CPU cost, peak allocations, and hourly rebuild cost before choosing a lighting cadence or promising runtime.
+
+Numeral heights are artistic exaggerations, rounded roofs use a stylized normal treatment, and there is no real elevation dataset. Terrain self-shadowing remains a later, separately budgeted feature. See [study 02](STUDY-02.md) for the visual and lighting decisions.
