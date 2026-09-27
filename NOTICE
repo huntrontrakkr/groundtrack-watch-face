@@ -310,3 +310,12 @@ The 243-place city catalog in data/cities.json is derived from Natural Earth
 https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_populated_places.geojson
 https://www.naturalearthdata.com/about/terms-of-use/
 Population values are used only to limit marker density, not as current estimates.
+
+Study 04 art-direction reference
+--------------------------------
+docs/art-direction/shorelight-concept.png is an AI-generated material study
+created with OpenAI's built-in image-generation tool on September 27, 2026.
+The full prompt and context are in docs/art-direction/README.md. It is not
+a watch screenshot and is not used by the map or watch renderer. Study 04
+uses its own fixed 4x4 ordered color mixing; the older studies retain the
+void-and-cluster screen credited above.

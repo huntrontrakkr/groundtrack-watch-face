@@ -11,7 +11,7 @@ try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(url)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}assert.ok(ready,logs);
   browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1280,height:1100},deviceScaleFactor:1});
   const failures=[];page.on('pageerror',e=>failures.push(e.message));page.on('response',r=>{if(r.status()>=400)failures.push(`${r.status()} ${r.url()}`);});
-  await page.goto(url);await page.waitForFunction(()=>window.groundtrackAtlas?.ready);
+  await page.goto(`${url}/study-03.html`);await page.waitForFunction(()=>window.groundtrackAtlas?.ready);
   assert.equal(await page.locator('#atlas-time').textContent(),'04:24');
   assert.equal(await page.locator('#atlas-minute').getAttribute('max'),'59');
   assert.equal(await page.locator('[data-zoom]').count(),0,'The wider overview must not return to this study');

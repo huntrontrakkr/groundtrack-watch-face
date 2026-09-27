@@ -26,7 +26,7 @@ export function sunPlaneHit(ground,sun,plane){
   const distance=(dot(plane.origin,plane.normal)-dot(ground,plane.normal))/denominator;
   if(distance<=0)return null;
   const offset=ground.map((v,i)=>v+sun[i]*distance-plane.origin[i]);
-  return {x:dot(offset,plane.u),y:dot(offset,plane.v)};
+  return {x:dot(offset,plane.dualU||plane.u),y:dot(offset,plane.dualV||plane.v)};
 }
 
 // Exact grid traversal through an extruded bitmap's footprint. This fills
@@ -63,7 +63,7 @@ export function sunVolumeHit(ground,sun,glyph){
   if(t1<t0)return false;
   const uv=t=>{
     const p=ground.map((v,i)=>v+sun[i]*t-plane.normal[i]);
-    return {x:dot(p,plane.u)/glyph.sx+glyph.mask.w/2,y:glyph.mask.h/2-dot(p,plane.v)/glyph.sy};
+    return {x:dot(p,plane.dualU||plane.u)/glyph.sx+glyph.mask.w/2,y:glyph.mask.h/2-dot(p,plane.dualV||plane.v)/glyph.sy};
   };
   return segmentHitsMask(glyph.mask,uv(t0),uv(t1));
 }

@@ -68,8 +68,9 @@ export function glyphGeometry(camera,dir,value,height){
   const worldCorners=[[-mask.w/2,-mask.h/2],[mask.w/2,-mask.h/2],[mask.w/2,mask.h/2],[-mask.w/2,mask.h/2]]
     .map(([u,v])=>plane.at(u*sx,v*sy));
   const corners=worldCorners.map(camera.projectWorld);
-  const x0=clamp(Math.floor(Math.min(...corners.map(p=>p.x)))-1,0,ART_W-1),x1=clamp(Math.ceil(Math.max(...corners.map(p=>p.x)))+1,0,ART_W-1);
-  const y0=clamp(Math.floor(Math.min(...corners.map(p=>p.y)))-1,0,ART_H-1),y1=clamp(Math.ceil(Math.max(...corners.map(p=>p.y)))+1,0,ART_H-1);
+  const width=camera.width||ART_W,heightPx=camera.heightPx||ART_H;
+  const x0=clamp(Math.floor(Math.min(...corners.map(p=>p.x)))-1,0,width-1),x1=clamp(Math.ceil(Math.max(...corners.map(p=>p.x)))+1,0,width-1);
+  const y0=clamp(Math.floor(Math.min(...corners.map(p=>p.y)))-1,0,heightPx-1),y1=clamp(Math.ceil(Math.max(...corners.map(p=>p.y)))+1,0,heightPx-1);
   const pixels=[],counterPixels=[];
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
     const local=plane.inverse(x+.5,y+.5);if(!local)continue;
@@ -94,11 +95,12 @@ export function sculptureGeometry(camera,dir,value,height,getGlyph=glyphGeometry
     for(let step=0;step<=steps;step++){
       const t=step/steps,g=step===0?base:step===steps?cap:glyphGeometry(camera,dir,value,height*t);
       for(const [x,y,u,v] of g.pixels){
-        const edge=g.mask.edgeNormals[v*g.mask.w+u],side=g.plane.u.map((q,i)=>q*edge.x+g.plane.v[i]*edge.y);
+        const edge=g.mask.edgeNormals[v*g.mask.w+u],side=(g.plane.dualU||g.plane.u).map((q,i)=>q*edge.x+(g.plane.dualV||g.plane.v)[i]*edge.y);
         const top=step===steps,bevel=top&&edge.distance<=1.5;
         let normal=top?g.plane.normal:Math.hypot(...side)>0?side:g.plane.normal;
+        if(!top&&g.plane.dualU&&g.plane.dualU!==g.plane.u)normal=norm(normal);
         if(bevel)normal=norm(normal.map((q,i)=>q*1.8+side[i]));
-        fragments.set(y*ART_W+x,{x,y,normal,height:t,top,bevel});
+        fragments.set(y*(camera.width||ART_W)+x,{x,y,normal,height:t,top,bevel});
       }
     }
     return {base,cap,fragments:[...fragments.values()]};
