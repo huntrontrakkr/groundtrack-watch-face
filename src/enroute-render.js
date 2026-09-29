@@ -74,6 +74,7 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // above a station's horizon (about 15.6 degrees of arc).
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
+export const NUMERALS=['colon','plain','even','mono','accent'];
 export const FIGURE={scale:40,hour:80,hourTwo:72,minute:28,callout:28,calloutMinute:20};
 // The time scale registers with the route: its hour marks stand over the
 // two stations, 120 px apart on the zoomed charts, so each minute is exactly
@@ -155,7 +156,7 @@ const FIX=['....#....','...###...','...###...','..#####..','..#####..','.#######
 const AIRPORT=['.....#.....','.....#.....','....###....','...#...#...','..#.....#..','###.....###','..#.....#..','...#...#...','....###....','.....#.....','.....#.....'];
 const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['....#....','...#.#...','...#.#...','..#...#..','..#...#..','.#.....#.','#########'];
-export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed'}){
+export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed',numerals='colon',zone='utc'}){
   const pal=PLATES[plate],buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
   const zoneAt=(x,y)=>light[Math.max(0,Math.min(H-1,Math.round(y)))*W+Math.max(0,Math.min(W-1,Math.round(x)))];
@@ -377,10 +378,29 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // hung from a shoulder, the cartographer's elbow leader, that runs back
   // to the body. The leader is cased with a hairline of paper so it crosses
   // relief cleanly, and it breaks for lettering, as a printed line does.
-  const calloutWidth=(big,small)=>runWidth(hour,big)+2*(gapFor(big)+1)+glyph(small,':').width+runWidth(parts.m,small);
+  // The callout's time, in one of the styles under study: 'colon' (the
+  // hour, a colon and smaller minutes), 'plain' (no colon), 'even' (four
+  // figures at one size, the minutes outlined like the next hour's
+  // figure), 'mono' (minutes in double-size Departure Mono) and 'accent'
+  // (smaller minutes in the route's ink). Pixels are relative to the top
+  // left of the hour figure; every style shares its baseline.
+  const timeFigure=(big,small)=>{
+    const fh=runHeight(big),gap=gapFor(big),hh=numerals==='even'&&clock24?hour.padStart(2,'0'):hour,solid=figurePixels(hh,big,0,0),hollow=[],accent=[];
+    let x=runWidth(hh,big);const sh=runHeight(small),add=(px,to)=>{for(const q of px)to.push(q);};
+    if(numerals==='colon'){x+=gap+1;add(figurePixels(':',small,x,fh-sh),solid);x+=glyph(small,':').width+gap+1;add(figurePixels(parts.m,small,x,fh-sh),solid);x+=runWidth(parts.m,small);}
+    else if(numerals==='even'){x+=gap+3;add(outline(figurePixels(parts.m,big,x,0),1),hollow);x+=runWidth(parts.m,big);}
+    else if(numerals==='mono'){x+=gap+3;add(textPixels(departure.double,parts.m,x,fh),solid);x+=textWidth(departure.double,parts.m)-2;}
+    else{x+=gap+3;add(figurePixels(parts.m,small,x,fh-sh),numerals==='accent'?accent:solid);x+=runWidth(parts.m,small);}
+    return {solid,hollow,accent,w:x,h:fh};
+  };
+  const setTime=(t,fx,fy)=>{
+    const at=px=>px.map(([a,b])=>[a+fx,b+fy]),solid=at(t.solid),hollow=at(t.hollow),accent=at(t.accent);
+    letter([...solid,...hollow],ink('ink'));if(accent.length)letter(accent,ink('route'));
+    return [...solid,...hollow,...accent];
+  };
+  const calloutWidth=(big,small)=>timeFigure(big,small).w;
   const callout=({big,small,x:bx,y:by,up,reach,aside=null})=>{
-    const gap=gapFor(big),colon=gapFor(big)+1,hw=runWidth(hour,big),cw=glyph(small,':').width,mw=runWidth(parts.m,small),fw=hw+colon+cw+colon+mw;
-    const fh=runHeight(big),sh=runHeight(small),sy=up?by-reach:by+reach;
+    const t=timeFigure(big,small),fw=t.w,fh=t.h,sy=up?by-reach:by+reach;
     const open=([x,y])=>!type.some(b=>x>=b.x-2&&x<b.x+b.w+2&&y>=b.y-2&&y<b.y+b.h+2);
     if(aside){
       // Set aside in open map beside the track: the figure level with the
@@ -388,8 +408,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       // the body from the shoulder's near end.
       const fx=aside.x,fy=Math.max(aside.top,Math.min(aside.bottom-fh-3,by-fh)),y=fy+fh+3,end={x:fx+fw+1,y},d=Math.hypot(end.x-bx,end.y-by)||1,line=[];
       segment({x:bx+(end.x-bx)/d*9,y:by+(end.y-by)/d*9},end,(x,y)=>line.push([x,y]));segment({x:fx-1,y},end,(x,y)=>line.push([x,y]));
-      const mx0=fx+hw+colon,figure=[...figurePixels(hour,big,fx,fy),...figurePixels(':',small,mx0,fy+fh-sh),...figurePixels(parts.m,small,mx0+cw+colon,fy+fh-sh)];
-      letter(line.filter(open),ink('ink'));letter(figure,ink('ink'));
+      letter(line.filter(open),ink('ink'));const figure=setTime(t,fx,fy);
       return {figure,box:bounds(figure)};
     }
     // Hang the time on whichever side keeps it on the face and its leader
@@ -401,9 +420,8 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       return {fx,shown,score:(fits?0:1000)+(line.length-shown.length)*10+(side===(bx<W/2?1:-1)?0:1)};
     };
     const {fx,shown}=[layout(1),layout(-1)].sort((a,b)=>a.score-b.score)[0];
-    const fy=up?sy-3-fh:sy+3,mx0=fx+hw+colon;
-    const figure=[...figurePixels(hour,big,fx,fy),...figurePixels(':',small,mx0,fy+fh-sh),...figurePixels(parts.m,small,mx0+cw+colon,fy+fh-sh)];
-    letter(shown,ink('ink'));letter(figure,ink('ink'));
+    const fy=up?sy-3-fh:sy+3;
+    letter(shown,ink('ink'));const figure=setTime(t,fx,fy);
     return {figure,box:bounds(figure)};
   };
   if(camera.world&&tape!=='fixed'){
@@ -525,7 +543,10 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     if(middle){const c=textPixels(LABEL,middle,Math.round((left+right-textWidth(LABEL,middle))/2),y);letter(c,color,1);zulu={text:middle,box:bounds(c)};}
   };
   // Zulu: the same moment in UTC, as pilots and mission control keep it.
-  const utc=new Date(epoch),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}Z`;let zulu=null;
+  // With zone 'body', the margin shows instead the time in the nautical
+  // time zone under the body, with the zone's letter: Z at Greenwich, R for
+  // US Eastern, I for Japan. The Sun's is always near noon.
+  const zoned=zone==='body'?nauticalZone(body.lon):{hours:0,letter:'Z'},utc=new Date(epoch+zoned.hours*3600000),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}${zoned.letter}`;let zulu=null;
   const MONTHS='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
   if(camera.world){
     // Satellites say where their numbers come from: the 2019 archive, or
@@ -546,7 +567,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
-    figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,time:camera.day||readout?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+}
+// Nautical time zones: 15° wide, centred on multiples of 15°, lettered A–M
+// east of Greenwich (no J), N–Y west, Z at Greenwich.
+export function nauticalZone(lon){
+  const hours=Math.max(-12,Math.min(12,Math.round((((lon+540)%360)-180)/15)));
+  return {hours,letter:hours===0?'Z':hours>0?'ABCDEFGHIKLM'[hours-1]:'NOPQRSTUVWXY'[-hours-1]};
 }
 // Local clock time in the chart's four figures, 24-hour, no colon.
 const hhmm=(t,timeZone)=>{const q=clockParts(t,timeZone);return `${String(q.h).padStart(2,'0')}${String(q.m).padStart(2,'0')}`;};
@@ -572,15 +599,15 @@ export function localDate(epoch,timeZone){
 export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',start=civilHour(epoch,timeZone);
+    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',numerals=NUMERALS.includes(state.numerals)?state.numerals:'colon',zone=state.zone==='body'?'body':'utc',start=civilHour(epoch,timeZone);
     const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
       this.camera=projection==='fuller'?(body==='sun'||body==='moon'||view==='day'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):view==='day'?chartCamera(body,start,{day:localDay(epoch,timeZone)}):chartCamera(body,start,{span:SPAN,center:slide?minute:null});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
-    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${tape}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
-    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events,tape});
+    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${tape}/${numerals}/${zone}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
+    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events,tape,numerals,zone});
     const zones=[0,0,0];for(const z of this.light)zones[z]++;
     this.sceneKey=sceneKey;this.stats.renders++;
     const rgba=new Uint8ClampedArray(W*H*4);for(let i=0;i<W*H;i++){rgba.set(out.buf.subarray(i*3,i*3+3),i*4);rgba[i*4+3]=255;}

@@ -48,10 +48,18 @@ try{
   await page.locator('#enroute-minute').fill('3');await page.locator('#enroute-minute').dispatchEvent('input');await page.locator('#enroute-reset').click();assert.equal(await page.locator('#enroute-minute').inputValue(),'24');
   await page.locator('[data-body="sun"]').click();await page.locator('.art-options summary').click();await page.locator('#enroute-zone').selectOption('Asia/Kolkata');
   assert.equal(await page.locator('#enroute-time').textContent(),'13:54');
-  assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['1','54','2']);
+  assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['13','54','14']);
   assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
   await page.locator('#enroute-readout').check();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
   await page.locator('#enroute-readout').uncheck();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
+  // 24-hour figures are the default; the callout sets four figures, and the
+  // margin can give the nautical zone under the body.
+  assert.equal(await page.locator('#enroute-24').isChecked(),true);
+  await page.locator('#enroute-readout').check();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.time),'1354');
+  await page.locator('#enroute-numerals').selectOption('colon');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.time),'13:54');
+  await page.locator('#enroute-numerals').selectOption('even');await page.locator('#enroute-readout').uncheck();
+  await page.locator('#enroute-margin-zone').selectOption('body');assert.match(await page.evaluate(()=>groundtrackEnroute.main.last.zulu.text),/^\d{4}[A-IK-Z]$/);
+  await page.locator('#enroute-margin-zone').selectOption('utc');assert.match(await page.evaluate(()=>groundtrackEnroute.main.last.zulu.text),/^\d{4}Z$/);
   await page.locator('#enroute-24').check();assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.next];}),['13','14']);
   // Home: New York by default; none; or the browser's location, when asked.
   assert.equal(await page.locator('#home-select').inputValue(),'America/New_York');
