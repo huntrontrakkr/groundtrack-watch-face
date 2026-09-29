@@ -6,10 +6,11 @@ import {ChartRenderer,CHARTS,W,H} from '../src/chart-render.js';
 import {EnrouteRenderer,PLATES} from '../src/enroute-render.js';
 import {decodeRelief} from '../src/relief.js';
 import {encodePNG} from './png.mjs';
+import {HOMES} from '../src/home.js';
 import fonts from '../data/draft-font.json' with {type:'json'};
 
 const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
-const zone='America/New_York';
+const zone='America/New_York',home=HOMES[zone];
 mkdirSync('docs/screenshots',{recursive:true});
 
 function contactSheet(study,scenes,styles,draw){
@@ -43,7 +44,7 @@ const enroute=contactSheet('study-06',[
   {name:'moon-day',caption:'MOON BY DAY / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z')},
   {name:'moon-dusk',caption:'MOON AT NIGHTFALL / 05:24',body:'moon',epoch:Date.parse('2026-09-19T09:24:00Z')},
   {name:'iss',caption:'ISS ARCHIVE / 08:24',body:'iss',epoch:Date.parse('2019-06-05T12:24:00Z')}
-],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate}).buf);
+],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate,home}).buf);
 
 // Spike: the same faces on a rolling Fuller sheet.
 const fuller=contactSheet('study-06-fuller',[
@@ -51,6 +52,6 @@ const fuller=contactSheet('study-06-fuller',[
   {name:'iss-later',caption:'ISS ARCHIVE / 09:24',body:'iss',epoch:Date.parse('2019-06-05T13:24:00Z')},
   {name:'sun',caption:'SUN / 04:24',body:'sun',epoch:Date.parse('2026-09-27T08:24:00Z')},
   {name:'moon-day',caption:'MOON BY DAY / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z')}
-],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate,projection:'fuller'}).buf);
+],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate,projection:'fuller',home}).buf);
 
 console.log(`Wrote ${chart} Study 05, ${enroute} Study 06 and ${fuller} rolling-Fuller native proofs, three contact sheets and three 2x enlargements.`);

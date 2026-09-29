@@ -14,6 +14,7 @@ import numerals from '../data/enroute-font.json' with {type:'json'};
 import departure from '../data/departure-font.json' with {type:'json'};
 import network from '../data/tracking-stations.json' with {type:'json'};
 import {catalogEntry,elementsFor} from './satellites.js';
+import {riseSet,nextPass,reach} from './home.js';
 
 export {W,H};
 const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));
@@ -148,9 +149,11 @@ export function contourLevel(relief,land,i,levels=CONTOURS){
   return 0;
 }
 
+// An airport with services: a ring with four ticks, as on a sectional.
+const AIRPORT=['.....#.....','.....#.....','....###....','...#...#...','..#.....#..','###.....###','..#.....#..','...#...#...','....###....','.....#.....','.....#.....'];
 const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['....#....','...#.#...','...#.#...','..#...#..','..#...#..','.#.....#.','#########'];
-export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false}){
+export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null}){
   const pal=PLATES[plate],buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
   const zoneAt=(x,y)=>light[Math.max(0,Math.min(H-1,Math.round(y)))*W+Math.max(0,Math.min(W-1,Math.round(x)))];
@@ -234,6 +237,28 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // points with their network codes. On the world band each also shows its
   // acquisition circle, as on the plotboards of the mission control rooms.
   const stations=[],taken=[],type=[];
+  // The margins' lettering is reserved: the date line under the chart and,
+  // with a home, the rise, set or pass line over it.
+  const overlaps=box=>taken.some(b=>b.x<box.x+box.w&&box.x<b.x+b.w&&b.y<box.y+box.h&&box.y<b.y+b.h);
+  if(!camera.world){taken.push({x:0,y:H-16,w:W,h:16});if(home)taken.push({x:0,y:0,w:W,h:14});}
+  // Home: the wearer's own station, drawn first so the network gives way to
+  // it. It takes the chart's airport symbol, a ring with four ticks, and on
+  // the world views the acquisition circle within which the satellite
+  // clears 10° above the home horizon.
+  let homeMark=null;
+  if(home){
+    const q=camera.project(home.lat,home.lon),x=Math.round(q.x),y=Math.round(q.y),col=ink('mark');
+    if(camera.world||camera.wide&&!camera.day){
+      const r=reach(position(camera.body,epoch).altitude);
+      for(let bearing=0;bearing<360;bearing+=3){const g=destination(home.lat,home.lon,r,bearing),c=camera.project(g.lat,g.lon);if(Math.abs(c.x-x)<W/2&&inBand(c.y)&&!camera.outside?.(c.x,c.y))plot(buf,c.x,c.y,col(c.x,c.y));}
+    }
+    const w=textWidth(LABEL,home.code),right=x+7+w<W-3,box={x:right?x-5:x-8-w,y:y-6,w:w+13,h:13};
+    if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!camera.outside?.(x,y)&&!overlaps(box)){
+      // Placed now so the network gives way; drawn last, over everything.
+      const code=textPixels(LABEL,home.code,right?x+7:x-7-w,y+4);
+      taken.push(box);type.push(bounds(code));homeMark={x,y,box,code};
+    }
+  }
   // On a whole-orbit Fuller sheet only the stations that can hear the
   // satellite during this hour are shown, each with its acquisition circle.
   const heard=s=>camera.track.some(p=>p.hour&&dot(p.dir,direction(s.lat,s.lon))>=Math.cos(ACQUISITION*RAD));
@@ -242,7 +267,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const p=camera.project(s.lat,s.lon),x=Math.round(p.x),y=Math.round(p.y);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
     const w=textWidth(LABEL,s.code),right=x+5+w<W-3,box={x:right?x-3:x-6-w,y:y-5,w:w+9,h:11};
-    if(taken.some(b=>b.x<box.x+box.w&&box.x<b.x+b.w&&b.y<box.y+box.h&&box.y<b.y+b.h))continue;
+    if(overlaps(box))continue;
     taken.push(box);stations.push({code:s.code,x,y,box});
     if(camera.world||camera.wide)for(let bearing=0;bearing<360;bearing+=5){
       const q=destination(s.lat,s.lon,ACQUISITION,bearing),r=camera.project(q.lat,q.lon);
@@ -387,8 +412,8 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // A whole day is too long a scale to read minutes from, so the strip
     // carries a time callout, in the open paper above the net where there
     // is room, otherwise below the body.
-    const fh=runHeight(FIGURE.scale),netTop=Math.max(0,Math.min(...camera.tiles.map(t=>t.box[1]))),up=netTop>=fh+16||my-26-fh>=4;
-    const reach=netTop>=fh+16?my-(Math.round((netTop-fh)/2)+fh+3):26;
+    const fh=runHeight(FIGURE.scale),head=home?14:0,netTop=Math.max(0,Math.min(...camera.tiles.map(t=>t.box[1]))),room=netTop-head>=fh+16,up=room||my-26-fh>=4+head;
+    const reach=room?my-(head+Math.round((netTop-head-fh)/2)+fh+3):26;
     const c=callout({big:FIGURE.scale,small:FIGURE.minute,x:mx,y:my,up,reach});
     hourPixels=c.figure;nextSolid=[];index={x:mx,y:my};
   }else{
@@ -401,6 +426,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       minuteBox=callout({big:FIGURE.callout,small:FIGURE.calloutMinute,x:mx,y:my,up:false,reach:26}).box;
     }
   }
+  // Home on top of the route and figures, on its own knockout.
+  if(homeMark){
+    const {x,y,code}=homeMark,col=ink('mark');
+    for(let dy=-6;dy<=6;dy++)for(let dx=-6;dx<=6;dx++)if(dx*dx+dy*dy<=36)clear(x+dx,y+dy);
+    AIRPORT.forEach((row,dy)=>[...row].forEach((v,dx)=>{if(v==='#')plot(buf,x+dx-5,y+dy-5,col(x,y));}));
+    letter(code,col);delete homeMark.code;
+  }
   // Margins: the ISS archive and altitude; otherwise the date in the chart's
   // own terms, with the day of the year as mission control kept it.
   const margin=(l,r,y,color)=>{letter(textPixels(LABEL,l,6,y),color,1);letter(textPixels(LABEL,r,W-6-textWidth(LABEL,r),y),color,1);};
@@ -411,12 +443,30 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const elements=elementsFor(camera.body),date=new Date(elements?elements.epoch:epoch),day=String(date.getUTCDate()).padStart(2,'0');
     const source=elements?`${elements.catalog?.code||'SAT'} EL ${day} ${MONTHS[date.getUTCMonth()]} ${String(date.getUTCHours()).padStart(2,'0')}${String(date.getUTCMinutes()).padStart(2,'0')}Z`:`ARCHIVE ${day} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
     margin(source,`${Math.round(body.altitude)} KM`,top-6,()=>pal.spaceInk);
+    // Under the band, the next pass over home: acquisition of signal, its
+    // length and its greatest elevation; or, while in view, loss of signal.
+    if(home)margin(passText(camera.body,home,epoch,timeZone),'',H-1,()=>pal.spaceInk);
   }else{
     const d=localDate(epoch,timeZone);
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'));
+    // Over the chart, home's next satellite pass, or the day's rise and
+    // set of the Sun or Moon there, in local time.
+    if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
   }
-  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,
+  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,
     figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+}
+// Local clock time in the chart's four figures, 24-hour, no colon.
+const hhmm=(t,timeZone)=>{const q=clockParts(t,timeZone);return `${String(q.h).padStart(2,'0')}${String(q.m).padStart(2,'0')}`;};
+export function riseText(body,home,epoch,timeZone){
+  const {rise,set}=riseSet(body,home,localDay(epoch,timeZone).start),[a,b]=body==='moon'?['MR','MS']:['SR','SS'];
+  return [`${home.code} ${a} ${rise?hhmm(rise,timeZone):'----'}`,`${b} ${set?hhmm(set,timeZone):'----'}`];
+}
+export function passText(body,home,epoch,timeZone){
+  const pass=nextPass(body,home,epoch);
+  if(!pass)return `${home.code} NO PASS`;
+  if(pass.aos<=epoch)return `${home.code} IN VIEW LOS ${hhmm(pass.los,timeZone)}`;
+  return `${home.code} AOS ${hhmm(pass.aos,timeZone)} ${Math.max(1,Math.round((pass.los-pass.aos)/MINUTE))}M ${Math.round(pass.peak)}°`;
 }
 // The calendar date where the watch is, and its day of the year.
 const dateFormats=new Map();
@@ -430,15 +480,15 @@ export function localDate(epoch,timeZone){
 export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,start=civilHour(epoch,timeZone);
+    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,start=civilHour(epoch,timeZone);
     const projection=state.projection==='fuller'?'fuller':'chart',geometryKey=`${projection}/${body}/${start}/${timeZone}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
       this.camera=projection==='fuller'?(body==='sun'||body==='moon'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
-    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}`;if(this.sceneKey===sceneKey)return this.last;
-    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout});
+    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${home?`${home.code}${home.lat},${home.lon}`:''}`;if(this.sceneKey===sceneKey)return this.last;
+    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home});
     const zones=[0,0,0];for(const z of this.light)zones[z]++;
     this.sceneKey=sceneKey;this.stats.renders++;
     const rgba=new Uint8ClampedArray(W*H*4);for(let i=0;i<W*H;i++){rgba.set(out.buf.subarray(i*3,i*3+3),i*4);rgba[i*4+3]=255;}

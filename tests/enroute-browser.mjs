@@ -53,6 +53,14 @@ try{
   await page.locator('#enroute-readout').check();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
   await page.locator('#enroute-readout').uncheck();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
   await page.locator('#enroute-24').check();assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.next];}),['13','14']);
+  // Home: New York by default; none; or the browser's location, when asked.
+  assert.equal(await page.locator('#home-select').inputValue(),'America/New_York');
+  await page.locator('#home-select').selectOption('none');assert.equal(await page.evaluate(()=>groundtrackEnroute.state.home),null);
+  await page.context().grantPermissions(['geolocation'],{origin:new URL(url).origin});await page.context().setGeolocation({latitude:51.47793,longitude:-0.00148});
+  await page.locator('#home-select').selectOption('here');await page.waitForFunction(()=>groundtrackEnroute.state.home?.name==='My location');
+  assert.deepEqual(await page.evaluate(()=>{const h=groundtrackEnroute.state.home;return [h.lat,h.lon];}),[51.48,0]);
+  assert.equal(await page.locator('#home-select').inputValue(),'here');assert.match(await page.locator('#home-status').textContent(),/51\.48°N/);
+  await page.locator('#home-select').selectOption('Europe/London');assert.equal(await page.evaluate(()=>groundtrackEnroute.state.home.name),'London');
   // Live satellites: CelesTrak is intercepted, so no network is used. One
   // satellite answers with fresh elements, another with an error.
   const requests=[];
