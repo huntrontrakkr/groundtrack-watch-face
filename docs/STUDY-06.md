@@ -15,6 +15,7 @@ The Study 05 chart, redrawn in the language of aeronautical charts and of NASA's
 - **The present.** The body's own symbol: ☉ for the Sun, the Moon in its calculated phase, or a small station for the ISS.
 - **The network.** Twenty-four stations of the Mercury (1961–63) and Apollo (1967–75) tracking networks, drawn as circled points with their network codes. Examples include TAN (Tananarive, Madagascar), ZZB (Zanzibar), CRO (Carnarvon) and GDS (Goldstone). When labels would collide, the station earlier in the list wins.
 - **Acquisition circles.** On the ISS world band, each station also carries the circle within which a 410 km orbit rises 5° above its horizon, about 15.6° of arc. The circles are computed on the sphere, so they widen toward the poles, as they did on the Mercator plotboards.
+- **Lettering.** Station codes, quarter-hour marks and margin notes are set in [Departure Mono](https://github.com/rektdeckard/departure-mono) (SIL OFL 1.1). It is a pixel face drawn on an 11 px grid, so at 11 px every pixel is fully on or off, with no thresholding. Its slashed zeros and squared capitals suit chart lettering, and they sit well beside the Fira Sans figures. The page uses it for all its small type as well. A double-size version was also tried for the raised minutes, but its 2 px strokes looked spindly beside the heavy hour figure, so the minutes stay in Fira.
 - **Honest margins.** The ISS view states `ARCHIVE 05 JUN 2019` and the station's altitude, because it is a bounded archive, not live data.
 - **Night.** The paper plates print night as a regular dot screen under every symbol. The screen deepens from nothing at sunset to 25% at the end of civil twilight, which is how a printed chart would overprint a tint. The Plotboard keeps flat light zones.
 
@@ -30,7 +31,7 @@ The Study 05 chart, redrawn in the language of aeronautical charts and of NASA's
 
 - **Relief:** `public/relief.bin` is a quarter-degree grid that lines up cell for cell with `public/land.bin` (1,036,800 bytes). It uses square-root codes: 0–63 is depth to 11,000 m and 64–255 is height to 8,850 m. `npm run generate:relief` rebuilds it from the AWS Open Data Terrain Tiles (Tilezen Joerd) at zoom 3. At that zoom, the tiles' own source headers list only NOAA ETOPO1 and USGS GMTED2010, both in the public domain. The generator records those headers in `data/relief.json` and refuses to write the grid if any other source appears. Checks cover the Tibetan plateau, the Altiplano, the Amazon basin, the Netherlands, the Mariana Trench, and agreement with the coastline atlas, where 99.7% of land cells have non-negative height. The grid is generalized and **not for navigation**.
 - **Tracking stations:** `data/tracking-stations.json` holds positions rounded to about 0.1° from public histories of the networks. They place a symbol, not a survey point.
-- **Everything else** carries over from Study 05: Astronomy Engine for the Sun and Moon, the bounded 2019 Satellite.js ISS archive, Natural Earth coastlines, and Fira Sans (SIL OFL 1.1) and Dymaxion pixel figures.
+- **Everything else** carries over from Study 05: Astronomy Engine for the Sun and Moon, the bounded 2019 Satellite.js ISS archive, Natural Earth coastlines, and Fira Sans (SIL OFL 1.1). Departure Mono (SIL OFL 1.1) is new for the chart lettering.
 
 ## The exploration
 

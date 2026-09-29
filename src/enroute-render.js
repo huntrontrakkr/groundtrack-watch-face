@@ -10,7 +10,7 @@ import {SUNRISE_SINE,CIVIL_TWILIGHT_SINE} from './solar.js';
 import {chartCamera,groundLayer,lightLayer,civilHour,LAND,SPACE,COAST,W,H} from './chart-render.js';
 import {reliefAt} from './relief.js';
 import numerals from '../data/chart-font.json' with {type:'json'};
-import drafts from '../data/draft-font.json' with {type:'json'};
+import departure from '../data/departure-font.json' with {type:'json'};
 import network from '../data/tracking-stations.json' with {type:'json'};
 
 export {W,H};
@@ -42,6 +42,8 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
 export const FIGURE={hour:80,hourTwo:72,minute:36,next:36};
+// Chart lettering: Departure Mono, drawn on the display's own pixel grid.
+const LABEL=departure.regular;
 
 function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];}
 function segment(a,b,fn){
@@ -150,7 +152,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   for(const s of network.stations){
     const p=camera.project(s.lat,s.lon),x=Math.round(p.x),y=Math.round(p.y);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
-    const w=textWidth(drafts.small,s.code),right=x+5+w<W-3,box={x:right?x-3:x-6-w,y:y-4,w:w+9,h:9};
+    const w=textWidth(LABEL,s.code),right=x+5+w<W-3,box={x:right?x-3:x-6-w,y:y-5,w:w+9,h:11};
     if(taken.some(b=>b.x<box.x+box.w&&box.x<b.x+b.w&&b.y<box.y+box.h&&box.y<b.y+b.h))continue;
     taken.push(box);stations.push({code:s.code,x,y,box});
     if(camera.world)for(let bearing=0;bearing<360;bearing+=5){
@@ -159,7 +161,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     }
     for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(buf,x+dx,y+dy,ink('ink')(x,y));}
     plot(buf,x,y,ink('ink')(x,y));
-    letter(textPixels(drafts.small,s.code,right?x+5:x-5-w,y+3),ink('ink'));
+    letter(textPixels(LABEL,s.code,right?x+5:x-5-w,y+4),ink('ink'));
   }
   // The route, as the magenta line: bold behind the present, fine ahead,
   // dashed before and after the hour. Ticks every five minutes; the
@@ -177,7 +179,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);if(m%5||m===0||m===60)continue;
     const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const size=m%15===0?4:2;for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
-    if(m%15===0&&!camera.world){const label=String(m);letter(textPixels(drafts.small,label,Math.round(p.x+nx*9-textWidth(drafts.small,label)/2),Math.round(p.y+ny*9+3)),ink('route'),0);}
+    if(m%15===0&&!camera.world){const label=String(m);letter(textPixels(LABEL,label,Math.round(p.x+nx*6-textWidth(LABEL,label)/2),Math.round(p.y+ny*6+8)),ink('route'),0);}
   }
   // This hour's station is a VOR: a hexagon inside a compass rose, north up.
   // The next hour is an open triangle, a reporting point.
@@ -220,9 +222,9 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // The ISS is an archived orbit: say so, with its altitude, in the margin.
   if(camera.world){
     const date=new Date(epoch),month='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ')[date.getUTCMonth()];
-    const archive=`ARCHIVE ${String(date.getUTCDate()).padStart(2,'0')} ${month} ${date.getUTCFullYear()}`,altitude=`ALT ${Math.round(body.altitude)} KM`;
-    letter(textPixels(drafts.small,archive,8,top-8),()=>pal.spaceInk,0);
-    letter(textPixels(drafts.small,altitude,W-8-textWidth(drafts.small,altitude),top-8),()=>pal.spaceInk,0);
+    const archive=`ARCHIVE ${String(date.getUTCDate()).padStart(2,'0')} ${month} ${date.getUTCFullYear()}`,altitude=`${Math.round(body.altitude)} KM`;
+    letter(textPixels(LABEL,archive,8,top-6),()=>pal.spaceInk,0);
+    letter(textPixels(LABEL,altitude,W-8-textWidth(LABEL,altitude),top-6),()=>pal.spaceInk,0);
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,
     figure:{hour,minute:parts.m,next,box:bounds([...hourPixels,...minutePixels]),nextBox:bounds(nextPixels)},rose:camera.world?null:{...c0,r:20}};

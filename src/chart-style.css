@@ -5,3 +5,6 @@
 .chart-page .art-reading h2{font-family:Georgia,serif;font-size:26px}
 @media(max-width:760px){.chart-page .intro-note{font-size:15px}.chart-page .watch-wrap{min-height:430px}.chart-page .comparison-grid span{font-size:8px}.chart-page .section-heading{align-items:start}}
 @media(max-width:370px){.chart-page .watch-wrap{min-height:345px}}
+/* Study 06 lettering: Departure Mono, a pixel face drawn on an 11 px grid; its small sizes stay on multiples of 11. */
+@font-face{font-family:"Departure Mono";src:url('./fonts/DepartureMono-Regular.woff2') format('woff2');font-display:swap}
+.enroute-page{--mono:"Departure Mono",ui-monospace,SFMono-Regular,Consolas,monospace}.enroute-page .stage-meta,.enroute-page .range-ends,.enroute-page .page-footer,.enroute-page .art-study-date,.enroute-page .comparison-grid span,.enroute-page .scene-caption,.enroute-page .edition,.enroute-page .eyebrow{font-size:11px!important;-webkit-font-smoothing:none;font-smooth:never}.enroute-page .art-clock-readout output{font:22px var(--mono)}.enroute-page .brand{font-weight:400}
