@@ -502,7 +502,20 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     }else{hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);}
     letter(hourPixels,ink('ink'));letter(outline(nextSolid,2),ink('ink'));
     index={x:ix,y:c0.y};
-    if(readout){
+    if(readout==='flag'){
+      // Optional minute flag: a staff rising from the body into the space
+      // between the route and the hour figures, flying a small pennant with
+      // the minutes reversed out of the route's ink in the chart's
+      // lettering. It flies ahead, toward the next hour, and turns back as
+      // the next station comes near.
+      const tw=textWidth(LABEL,parts.m)-1,fh2=11,fw=tw+6,point=6,top=my-24,ahead=forward?1:-1,room=forward?c1.x-mx:mx-c1.x;
+      const d=room<fw+point+8?-ahead:ahead,staff=[],flag=[];
+      for(let y=top;y<=my-8;y++)staff.push([mx,y]);
+      for(let y=0;y<fh2;y++){const tip=Math.round(point*(1-Math.abs(2*y-(fh2-1))/(fh2-1)));for(let x=0;x<fw+tip;x++)flag.push([d>0?mx+1+x:mx-1-x,top+y]);}
+      const digits=textPixels(LABEL,parts.m,d>0?mx+4:mx-fw+2,top+10);
+      letter([...staff,...flag],ink('route'),1);for(const [a,b] of digits)clear(a,b);
+      minuteBox=bounds(flag);
+    }else if(readout){
       // Optional time callout, under the route, clear of the hour figures.
       minuteBox=callout({big:FIGURE.callout,small:FIGURE.calloutMinute,x:mx,y:my,up:false,reach:26}).box;
     }
@@ -567,7 +580,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
-    figure:{hour,minute:parts.m,next,time:camera.day||readout?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,time:camera.day||readout===true?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // Nautical time zones: 15° wide, centred on multiples of 15°, lettered A–M
 // east of Greenwich (no J), N–Y west, Z at Greenwich.
@@ -599,7 +612,7 @@ export function localDate(epoch,timeZone){
 export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',numerals=NUMERALS.includes(state.numerals)?state.numerals:'colon',zone=state.zone==='body'?'body':'utc',start=civilHour(epoch,timeZone);
+    const {body,epoch,timeZone,clock24,plate}=state,readout=state.readout==='flag'?'flag':!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',numerals=NUMERALS.includes(state.numerals)?state.numerals:'colon',zone=state.zone==='body'?'body':'utc',start=civilHour(epoch,timeZone);
     const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
       this.camera=projection==='fuller'?(body==='sun'||body==='moon'||view==='day'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):view==='day'?chartCamera(body,start,{day:localDay(epoch,timeZone)}):chartCamera(body,start,{span:SPAN,center:slide?minute:null});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);

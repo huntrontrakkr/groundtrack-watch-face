@@ -50,14 +50,15 @@ try{
   assert.equal(await page.locator('#enroute-time').textContent(),'13:54');
   assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['13','54','14']);
   assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
-  await page.locator('#enroute-readout').check();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
-  await page.locator('#enroute-readout').uncheck();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
+  await page.locator('#enroute-readout').selectOption('callout');assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
+  await page.locator('#enroute-readout').selectOption('flag');assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout.h===11));
+  await page.locator('#enroute-readout').selectOption('off');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
   // 24-hour figures are the default; the callout sets four figures, and the
   // margin can give the nautical zone under the body.
   assert.equal(await page.locator('#enroute-24').isChecked(),true);
-  await page.locator('#enroute-readout').check();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.time),'1354');
+  await page.locator('#enroute-readout').selectOption('callout');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.time),'1354');
   await page.locator('#enroute-numerals').selectOption('colon');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.time),'13:54');
-  await page.locator('#enroute-numerals').selectOption('even');await page.locator('#enroute-readout').uncheck();
+  await page.locator('#enroute-numerals').selectOption('even');await page.locator('#enroute-readout').selectOption('off');
   await page.locator('#enroute-margin-zone').selectOption('body');assert.match(await page.evaluate(()=>groundtrackEnroute.main.last.zulu.text),/^\d{4}[A-IK-Z]$/);
   await page.locator('#enroute-margin-zone').selectOption('utc');assert.match(await page.evaluate(()=>groundtrackEnroute.main.last.zulu.text),/^\d{4}Z$/);
   await page.locator('#enroute-24').check();assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.next];}),['13','14']);

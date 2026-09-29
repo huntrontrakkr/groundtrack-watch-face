@@ -42,7 +42,7 @@ function render(){
   if(!list.children.length){const li=document.createElement('li');li.textContent='No events this day.';list.append(li);}
   $('home-select').value=state.home?(Object.keys(HOMES).find(k=>HOMES[k]===state.home)||'here'):'none';
   $('enroute-numerals').value=state.numerals;$('enroute-margin-zone').value=state.zone;
-  $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-readout').checked=state.readout;
+  $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-readout').value=state.readout===true?'callout':state.readout||'off';
   const sat=catalogEntry(state.body),elements=elementsFor(state.body);
   $('enroute-date').textContent=new Date(state.epoch).toISOString().slice(0,10);$('body-note').textContent=sat?sat.note:NOTES[state.body];
   const lat=r.marker.lat,lon=((r.marker.lon+540)%360)-180,place=`${Math.abs(lat).toFixed(1)}°${lat<0?'S':'N'} ${Math.abs(lon).toFixed(1)}°${lon<0?'W':'E'}`;
@@ -139,6 +139,6 @@ try{
   });
   $('enroute-numerals').addEventListener('change',()=>{state.numerals=$('enroute-numerals').value;render();});
   $('enroute-margin-zone').addEventListener('change',()=>{state.zone=$('enroute-margin-zone').value;render();});
-  $('enroute-readout').addEventListener('change',()=>{state.readout=$('enroute-readout').checked;render();});
+  $('enroute-readout').addEventListener('change',()=>{const v=$('enroute-readout').value;state.readout=v==='callout'?true:v==='flag'?'flag':false;render();});
   render();window.groundtrackEnroute={ready:true,state,main,render,track,demos:DEMOS,observations:OBSERVATIONS,events:STUDY_EVENTS};
 }catch(error){$('enroute-caption').textContent=`The chart could not load: ${error.message}. Please reload.`;console.error(error);}

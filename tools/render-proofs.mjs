@@ -81,4 +81,8 @@ const numerals=contactSheet('study-06-numerals',[
   {name:'moon',caption:'MOON / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z'),plate:'sectional',readout:true}
 ],NUMERALS.map(k=>[k,NAMES[k]]),(scene,style)=>new EnrouteRenderer(atlas,meters).render({timeZone:zone,clock24:true,home,events,...scene,numerals:style}).buf);
 
-console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape, ${gnss} GPS/QZSS and ${numerals} numeral native proofs, six contact sheets and six 2x enlargements.`);
+// The minute flag across the hour.
+const flag=contactSheet('study-06-flag',[4,24,44,58].map(m=>({name:`m${m}`,caption:`SUN / 04:${String(m).padStart(2,'0')}`,body:'sun',epoch:Date.parse('2026-09-27T08:00:00Z')+m*60000})),
+  ['enroute','plotboard','red'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,plate,home,events,readout:'flag'}).buf);
+
+console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape, ${gnss} GPS/QZSS, ${numerals} numeral and ${flag} flag native proofs, seven contact sheets and seven 2x enlargements.`);
