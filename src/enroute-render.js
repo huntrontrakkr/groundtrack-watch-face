@@ -162,7 +162,10 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const levels=camera.wide?[2000,4000]:CONTOURS;
   // Distance from the shore, out to a few pixels, for waterlining.
   let shore=null;
-  if(pal.waterline){
+  // At world scale coasts crowd together, so a one-ink plate keeps its
+  // waterlines and shelf edge for the zoomed charts only.
+  const sparse=pal.mono&&(camera.wide||camera.world);
+  if(pal.waterline&&!sparse){
     shore=new Uint8Array(W*H).fill(255);let edge=[];
     for(let i=0;i<W*H;i++)if(land[i]&&mat[i]!==SPACE){shore[i]=0;edge.push(i);}
     for(let d=1;d<=5&&edge.length;d++){const next=[];for(const i of edge){const x=i%W;for(const j of [x>0?i-1:-1,x<W-1?i+1:-1,i-W,i+W])if(j>=0&&j<W*H&&shore[j]===255){shore[j]=d;next.push(j);}}edge=next;}
@@ -173,7 +176,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       const level=contourLevel(relief,land,i,levels);
       if(level&&((level!==CONTOURS[0]&&!pal.dots)||((x+y)&1)===0))c=pal.contour[z];
       else if(mat[i]===COAST)c=pal.coast[z];
-      else if(!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF))c=pal.shelf[z];
+      else if(!sparse&&!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF))c=pal.shelf[z];
       else if(shore&&!land[i]&&shore[i]>=2&&shore[i]<=5&&y%3===0)c=pal.waterline;
     }
     // Console night: dark scan lines, every other line by night and every
