@@ -17,7 +17,7 @@ try{
   assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['4','24','5']);
   // The canvas and the three proofs show exactly the renderer's native pixels.
   let combinations=0;
-  for(const body of ['sun','moon','iss'])for(const plate of ['enroute','sectional','plotboard'])for(const clock24 of [false,true]){
+  for(const body of ['sun','moon','iss'])for(const plate of ['enroute','sectional','plotboard','hypsometric','red','crt','sunlight'])for(const clock24 of [false,true]){
     const r=await page.evaluate(({body,plate,clock24})=>{
       const g=groundtrackEnroute;Object.assign(g.state,{body,plate,clock24,epoch:g.demos[body]});g.render();
       const shown=document.getElementById('enroute-watch').getContext('2d').getImageData(0,0,200,228).data,own=g.main.last.rgba;let differ=0,invalid=0;

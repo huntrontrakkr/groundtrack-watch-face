@@ -17,7 +17,7 @@ import {catalogEntry,elementsFor} from './satellites.js';
 
 export {W,H};
 const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));
-const inks=list=>list.map(hex);
+const inks=list=>list.map(hex),SHELF_DEPTH=-200;
 // Printing plates. Each ink has a day, dusk and night value; paper plates
 // keep their day colors and take a dot screen through twilight and night.
 export const PLATES={
@@ -35,7 +35,37 @@ export const PLATES={
     water:inks(['#000055','#000055','#000000']),land:inks(['#005555','#005555','#000055']),coast:inks(['#55AAAA','#55AAAA','#0055AA']),
     contour:inks(['#00AAAA','#00AAAA','#0055AA']),shelf:inks(['#0055AA','#0055AA','#000055']),grid:inks(['#0055AA','#0055AA','#0055AA']),
     route:inks(['#FFAA00','#FFAA00','#FFAA00']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFAA']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
-    space:hex('#000000'),spaceInk:hex('#FFFFFF')}
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')},
+  // After the jet navigation charts: layer tints by height, green lowland
+  // through tan to brown, and the sea tinted deeper off the shelf.
+  hypsometric:{name:'Hypsometric',note:'Jet navigation chart: layer tints by height',night:'screen',
+    tints:[[300,hex('#AAFFAA')],[1000,hex('#FFFFAA')],[2000,hex('#FFAA55')],[3500,hex('#AA5500')],[Infinity,hex('#AA5555')]],depths:[[SHELF_DEPTH,hex('#AAFFFF')],[-Infinity,hex('#55AAFF')]],
+    water:inks(['#AAFFFF','#AAFFFF','#AAFFFF']),land:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),coast:inks(['#0055AA','#0055AA','#0055AA']),
+    contour:inks(['#555500','#555500','#555500']),shelf:inks(['#0055AA','#0055AA','#0055AA']),grid:inks(['#005555','#005555','#005555']),
+    route:inks(['#FF00AA','#FF00AA','#FF00AA']),ink:inks(['#000055','#000055','#000055']),mark:inks(['#000000','#000000','#000000']),
+    screen:hex('#000055'),space:hex('#FFFFFF'),spaceInk:hex('#000055')},
+  // Red cockpit lighting, which keeps the eye's night vision: reds only,
+  // drawn as outlines on black; coasts dim where it is night.
+  red:{name:'Night red',note:'Cockpit red: every ink a red, nothing to dazzle',night:'zones',
+    water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#AA0000','#AA0000','#550000']),
+    contour:inks(['#550000','#550000','#550000']),shelf:inks(['#550000','#550000','#550000']),grid:inks(['#550000','#550000','#550000']),
+    route:inks(['#FF0000','#FF0000','#FF0000']),ink:inks(['#FF5555','#FF5555','#FF5555']),mark:inks(['#FFAAAA','#FFAAAA','#FFAAAA']),
+    space:hex('#000000'),spaceInk:hex('#FF5555')},
+  // The green phosphor of the consoles: one green at several brightnesses,
+  // and night drawn with dark scan lines, dusk with every fourth line.
+  crt:{name:'Green CRT',note:'Console phosphor: one green, night in scan lines',night:'zones',scan:true,
+    water:inks(['#000000','#000000','#000000']),land:inks(['#005500','#005500','#005500']),coast:inks(['#00AA00','#00AA00','#00AA00']),
+    contour:inks(['#00AA00','#00AA00','#00AA00']),shelf:inks(['#005500','#005500','#005500']),grid:inks(['#005500','#005500','#005500']),
+    route:inks(['#00FF00','#00FF00','#00FF00']),ink:inks(['#AAFFAA','#AAFFAA','#AAFFAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000000'),spaceInk:hex('#55FF55')},
+  // For bright sun: black on white only. A band of waterlines follows the
+  // coast, as on one-color charts; contours are dotted and the route is
+  // cased in white so it leads.
+  sunlight:{name:'Sunlight',note:'One ink: black on white, water lined',night:'screen',mono:true,waterline:hex('#000000'),dots:true,
+    water:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),land:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),coast:inks(['#000000','#000000','#000000']),
+    contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000000','#000000','#000000']),grid:inks(['#000000','#000000','#000000']),
+    route:inks(['#000000','#000000','#000000']),ink:inks(['#000000','#000000','#000000']),mark:inks(['#000000','#000000','#000000']),
+    screen:hex('#000000'),space:hex('#FFFFFF'),spaceInk:hex('#000000')}
 };
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
@@ -124,19 +154,31 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const pal=PLATES[plate],buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
   const zoneAt=(x,y)=>light[Math.max(0,Math.min(H-1,Math.round(y)))*W+Math.max(0,Math.min(W-1,Math.round(x)))];
-  const base=i=>mat[i]===SPACE?pal.space:(land[i]?pal.land:pal.water)[light[i]];
+  const tint=(table,v)=>table.find(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit)[1];
+  const base=i=>mat[i]===SPACE?pal.space:pal.tints&&land[i]?tint(pal.tints,relief[i]):pal.depths&&!land[i]?tint(pal.depths,relief[i]):(land[i]?pal.land:pal.water)[light[i]];
   const ink=key=>(x,y)=>pal[key][zoneAt(x,y)];
   // Ground: water, land, coastline, contours and the continental shelf edge.
   // A whole-orbit Fuller sheet keeps only the 2,000 and 4,000 m contours.
   const levels=camera.wide?[2000,4000]:CONTOURS;
+  // Distance from the shore, out to a few pixels, for waterlining.
+  let shore=null;
+  if(pal.waterline){
+    shore=new Uint8Array(W*H).fill(255);let edge=[];
+    for(let i=0;i<W*H;i++)if(land[i]&&mat[i]!==SPACE){shore[i]=0;edge.push(i);}
+    for(let d=1;d<=5&&edge.length;d++){const next=[];for(const i of edge){const x=i%W;for(const j of [x>0?i-1:-1,x<W-1?i+1:-1,i-W,i+W])if(j>=0&&j<W*H&&shore[j]===255){shore[j]=d;next.push(j);}}edge=next;}
+  }
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=y*W+x,z=light[i];let c=base(i);
     if(mat[i]!==SPACE){
       const level=contourLevel(relief,land,i,levels);
-      if(level&&(level!==CONTOURS[0]||((x+y)&1)===0))c=pal.contour[z];
+      if(level&&((level!==CONTOURS[0]&&!pal.dots)||((x+y)&1)===0))c=pal.contour[z];
       else if(mat[i]===COAST)c=pal.coast[z];
       else if(!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF))c=pal.shelf[z];
+      else if(shore&&!land[i]&&shore[i]>=2&&shore[i]<=5&&y%3===0)c=pal.waterline;
     }
+    // Console night: dark scan lines, every other line by night and every
+    // fourth through twilight.
+    if(pal.scan&&z&&y%(z===2?2:4)===1)c=pal.space;
     buf.set(c,i*3);
   }
   // Paper plates show night as a regular dot tint, deepening through civil
@@ -201,6 +243,11 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // dashed before and after the hour. Ticks every five minutes; the
   // quarter hours are longer and carry their minute, like a plotted track.
   const track=camera.track,now=Math.floor(epoch/MINUTE)*MINUTE,[s0,s1]=camera.stations,jump=(a,b)=>Math.abs(b.x-a.x)>W/2;
+  // A one-ink plate cases the route in white, so it reads over waterlines.
+  if(pal.mono)for(let i=1;i<track.length;i++){
+    const a=track[i-1],b=track[i];if(jump(a,b)||!(a.hour&&b.hour))continue;
+    segment(a,b,(x,y)=>{for(let dy=-2;dy<=2;dy++)for(let dx=-1;dx<=1;dx++)clear(x+dx,y+dy);});
+  }
   for(let i=1;i<track.length;i++){
     const a=track[i-1],b=track[i];if(jump(a,b))continue;
     const hour=a.hour&&b.hour,bold=hour&&b.epoch<=now,steep=Math.abs(b.y-a.y)>Math.abs(b.x-a.x);
@@ -219,14 +266,14 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const hr=Math.round((p.epoch-camera.day.start)/3600000),size=hr%24===0?7:hr%3===0?5:3;
     for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
-    if(hr%3===0){const hh=Number(clockParts(p.epoch,timeZone).h),label=String(clock24?(hr===24?24:hh):hh%12||12),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*9-lw/2)+1,Math.round(p.y+ny*9+9));type.push(bounds(q));letter(q,ink('route'),0);}
+    if(hr%3===0){const hh=Number(clockParts(p.epoch,timeZone).h),label=String(clock24?(hr===24?24:hh):hh%12||12),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*9-lw/2)+1,Math.round(p.y+ny*9+9));type.push(bounds(q));letter(q,ink('route'),pal.mono?1:0);}
   }
   for(let i=1;i<track.length-1&&!camera.day;i++){
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);
     if((p.epoch-s0.epoch)%MINUTE||m<=0||m>=60||(camera.world&&m%5))continue;
     const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const size=camera.world?(m%15===0?4:2):m%15===0?6:m%5===0?4:2;for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
-    if(!camera.world&&m%15===0){const label=String(m),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*8-lw/2)+1,Math.round(p.y+ny*8+9));type.push(bounds(q));letter(q,ink('route'),0);}
+    if(!camera.world&&m%15===0){const label=String(m),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*8-lw/2)+1,Math.round(p.y+ny*8+9));type.push(bounds(q));letter(q,ink('route'),pal.mono?1:0);}
   }
   // This hour's station is a VOR: a hexagon inside a compass rose, north up.
   // The next hour is an open triangle, a reporting point.

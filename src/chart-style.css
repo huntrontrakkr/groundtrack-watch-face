@@ -20,3 +20,5 @@
 .enroute-page .help{font-size:14px}.enroute-page .segmented button{font-size:14px}.enroute-page .reading article>p:last-child{font-size:15px}.enroute-page .section-heading>p:last-child{font-size:14px}.enroute-page .theme-options button{font-size:13px}.enroute-page .technical{font-size:14px}
 .enroute-page .live-row{display:flex;gap:8px}.enroute-page .live-row select{flex:1;max-width:none;font:14px var(--sans);padding:9px}.enroute-page .live-row button{border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:9px 14px;font:14px var(--sans)}.enroute-page .range-actions button{font:inherit;border:0;background:none;padding:0;text-decoration:underline;text-underline-offset:3px}
 .enroute-page .live-row select{min-width:0;width:100%}.enroute-page .live-row{min-width:0}.enroute-page .range-ends{flex-wrap:wrap;row-gap:6px}
+.enroute-page .theme-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}.enroute-page .theme-options button{min-width:0;overflow-wrap:anywhere}
+.enroute-page .comparison-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.enroute-page .comparison-grid span{overflow-wrap:anywhere}

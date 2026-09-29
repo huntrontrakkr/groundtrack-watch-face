@@ -18,7 +18,7 @@ The Study 05 chart, redrawn in the language of aeronautical charts and of NASA's
 - **Acquisition circles.** On the ISS world band, each station also carries the circle within which a 410 km orbit rises 5° above its horizon, about 15.6° of arc. The circles are computed on the sphere, so they widen toward the poles, as they did on the Mercator plotboards.
 - **Type.** The figures are set in Jost (SIL OFL 1.1), a revival of Futura, the face of the Apollo 11 plaque and many mission patches. Jost replaced Fira Sans after a side-by-side test on the face. Barlow (a DIN-style face) was the close second; Michroma was too wide for the figures at this size. The chart lettering (station codes, quarter-hour marks and margin notes) is [Departure Mono](https://github.com/rektdeckard/departure-mono) (SIL OFL 1.1). It is a pixel face drawn on an 11 px grid, so at 11 px every pixel is fully on or off. A double-size Departure minute set directly after the hour looked spindly. On the page, headlines use Michroma (after Microgramma, the lettering of 1960s space hardware), text uses Jost, and small type uses Departure Mono.
 - **Honest margins.** The ISS view states `ARCHIVE 05 JUN 2019` and the station's altitude, because it is a bounded archive, not live data.
-- **Night.** The paper plates print night as a regular dot screen under every symbol. The screen deepens from nothing at sunset to 25% at the end of civil twilight, which is how a printed chart would overprint a tint. The Plotboard keeps flat light zones.
+- **Night.** The paper plates print night as a regular dot screen under every symbol. The screen deepens from nothing at sunset to 25% at the end of civil twilight, which is how a printed chart would overprint a tint. Hypsometric and Sunlight do the same. Plotboard and Night red keep flat light zones, and Green CRT draws twilight and night as dark scan lines, every fourth line at dusk and every other line at night.
 
 ## Live satellites
 
@@ -59,6 +59,10 @@ Tests check the following:
 | **Enroute** (default) | IFR enroute chart | white land, pale water | gray contours, cobalt coast | navy | magenta |
 | **Sectional** | VFR sectional chart | cream land, pale water | olive contours, cobalt coast | cobalt | magenta |
 | **Plotboard** | 1960s mission control display | teal land, dark water | cyan contours and coast | white | amber |
+| **Hypsometric** | jet navigation chart layer tints | green lowland to tan and brown peaks; sea deepens off the shelf | olive contours, cobalt coast | navy | magenta |
+| **Night red** | red cockpit lighting | outlines on black; coasts dim where it is night | dark red contours | light red | red |
+| **Green CRT** | mission control console phosphor | green land on black; night in scan lines | green contours and coast | pale green | green |
+| **Sunlight** | one-color chart, for bright sun | white, with coastal waterlines | dotted black contours | black | black, cased in white |
 
 ## Data
 
