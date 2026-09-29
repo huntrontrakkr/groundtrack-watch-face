@@ -113,6 +113,8 @@ try{
   assert.match(await page.locator('#enroute-caption').textContent(),/GPS.*nominal orbit/);
   await page.locator('[data-body="sat:42738"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.camera.day.hours.length===25));
   assert.match(await page.locator('#body-note').textContent(),/figure-8/);
+  await page.locator('[data-span="hour"]').click();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.camera.day),null);
+  await page.locator('[data-span="day"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.camera.day.hours.length===25));
   await page.reload();await page.waitForFunction(()=>window.groundtrackEnroute?.ready);await page.screenshot({path:'docs/screenshots/study-06-workshop.png',fullPage:true});
   for(const width of [320,390]){await page.setViewportSize({width,height:844});const scroll=await page.evaluate(()=>[document.documentElement.scrollWidth,innerWidth,[...document.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>innerWidth+.5).slice(0,4).map(e=>e.tagName+'#'+e.id+'.'+e.className)]);assert.ok(scroll[0]<=scroll[1],JSON.stringify(scroll));await page.screenshot({path:`test-results/enroute-mobile-${width}.png`,fullPage:true});}
   assert.deepEqual(failures,[]);console.log('Controls, plates, moonlight, stations, clock zones, zero idle redraws and mobile layouts passed.');

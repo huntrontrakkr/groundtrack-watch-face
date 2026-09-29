@@ -118,6 +118,17 @@ function figurePixels(text,size,x,y){
   for(const c of text){const g=glyph(size,c);for(let yy=0;yy<g.height;yy++)for(let xx=0;xx<g.width;xx++)if(g.rows[yy][xx]==='#')out.push([cx+xx,y+h-g.height+yy]);cx+=g.width+gapFor(size);}
   return out;
 }
+// Leaders are routed like circuit traces: a 45° run leaving the start,
+// then a straight horizontal or vertical run to the end, and no other
+// angle. The pixels within `clear` of the start (the body's knockout) are
+// left out.
+export function circuitPath(a,b,clearance=0){
+  const ax=Math.round(a.x),ay=Math.round(a.y),bx=Math.round(b.x),by=Math.round(b.y),dx=bx-ax,dy=by-ay,diag=Math.min(Math.abs(dx),Math.abs(dy)),sx=Math.sign(dx),sy=Math.sign(dy),out=[];
+  let x=ax,y=ay;out.push([x,y]);
+  for(let k=0;k<diag;k++){x+=sx;y+=sy;out.push([x,y]);}
+  while(x!==bx||y!==by){if(x!==bx)x+=sx;else y+=sy;out.push([x,y]);}
+  return out.filter(([px,py])=>Math.hypot(px-ax,py-ay)>=clearance);
+}
 const bounds=pixels=>{
   if(!pixels.length)return null;
   const xs=pixels.map(p=>p[0]),ys=pixels.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys);
@@ -407,7 +418,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       // body, the shoulder ruled under it, and the leader run across to
       // the body from the shoulder's near end.
       const fx=aside.x,fy=Math.max(aside.top,Math.min(aside.bottom-fh-3,by-fh)),y=fy+fh+3,end={x:fx+fw+1,y},d=Math.hypot(end.x-bx,end.y-by)||1,line=[];
-      segment({x:bx+(end.x-bx)/d*9,y:by+(end.y-by)/d*9},end,(x,y)=>line.push([x,y]));segment({x:fx-1,y},end,(x,y)=>line.push([x,y]));
+      line.push(...circuitPath({x:bx,y:by},end,9));segment({x:fx-1,y},end,(x,y)=>line.push([x,y]));
       letter(line.filter(open),ink('ink'));const figure=setTime(t,fx,fy);
       return {figure,box:bounds(figure)};
     }
@@ -415,7 +426,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // clearest of lettering, toward the middle of the face if both do.
     const layout=side=>{
       const sx=bx+side*10,fx=Math.max(4,Math.min(W-4-fw,side>0?sx+2:sx-2-fw)),d=Math.hypot(sx-bx,sy-by),line=[];
-      segment({x:bx+(sx-bx)/d*9,y:by+(sy-by)/d*9},{x:sx,y:sy},(x,y)=>line.push([x,y]));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
+      line.push(...circuitPath({x:bx,y:by},{x:sx,y:sy},9));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
       const shown=line.filter(open),fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
       return {fx,shown,score:(fits?0:1000)+(line.length-shown.length)*10+(side===(bx<W/2?1:-1)?0:1)};
     };
@@ -513,7 +524,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       const n=camera.normal||{x:0,y:-1},tw=textWidth(LABEL,parts.m)-1,fh2=11,fw=tw+6,point=6,ahead=forward?1:-1,room=forward?c1.x-mx:mx-c1.x;
       const sx=Math.round(mx+n.x*20),top=Math.round(my+n.y*20)-(n.y<=0?4:0)-(n.y>0?fh2-4:0);
       const d=Math.abs(n.x)>.5?Math.sign(n.x):room<fw+point+8?-ahead:ahead,staff=[],flag=[];
-      segment({x:mx+n.x*8,y:my+n.y*8},{x:sx,y:n.y<=0?top:top+fh2-1},(x,y)=>staff.push([x,y]));
+      staff.push(...circuitPath({x:mx,y:my},{x:sx,y:n.y<=0?top:top+fh2-1},8));
       for(let y=0;y<fh2;y++){const tip=Math.round(point*(1-Math.abs(2*y-(fh2-1))/(fh2-1)));for(let x=0;x<fw+tip;x++)flag.push([d>0?sx+1+x:sx-1-x,top+y]);}
       const digits=textPixels(LABEL,parts.m,d>0?sx+4:sx-fw+2,top+10);
       letter([...staff,...flag],ink('route'),1);for(const [a,b] of digits)clear(a,b);
@@ -616,7 +627,7 @@ export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
     const {body,epoch,timeZone,clock24,plate}=state,readout=state.readout==='flag'?'flag':!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',numerals=NUMERALS.includes(state.numerals)?state.numerals:'colon',zone=state.zone==='body'?'body':'utc',start=civilHour(epoch,timeZone);
-    const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
+    const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body)==='day'&&state.span==='hour'?'hour':viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${view}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
       this.camera=projection==='fuller'?(body==='sun'||body==='moon'||view==='day'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):view==='day'?chartCamera(body,start,{day:localDay(epoch,timeZone)}):chartCamera(body,start,{span:SPAN,center:slide?minute:null});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
