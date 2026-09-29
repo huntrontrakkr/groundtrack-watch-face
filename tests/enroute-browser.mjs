@@ -2,6 +2,7 @@ import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {mkdirSync} from 'node:fs';
 import {spawn} from 'node:child_process';
+import {fixtureTLE} from './tle-fixture.mjs';
 const url=process.env.GROUNDTRACK_URL||'http://127.0.0.1:5197';
 const server=process.env.GROUNDTRACK_URL?null:spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port','5197','--strictPort'],{stdio:'pipe'});
 let logs='';server?.stdout.on('data',d=>logs+=d);server?.stderr.on('data',d=>logs+=d);
@@ -10,7 +11,7 @@ mkdirSync('test-results',{recursive:true});mkdirSync('docs/screenshots',{recursi
 try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(url)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}assert.ok(ready,logs);
   browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1280,height:1100},deviceScaleFactor:1});
-  const failures=[];page.on('pageerror',e=>failures.push(e.message));page.on('response',r=>{if(r.status()>=400)failures.push(`${r.status()} ${r.url()}`);});
+  const failures=[];page.on('pageerror',e=>failures.push(e.message));page.on('response',r=>{if(r.status()>=400&&!r.url().startsWith('https://celestrak.org/'))failures.push(`${r.status()} ${r.url()}`);});
   await page.goto(url);await page.waitForFunction(()=>window.groundtrackEnroute?.ready);
   assert.equal(await page.locator('#enroute-time').textContent(),'04:24');
   assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['4','24','5']);
@@ -52,8 +53,27 @@ try{
   await page.locator('#enroute-tag').uncheck();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.tag),null);
   await page.locator('#enroute-tag').check();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.tag));
   await page.locator('#enroute-24').check();assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.next];}),['13','14']);
+  // Live satellites: CelesTrak is intercepted, so no network is used. One
+  // satellite answers with fresh elements, another with an error.
+  const requests=[];
+  await page.route('https://celestrak.org/**',route=>{
+    const norad=Number(new URL(route.request().url()).searchParams.get('CATNR'));requests.push(norad);
+    if(norad===49260)return route.fulfill({status:403,body:'Forbidden',headers:{'access-control-allow-origin':'*'}});
+    return route.fulfill({status:200,body:fixtureTLE(Date.now()-3600000,norad,'TEST'),headers:{'content-type':'text/plain','access-control-allow-origin':'*'}});
+  });
+  await page.locator('#sat-select').selectOption('20580');await page.locator('#sat-track').click();
+  await page.waitForFunction(()=>groundtrackEnroute.state.body==='sat:20580');
+  assert.match(await page.locator('#enroute-caption').textContent(),/Hubble/);assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.world));
+  assert.match(await page.locator('#sat-status').textContent(),/CelesTrak/);
+  await page.locator('#sat-track').click();await page.waitForFunction(()=>/cache/.test(document.getElementById('sat-status').textContent));
+  assert.deepEqual(requests,[20580],'a second request within two hours is served from cache');
+  await page.locator('#sat-select').selectOption('49260');await page.locator('#sat-track').click();
+  await page.waitForFunction(()=>/Could not track/.test(document.getElementById('sat-status').textContent));
+  assert.equal(await page.evaluate(()=>groundtrackEnroute.state.body),'sat:20580');
+  await page.locator('[data-body="sun"]').click();await page.locator('#enroute-now').click();
+  assert.ok(await page.evaluate(()=>Math.abs(groundtrackEnroute.state.epoch-Date.now())<120000));
   await page.locator('[data-body="iss"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.world));assert.match(await page.locator('#enroute-caption').textContent(),/ISS/);
   await page.reload();await page.waitForFunction(()=>window.groundtrackEnroute?.ready);await page.screenshot({path:'docs/screenshots/study-06-workshop.png',fullPage:true});
-  for(const width of [320,390]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`test-results/enroute-mobile-${width}.png`,fullPage:true});}
+  for(const width of [320,390]){await page.setViewportSize({width,height:844});const scroll=await page.evaluate(()=>[document.documentElement.scrollWidth,innerWidth,[...document.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>innerWidth+.5).slice(0,4).map(e=>e.tagName+'#'+e.id+'.'+e.className)]);assert.ok(scroll[0]<=scroll[1],JSON.stringify(scroll));await page.screenshot({path:`test-results/enroute-mobile-${width}.png`,fullPage:true});}
   assert.deepEqual(failures,[]);console.log('Controls, plates, moonlight, stations, clock zones, zero idle redraws and mobile layouts passed.');
 }finally{await browser?.close();server?.kill();}

@@ -21,6 +21,11 @@ terrarium encoding, zoom 3). At that zoom the tiles' source headers list only:
 The grid is smoothed and generalized: not for navigation. No tiles are fetched
 at runtime. https://github.com/tilezen/joerd/blob/master/docs/attribution.md
 
+Live satellite element sets are fetched at runtime from CelesTrak
+(https://celestrak.org) by the Study 06 page, cached for two hours per
+object as its usage policy asks, and never bundled.
+https://celestrak.org/usage-policy.php
+
 Tracking-station positions (data/tracking-stations.json) are approximate, from
 public histories of NASA's Mercury and Apollo Manned Space Flight Networks.
 No NASA insignia or logotypes are used.

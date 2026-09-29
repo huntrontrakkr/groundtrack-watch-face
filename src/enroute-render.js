@@ -12,6 +12,7 @@ import {reliefAt} from './relief.js';
 import numerals from '../data/enroute-font.json' with {type:'json'};
 import departure from '../data/departure-font.json' with {type:'json'};
 import network from '../data/tracking-stations.json' with {type:'json'};
+import {catalogEntry,elementsFor} from './satellites.js';
 
 export {W,H};
 const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));
@@ -41,7 +42,7 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // above a station's horizon (about 15.6 degrees of arc).
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
-export const FIGURE={hour:80,hourTwo:72,minute:36,next:36};
+export const FIGURE={hour:80,hourTwo:72};
 // Chart lettering: Departure Mono, drawn on the display's own pixel grid.
 const LABEL=departure.regular,TAG=departure.double;
 
@@ -205,16 +206,22 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // The Moon in its calculated phase; a rim keeps a new Moon visible.
     const {fraction,waxing}=moonLight(epoch),r=5.2;
     disc(mx,my,r,(x,y,dx,dy)=>{const edge=Math.sqrt(Math.max(0,r*r-dy*dy)),side=waxing?dx:-dx;if(side>=(1-2*fraction)*edge||dx*dx+dy*dy>(r-1.2)**2)plot(buf,x,y,mk);});
+  }else if(catalogEntry(camera.body)?.symbol==='satellite'){
+    // An uncrewed satellite: a small body between two panels.
+    for(let k=-1;k<=1;k++)for(let d=-1;d<=1;d++)plot(buf,mx+d,my+k,mk);
+    for(const side of [-1,1]){for(let k=2;k<=3;k++)plot(buf,mx+side*k,my,mk);for(let k=4;k<=6;k++)for(let d=-2;d<=2;d++)if(Math.abs(d)===2||k===4||k===6)plot(buf,mx+side*k,my+d,mk);}
   }else{
     for(let k=-5;k<=5;k++){plot(buf,mx+k,my,mk);if(Math.abs(k)>=3){plot(buf,mx+k,my-1,mk);plot(buf,mx+k,my+1,mk);}}
     for(let k=-2;k<=2;k++)for(let d=-1;d<=1;d++)plot(buf,mx+d,my+k,mk);
   }
   // The hours stand over their stations: this hour large, the next smaller.
   const parts=clockParts(epoch,timeZone),h=Number(parts.h),hour=String(clock24?h:h%12||12),next=String(clock24?(h+1)%24:(h+1)%12||12);
-  const big=hour.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,big),nw=runWidth(next,FIGURE.next);
+  // Both hours share one size and one baseline; the next is drawn in outline.
+  const big=hour.length>1||next.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,big),nw=runWidth(next,big);
   const gx=Math.max(8,Math.min(W-8-hw,Math.round(c0.x-hw/2))),gy=camera.world?Math.round((top-runHeight(big))/2)-4:c0.y-26-runHeight(big);
-  const nx=Math.max(6,Math.min(W-6-nw,Math.round(c1.x-nw/2))),ny=camera.world?gy+runHeight(big)-runHeight(FIGURE.next):c1.y-10-runHeight(FIGURE.next);
-  const hourPixels=figurePixels(hour,big,gx,gy),nextPixels=figurePixels(next,FIGURE.next,nx,ny);
+  const nx=Math.max(8,Math.min(W-8-nw,Math.round(c1.x-nw/2))),ny=gy;
+  const hourPixels=figurePixels(hour,big,gx,gy),nextSolid=figurePixels(next,big,nx,ny),inside=new Set(nextSolid.map(([a,b])=>a+','+b));
+  const nextPixels=nextSolid.filter(([a,b])=>[[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]].some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));
   letter(hourPixels,ink('ink'));letter(nextPixels,ink('ink'));
   // The minute rides with the body in a data block, as a radar display tags
   // a target: a leader line from the symbol to a boxed readout. It points
@@ -248,14 +255,17 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const margin=(l,r,y,color)=>{letter(textPixels(LABEL,l,6,y),color,1);letter(textPixels(LABEL,r,W-6-textWidth(LABEL,r),y),color,1);};
   const MONTHS='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
   if(camera.world){
-    const date=new Date(epoch);
-    margin(`ARCHIVE ${String(date.getUTCDate()).padStart(2,'0')} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`,`${Math.round(body.altitude)} KM`,top-6,()=>pal.spaceInk);
+    // Satellites say where their numbers come from: the 2019 archive, or
+    // the epoch of the live element set in use.
+    const elements=elementsFor(camera.body),date=new Date(elements?elements.epoch:epoch),day=String(date.getUTCDate()).padStart(2,'0');
+    const source=elements?`${elements.catalog?.code||'SAT'} EL ${day} ${MONTHS[date.getUTCMonth()]} ${String(date.getUTCHours()).padStart(2,'0')}${String(date.getUTCMinutes()).padStart(2,'0')}Z`:`ARCHIVE ${day} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+    margin(source,`${Math.round(body.altitude)} KM`,top-6,()=>pal.spaceInk);
   }else{
     const d=localDate(epoch,timeZone);
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'));
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,
-    figure:{hour,minute:parts.m,next,box:bounds(hourPixels),nextBox:bounds(nextPixels),tag:tagBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,box:bounds(hourPixels),nextBox:bounds(nextSolid),tag:tagBox},rose:camera.world?null:{...c0,r:20}};
 }
 // The calendar date where the watch is, and its day of the year.
 const dateFormats=new Map();

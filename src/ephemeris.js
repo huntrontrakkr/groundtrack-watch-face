@@ -2,6 +2,7 @@ import {Body,GeoVector,RotateVector,Rotation_EQJ_EQD,EquatorFromVector,SiderealT
 import {twoline2satrec,propagate,gstime,eciToGeodetic} from 'satellite.js';
 import iss from '../data/iss.json' with {type:'json'};
 import {direction,wrap,RAD} from './geometry.js';
+import {satellitePosition} from './satellites.js';
 const satrec=twoline2satrec(...iss.tle);
 export const MINUTE=60000;
 export const BODIES={
@@ -10,6 +11,8 @@ export const BODIES={
   iss:{name:'ISS',label:'ISS / ARCHIVE',kind:'satellite',demo:Date.parse('2019-06-05T12:24:00Z'),window:90,cameraMinutes:10}
 };
 export function position(body,epoch){
+  // Live satellites registered from element sets: see satellites.js.
+  if(typeof body==='string'&&body.startsWith('sat:')){if(!Number.isFinite(epoch))throw new RangeError('Invalid time');return satellitePosition(body,epoch);}
   if(!BODIES[body]||!Number.isFinite(epoch))throw new RangeError('Unknown body or invalid time');
   const date=new Date(epoch);
   if(body==='iss'){

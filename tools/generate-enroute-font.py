@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 root = Path(__file__).resolve().parent.parent
 WEIGHT = 600
-HEIGHTS = {'36': 25, '72': 49, '80': 55}  # minutes and next hour, two-digit hour, hour
+HEIGHTS = {'72': 49, '80': 55}  # two-digit hours, single-digit hours
 
 
 def font(size):

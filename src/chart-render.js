@@ -41,7 +41,7 @@ export const CHARTS={
 // so it gets the whole world in a band, with its hours set in the margins.
 export const SPAN=128,TRACK_Y=150,WORLD={south:-60,north:72,bottom:H-10};
 export function chartCamera(body,start){
-  const world=body==='iss',step=world?MINUTE/4:MINUTE,lead=(world?20:40)*MINUTE;
+  const world=body!=='sun'&&body!=='moon',step=world?MINUTE/4:MINUTE,lead=(world?20:40)*MINUTE;
   const raw=sampleTrack(body,start-lead,start+60*MINUTE+lead,step);
   // Unwrap longitude so the route is continuous across the antimeridian.
   let turn=0;const track=raw.map((p,i)=>{

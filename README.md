@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite. **Study 06 — Enroute** is the default. It draws in the language of aeronautical charts and 1960s mission control plotboards: contour relief and the continental shelf edge from public-domain elevation data, a graticule with neatline ticks, and the magenta route. A VOR compass rose marks this hour and a reporting point the next. The hour is set large with its minutes raised, and Mercury and Apollo tracking stations appear with their network codes. Three plates are provided: Enroute (IFR white), Sectional (VFR cream) and Plotboard (mission control). [The Study 06 notes](docs/STUDY-06.md) describe each symbol, the data and the exploration.
+Open the URL printed by Vite. **Study 06 — Enroute** is the default. It draws in the language of aeronautical charts and 1960s mission control plotboards: contour relief and the continental shelf edge from public-domain elevation data, a graticule with neatline ticks, and the magenta route. A VOR compass rose marks this hour and a reporting point the next. The hour is set large with its minutes raised, and Mercury and Apollo tracking stations appear with their network codes. Three plates are provided: Enroute (IFR white), Sectional (VFR cream) and Plotboard (mission control). Five satellites can be tracked live from CelesTrak element sets: ISS, Tiangong, Hubble, Landsat 9 and NOAA-20. [The Study 06 notes](docs/STUDY-06.md) describe each symbol, the data and the exploration.
 
 **Study 05** remains at `/study-05.html`: the flat north-up chart that salvaged the earlier studies ([notes](docs/STUDY-05.md)). **Study 04** remains at `/study-04.html`: Shorelight, with shallow relief monuments and spatial color mixing. **Study 03** remains at `/study-03.html`: a two-ink repeated Fuller atlas with geographic context. **Study 02** remains at `/study-02.html`: rounded hour towers above a perspective globe. **Study 01** remains at `/study-01.html`: the initial landscape, oblique and globe exploration. All six studies stay frozen until you interact. No location or motion sensor is used.
 
@@ -27,7 +27,7 @@ Sun and Moon positions use Astronomy Engine. The same calculated Sun supplies St
 
 Studies 03 and 04 use [Philippe Rivière's public-domain Gray–Fuller triangle transform](https://observablehq.com/@fil/buckminster-fullers-triangle-transformation). Its repeated layout is not the canonical Airocean net. Five faces meet at an icosahedral vertex, six in a flat triangle grid: incompatible joins are therefore marked as cuts. Paths break and resume beside matching marks. It does not claim a globally seamless map.
 
-ISS uses Satellite.js with its published June 5, 2019 example TLE, is labeled `ARCHIVE`, and refuses extrapolation beyond a day from that epoch. There is no live satellite catalog or background polling. Cities use Natural Earth public-domain data; their lights are symbolic, limited night-side markers.
+ISS uses Satellite.js with its published June 5, 2019 example TLE, is labeled `ARCHIVE`, and refuses extrapolation beyond a day from that epoch. Study 06 can fetch current element sets from CelesTrak on request (cached two hours, used within three days of epoch); there is no background polling. Cities use Natural Earth public-domain data; their lights are symbolic, limited night-side markers.
 
 ## Verification and measurement
 
