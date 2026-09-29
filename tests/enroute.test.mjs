@@ -179,3 +179,13 @@ test('the dark plates draw the terminator: dashed at sunset, dotted where twilig
     assert.equal(changed(['sun',SUN],plate),0,plate);
   }
 });
+
+test('Zulu time sits in the bottom margin, clear of the date and the pass',async()=>{
+  const {HOMES}=await import('../src/home.js');
+  for(const [body,epoch,projection,home] of [['sun',SUN,'chart',null],['moon',MOON_DUSK,'fuller',HOMES.UTC],['iss',ISS,'chart',HOMES['Europe/London']],['iss',ISS,'chart',null],['iss',ISS+3600000,'fuller',HOMES['America/New_York']]]){
+    const r=new EnrouteRenderer(atlas,meters),out=r.render({body,epoch,timeZone:'Asia/Kolkata',clock24:false,plate:'enroute',projection,home});
+    const d=new Date(epoch);assert.equal(out.zulu.text,`${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}Z`);
+    const z=out.zulu.box;assert.ok(z.y>=H-14&&z.y+z.h<=H&&z.x>=6&&z.x+z.w<=W-6,`${body} ${projection}`);
+    for(const b of out.margins)assert.ok(disjoint(z,{x:b.x-3,y:b.y,w:b.w+6,h:b.h}),`${body} ${projection}: Zulu touches the margin`);
+  }
+});

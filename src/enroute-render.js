@@ -435,7 +435,16 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   }
   // Margins: the ISS archive and altitude; otherwise the date in the chart's
   // own terms, with the day of the year as mission control kept it.
-  const margin=(l,r,y,color)=>{letter(textPixels(LABEL,l,6,y),color,1);letter(textPixels(LABEL,r,W-6-textWidth(LABEL,r),y),color,1);};
+  // Each margin line sets text at the left and right edges; a middle entry
+  // is centred in the space between them.
+  const margins=[];
+  const margin=(l,r,y,color,middle='')=>{
+    const a=textPixels(LABEL,l,6,y),b=textPixels(LABEL,r,W-6-textWidth(LABEL,r),y),left=6+textWidth(LABEL,l),right=W-6-textWidth(LABEL,r);
+    letter(a,color,1);letter(b,color,1);margins.push(...[a,b].filter(q=>q.length).map(bounds));
+    if(middle){const c=textPixels(LABEL,middle,Math.round((left+right-textWidth(LABEL,middle))/2),y);letter(c,color,1);zulu={text:middle,box:bounds(c)};}
+  };
+  // Zulu: the same moment in UTC, as pilots and mission control keep it.
+  const utc=new Date(epoch),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}Z`;let zulu=null;
   const MONTHS='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
   if(camera.world){
     // Satellites say where their numbers come from: the 2019 archive, or
@@ -445,15 +454,17 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     margin(source,`${Math.round(body.altitude)} KM`,top-6,()=>pal.spaceInk);
     // Under the band, the next pass over home: acquisition of signal, its
     // length and its greatest elevation; or, while in view, loss of signal.
-    if(home)margin(passText(camera.body,home,epoch,timeZone),'',H-1,()=>pal.spaceInk);
+    // Under the band, Zulu time at the right.
+    margin(home?passText(camera.body,home,epoch,timeZone):'','',H-1,()=>pal.spaceInk);
+    const z=textPixels(LABEL,Z,W-6-textWidth(LABEL,Z),H-1);letter(z,()=>pal.spaceInk,1);zulu={text:Z,box:bounds(z)};
   }else{
     const d=localDate(epoch,timeZone);
-    margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'));
+    margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'),Z);
     // Over the chart, home's next satellite pass, or the day's rise and
     // set of the Sun or Moon there, in local time.
     if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
   }
-  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,
+  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,
     figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // Local clock time in the chart's four figures, 24-hour, no colon.
