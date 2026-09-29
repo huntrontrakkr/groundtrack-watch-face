@@ -9,7 +9,7 @@ import {clockParts} from './render.js';
 import {SUNRISE_SINE,CIVIL_TWILIGHT_SINE} from './solar.js';
 import {chartCamera,groundLayer,lightLayer,civilHour,LAND,SPACE,COAST,W,H} from './chart-render.js';
 import {reliefAt} from './relief.js';
-import numerals from '../data/chart-font.json' with {type:'json'};
+import numerals from '../data/enroute-font.json' with {type:'json'};
 import departure from '../data/departure-font.json' with {type:'json'};
 import network from '../data/tracking-stations.json' with {type:'json'};
 

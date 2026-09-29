@@ -94,6 +94,8 @@ test('paper plates print night as a dot screen that deepens through twilight',()
   const bands={day:[0,0],night:[0,0]};
   for(let y=4;y<H-4;y++)for(let x=4;x<W-4;x++){
     const i=y*W+x;if(Math.abs(y-r.camera.stations[0].y)<50)continue;
+    // Lettering knocks the screen out; measure the open chart only.
+    if([out.figure.box,out.figure.nextBox,...out.stations.map(s=>s.box)].some(b=>x>=b.x-2&&x<b.x+b.w+2&&y>=b.y-2&&y<b.y+b.h+2))continue;
     const a=dot(r.ground.dirs[i],sun),band=a>=SUNRISE_SINE?'day':a<CIVIL_TWILIGHT_SINE?'night':null;if(!band)continue;
     bands[band][0]++;if(out.buf.slice(i*3,i*3+3).join()===ink)bands[band][1]++;
   }
