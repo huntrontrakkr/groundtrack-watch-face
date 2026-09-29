@@ -13,6 +13,7 @@ import {rollCamera} from './roll.js';
 import numerals from '../data/enroute-font.json' with {type:'json'};
 import departure from '../data/departure-font.json' with {type:'json'};
 import network from '../data/tracking-stations.json' with {type:'json'};
+import cityLights from '../data/lights.json' with {type:'json'};
 import {catalogEntry,elementsFor} from './satellites.js';
 import {riseSet,nextPass,reach} from './home.js';
 
@@ -25,17 +26,17 @@ export const PLATES={
   enroute:{name:'Enroute',note:'IFR chart: white paper, blue and black',night:'screen',
     water:inks(['#AAFFFF','#55AAAA','#0055AA']),land:inks(['#FFFFFF','#AAAAAA','#555555']),coast:inks(['#0055AA','#005555','#55AAFF']),
     contour:inks(['#AAAAAA','#555555','#AAAAAA']),shelf:inks(['#55AAFF','#0055AA','#55AAFF']),grid:inks(['#0055AA','#005555','#55AAFF']),
-    route:inks(['#FF00AA','#AA0055','#FF55FF']),ink:inks(['#000055','#000055','#FFFFFF']),mark:inks(['#000000','#000000','#FFFFFF']),
+    lights:inks(['#AA5500','#FFAA00','#FFAA00']),route:inks(['#FF00AA','#AA0055','#FF55FF']),ink:inks(['#000055','#000055','#FFFFFF']),mark:inks(['#000000','#000000','#FFFFFF']),
     screen:hex('#0055AA'),space:hex('#FFFFFF'),spaceInk:hex('#000055')},
   sectional:{name:'Sectional',note:'VFR chart: cream paper, blue type',night:'screen',
     water:inks(['#AAFFFF','#55AAAA','#000055']),land:inks(['#FFFFAA','#AAAA55','#005555']),coast:inks(['#0055AA','#005555','#0055AA']),
     contour:inks(['#AAAA55','#555500','#0055AA']),shelf:inks(['#55AAFF','#0055AA','#0055AA']),grid:inks(['#0055AA','#005555','#0055AA']),
-    route:inks(['#FF00AA','#AA0055','#FF55FF']),ink:inks(['#0055AA','#000055','#AAFFFF']),mark:inks(['#000055','#000055','#FFFFAA']),
+    lights:inks(['#AA5500','#FFAA00','#FFAA00']),route:inks(['#FF00AA','#AA0055','#FF55FF']),ink:inks(['#0055AA','#000055','#AAFFFF']),mark:inks(['#000055','#000055','#FFFFAA']),
     screen:hex('#000055'),space:hex('#FFFFFF'),spaceInk:hex('#0055AA')},
   plotboard:{name:'Plotboard',note:'Mission control: lit lines on dark glass',night:'zones',
     water:inks(['#000055','#000055','#000000']),land:inks(['#005555','#005555','#000055']),coast:inks(['#55AAAA','#55AAAA','#0055AA']),
     contour:inks(['#00AAAA','#00AAAA','#0055AA']),shelf:inks(['#0055AA','#0055AA','#000055']),grid:inks(['#0055AA','#0055AA','#0055AA']),
-    route:inks(['#FFAA00','#FFAA00','#FFAA00']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFAA']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
+    lights:inks(['#AAAA55','#FFFF55','#FFFFAA']),route:inks(['#FFAA00','#FFAA00','#FFAA00']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFAA']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
     space:hex('#000000'),spaceInk:hex('#FFFFFF')},
   // After the jet navigation charts: layer tints by height, green lowland
   // through tan to brown, and the sea tinted deeper off the shelf.
@@ -43,21 +44,21 @@ export const PLATES={
     tints:[[300,hex('#AAFFAA')],[1000,hex('#FFFFAA')],[2000,hex('#FFAA55')],[3500,hex('#AA5500')],[Infinity,hex('#AA5555')]],depths:[[SHELF_DEPTH,hex('#AAFFFF')],[-Infinity,hex('#55AAFF')]],
     water:inks(['#AAFFFF','#AAFFFF','#AAFFFF']),land:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),coast:inks(['#0055AA','#0055AA','#0055AA']),
     contour:inks(['#555500','#555500','#555500']),shelf:inks(['#0055AA','#0055AA','#0055AA']),grid:inks(['#005555','#005555','#005555']),
-    route:inks(['#FF00AA','#FF00AA','#FF00AA']),ink:inks(['#000055','#000055','#000055']),mark:inks(['#000000','#000000','#000000']),
+    lights:inks(['#FF5500','#FFAA00','#FFFF55']),route:inks(['#FF00AA','#FF00AA','#FF00AA']),ink:inks(['#000055','#000055','#000055']),mark:inks(['#000000','#000000','#000000']),
     screen:hex('#000055'),space:hex('#FFFFFF'),spaceInk:hex('#000055')},
   // Red cockpit lighting, which keeps the eye's night vision: reds only,
   // drawn as outlines on black; coasts dim where it is night.
   red:{name:'Night red',note:'Cockpit red: every ink a red, nothing to dazzle',night:'zones',terminator:hex('#FF5555'),nightDots:hex('#AA0000'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#AA0000','#AA0000','#550000']),
     contour:inks(['#550000','#550000','#550000']),shelf:inks(['#550000','#550000','#550000']),grid:inks(['#550000','#550000','#550000']),
-    route:inks(['#FF0000','#FF0000','#FF0000']),ink:inks(['#FF5555','#FF5555','#FF5555']),mark:inks(['#FFAAAA','#FFAAAA','#FFAAAA']),
+    lights:inks(['#FF0000','#FFAAAA','#FFAAAA']),route:inks(['#FF0000','#FF0000','#FF0000']),ink:inks(['#FF5555','#FF5555','#FF5555']),mark:inks(['#FFAAAA','#FFAAAA','#FFAAAA']),
     space:hex('#000000'),spaceInk:hex('#FF5555')},
   // The green phosphor of the consoles: one green at several brightnesses,
   // and night drawn with dark scan lines, dusk with every fourth line.
   crt:{name:'Green CRT',note:'Console phosphor: one green, night in scan lines',night:'zones',scan:true,terminator:hex('#55FF55'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#005500','#005500','#005500']),coast:inks(['#00AA00','#00AA00','#00AA00']),
     contour:inks(['#00AA00','#00AA00','#00AA00']),shelf:inks(['#005500','#005500','#005500']),grid:inks(['#005500','#005500','#005500']),
-    route:inks(['#00FF00','#00FF00','#00FF00']),ink:inks(['#AAFFAA','#AAFFAA','#AAFFAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    lights:inks(['#00AA00','#AAFFAA','#FFFFFF']),route:inks(['#00FF00','#00FF00','#00FF00']),ink:inks(['#AAFFAA','#AAFFAA','#AAFFAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
     space:hex('#000000'),spaceInk:hex('#55FF55')},
   // For bright sun: black on white only. A band of waterlines follows the
   // coast, as on one-color charts; contours are dotted and the route is
@@ -205,6 +206,23 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const d=ground.dirs[y*W+x];if(!d)continue;
     const t=Math.max(0,Math.min(1,(SUNRISE_SINE-dot(d,sun))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE)));
     if(t>0&&BAYER[(y&3)*4+(x&3)]<t*4)plot(buf,x,y,pal.screen);
+  }
+  // City lights on the night side, as the astronauts saw them: every place
+  // of 50,000 people or more, in three brightnesses, lit from the middle of
+  // civil twilight. At world scale only the half-million cities show. The
+  // one-ink Sunlight plate, a daytime plate, has none.
+  let lit=0;
+  if(pal.lights){
+    const P=cityLights.points,least=camera.wide||camera.world?2:1;
+    for(let k=P.length-3;k>=0;k-=3){
+      const level=P[k+2];if(level<least)continue;
+      const q=camera.project(P[k]/10,P[k+1]/10),x=Math.round(q.x),y=Math.round(q.y);
+      if(x<1||y<1||x>=W-1||y>=H-1||camera.outside?.(x,y))continue;
+      const d=ground.dirs[y*W+x];if(!d||mat[y*W+x]===SPACE)continue;
+      if((SUNRISE_SINE-dot(d,sun))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE)<.5)continue;
+      const c=pal.lights[level-1];plot(buf,x,y,c);lit++;
+      if(level===3)for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])plot(buf,x+dx,y+dy,pal.lights[1]);
+    }
   }
   // Knockouts clear to plain paper under lettering, as on a printed chart.
   const clear=(x,y)=>{x=Math.round(x);y=Math.round(y);if(x>=0&&y>=0&&x<W&&y<H)plot(buf,x,y,base(y*W+x));};
@@ -484,7 +502,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // set of the Sun or Moon there, in local time.
     if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
   }
-  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
+  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,lights:lit,
     figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // Local clock time in the chart's four figures, 24-hour, no colon.

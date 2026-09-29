@@ -12,7 +12,8 @@
     "generate:map": "node tools/generate-land.mjs",
     "measure": "node tools/measure.mjs",
     "proofs": "node tools/render-proofs.mjs",
-    "generate:relief": "node tools/generate-relief.mjs"
+    "generate:relief": "node tools/generate-relief.mjs",
+    "generate:lights": "node tools/generate-lights.mjs"
   },
   "dependencies": {
     "astronomy-engine": "2.1.19",

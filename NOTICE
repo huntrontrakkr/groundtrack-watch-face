@@ -330,6 +330,10 @@ https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_popu
 https://www.naturalearthdata.com/about/terms-of-use/
 Population values are used only to limit marker density, not as current estimates.
 
+The city lights in data/lights.json (4,215 places of 50,000 people or more) are
+derived from Natural Earth 1:10m populated places, which is public domain.
+tools/generate-lights.mjs rebuilds them.
+
 Study 04 art-direction reference
 --------------------------------
 docs/art-direction/shorelight-concept.png is an AI-generated material study
