@@ -7,6 +7,8 @@ import {EnrouteRenderer,PLATES} from '../src/enroute-render.js';
 import {decodeRelief} from '../src/relief.js';
 import {encodePNG} from './png.mjs';
 import {HOMES} from '../src/home.js';
+import {registerNominal} from '../src/nominal.js';
+registerNominal();
 import {STUDY_EVENTS as events} from '../src/events.js';
 import fonts from '../data/draft-font.json' with {type:'json'};
 
@@ -63,4 +65,12 @@ const tape=contactSheet('study-06-tape',[
   {name:'58',caption:'ISS / 08:58',body:'iss',epoch:Date.parse('2019-06-05T12:58:00Z')}
 ],['enroute','plotboard','crt'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate,home,events,tape:'slide'}).buf);
 
-console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller and ${tape} tape native proofs, four contact sheets and four 2x enlargements.`);
+// Slow orbits: nominal GPS on the hour chart, nominal QZSS's day.
+const gnss=contactSheet('study-06-gnss',[
+  {name:'gps',caption:'GPS / 09:24',body:'sat:36585',epoch:Date.parse('2026-09-27T13:24:00Z')},
+  {name:'gps-later',caption:'GPS / 12:24',body:'sat:36585',epoch:Date.parse('2026-09-27T16:24:00Z')},
+  {name:'qzss',caption:'QZSS DAY / 01:24',body:'sat:42738',epoch:Date.parse('2026-09-27T05:24:00Z')},
+  {name:'qzss-later',caption:'QZSS DAY / 10:24',body:'sat:42738',epoch:Date.parse('2026-09-27T14:24:00Z')}
+],['enroute','plotboard','crt'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate,home,events}).buf);
+
+console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape and ${gnss} GPS/QZSS native proofs, five contact sheets and five 2x enlargements.`);

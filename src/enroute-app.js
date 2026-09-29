@@ -2,14 +2,16 @@ import {EnrouteRenderer,renderEnroute,PLATES,W,H} from './enroute-render.js';
 import {decodeRelief,RELIEF_BYTES} from './relief.js';
 import {MINUTE} from './ephemeris.js';
 import {clockParts} from './render.js';
-import {CATALOG,registerElements,elementsFor,bodyId,catalogEntry,FRESH} from './satellites.js';
+import {CATALOG,registerElements,elementsFor,bodyId,catalogEntry,FRESH,viewOf} from './satellites.js';
 import {HOMES} from './home.js';
+import {STUDY_ORBITS,registerNominal} from './nominal.js';
 import {localDay} from './enroute-render.js';
 import {STUDY_EVENTS,uniqueCode,atLocal} from './events.js';
 const $=id=>document.getElementById(id);
 // Frozen study moments; Moonlight is one Moon over three evenings.
 export const OBSERVATIONS={day:Date.parse('2026-09-15T12:24:00Z'),dusk:Date.parse('2026-09-19T09:24:00Z'),night:Date.parse('2026-09-20T10:24:00Z')};
-export const DEMOS={sun:Date.parse('2026-09-27T08:24:00Z'),moon:OBSERVATIONS.day,iss:Date.parse('2019-06-05T12:24:00Z')};
+registerNominal();
+export const DEMOS={sun:Date.parse('2026-09-27T08:24:00Z'),moon:OBSERVATIONS.day,iss:Date.parse('2019-06-05T12:24:00Z'),...Object.fromEntries(STUDY_ORBITS.map(o=>[bodyId(o.norad),o.demo]))};
 const NOTES={
   sun:'The ground directly beneath the Sun, where it is noon. The route runs west, so the next hour lies to the left.',
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
@@ -25,7 +27,7 @@ function paint(canvas,buf){
 function render(){
   const r=main.render(state);$('enroute-watch').getContext('2d').putImageData(new ImageData(r.rgba,W,H),0,0);
   for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home,events:state.events,tape:state.tape}).buf);
-  $('time-scale').classList.toggle('muted',state.body==='sun'||state.body==='moon'||state.projection==='fuller');
+  $('time-scale').classList.toggle('muted',viewOf(state.body)!=='world'||state.projection==='fuller');
   for(const key of ['body','observation','plate','projection','tape'])document.querySelectorAll(`[data-${key}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[key]===state[key])));
   document.querySelectorAll('[data-observation]').forEach(b=>b.disabled=state.body!=='moon');$('moon-light').classList.toggle('muted',state.body!=='moon');
   $('enroute-minute').value=Math.round((state.epoch-r.start)/MINUTE);$('enroute-time').textContent=r.time;
@@ -44,7 +46,7 @@ function render(){
   $('enroute-date').textContent=new Date(state.epoch).toISOString().slice(0,10);$('body-note').textContent=sat?sat.note:NOTES[state.body];
   const lat=r.marker.lat,lon=((r.marker.lon+540)%360)-180,place=`${Math.abs(lat).toFixed(1)}°${lat<0?'S':'N'} ${Math.abs(lon).toFixed(1)}°${lon<0?'W':'E'}`;
   const heard=r.stations.length?` · stations ${r.stations.map(s=>s.code).join(', ')}`:'';
-  const age=elements?`live elements ${Math.round(Math.abs(state.epoch-elements.epoch)/3600000)} h from epoch`:'';
+  const age=elements?elements.source==='nominal'?'nominal orbit, not measured elements':`live elements ${Math.round(Math.abs(state.epoch-elements.epoch)/3600000)} h from epoch`:'';
   $('enroute-caption').textContent=`${sat?`${sat.name} · ${age}`:state.body==='iss'?'ISS · archived orbit':state.body==='moon'?'Moon · sublunar route':'Sun · subsolar route'} · ${place}${heard}`;
   $('enroute-watch').setAttribute('aria-label',`${state.body.toUpperCase()} route at ${r.time}, ${state.timeZone}. Hour ${r.figure.hour}, minute ${r.figure.minute}, next hour ${r.figure.next}. ${PLATES[state.plate].name} plate.`);
   const colors=new Set();for(let i=0;i<r.buf.length;i+=3)colors.add((r.buf[i]<<16)|(r.buf[i+1]<<8)|r.buf[i+2]);
@@ -108,7 +110,7 @@ try{
   const [land,relief]=await Promise.all([load('land.bin',129600),load('relief.bin',RELIEF_BYTES)]);
   main=new EnrouteRenderer(land,decodeRelief(relief));
   document.querySelectorAll('[data-body]').forEach(b=>b.addEventListener('click',()=>{
-    state.body=b.dataset.body;state.epoch=state.body==='moon'?OBSERVATIONS[state.observation]:DEMOS[state.body];studyEpoch=state.epoch;render();
+    state.body=b.dataset.body;registerNominal();state.epoch=state.body==='moon'?OBSERVATIONS[state.observation]:DEMOS[state.body];studyEpoch=state.epoch;render();
   }));
   document.querySelectorAll('[data-observation]').forEach(b=>b.addEventListener('click',()=>{
     state.observation=b.dataset.observation;state.epoch=OBSERVATIONS[state.observation];studyEpoch=state.epoch;render();

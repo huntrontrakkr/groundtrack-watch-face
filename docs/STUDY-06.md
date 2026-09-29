@@ -37,6 +37,15 @@ On a watch, the phone would fetch and propagate the elements and send the watch 
 
 This cloud build environment blocks celestrak.org, so the tests replace CelesTrak with an intercepted fixture: the 2019 ISS elements moved to the current epoch. Real requests happen only in a viewer's browser.
 
+## Slow orbits: GPS and QZSS
+
+The Sun and Moon cross the ground at about 15° an hour, and a low orbit at nearly 240°. Between them are orbits that nearly keep pace with the Earth, and they suit the chart:
+
+- **GPS** (BIIF-1, PRN 25) circles in 12 hours at 20,200 km, tilted 55°. Its ground speed is close to the Sun's, but its hour can run any way, often steeply north or south. It is drawn on the hour chart. The hour's two stations are still 120 px apart along the route, north stays up, and each hour figure stands off its station on the route's open side: above a level route, beside a north–south one. The minute marks take the other side.
+- **QZSS** (QZS-2, Michibiki) is quasi-zenith: a 24-hour orbit tilted 41°, slightly oval (e 0.075), with perigee in the south. Its sub-point never leaves the western Pacific. It traces a figure-8 over Japan and Australia once a day, its northern loop slow and high over Japan. It is drawn as its whole local day on one north-up chart, with hour marks and every third hour numbered. The track is set to the right, and the time callout stands aside in the open map to its left with its leader run across to the satellite. Where the figure-8 crosses itself, two hours meet, and the later label gives way.
+
+The study uses **nominal** element sets for both: textbook orbits of each class generated in `src/nominal.js`, not measured elements, and the page says so. Live tracking of the real GPS BIIF-1 and QZS-2 (under Live satellites) replaces them with CelesTrak elements where the network allows. The catalogue numbers (36585 and 42738) should be checked against CelesTrak's listing when live tracking is first tried. The home station gives the next pass for both: from New York, GPS is often in view for hours, while QZSS never rises.
+
 ## Spike: rolling Fuller
 
 Studies 03 and 04 used a fixed icosahedral net. A flat triangle grid puts six triangles around every corner, but the icosahedron has only five, so any flat net must cut the Earth somewhere, and routes broke at those cuts. This is geometry, not a rendering fault: a sphere cannot lie flat without stretching or tearing.

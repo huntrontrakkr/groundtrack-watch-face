@@ -7,6 +7,7 @@ import {position,sampleTrack,moonLight,MINUTE} from './ephemeris.js';
 import {direction,dot,wrap,RAD} from './geometry.js';
 import {clockParts} from './render.js';
 import {SUNRISE_SINE,CIVIL_TWILIGHT_SINE} from './solar.js';
+import {viewOf} from './satellites.js';
 import numerals from '../data/chart-font.json' with {type:'json'};
 import drafts from '../data/draft-font.json' with {type:'json'};
 
@@ -40,38 +41,58 @@ export const CHARTS={
 // line at TRACK_Y. The ISS covers about 240 degrees of longitude in an hour,
 // so it gets the whole world in a band, with its hours set in the margins.
 export const SPAN=128,TRACK_Y=150,WORLD={south:-60,north:72,bottom:H-10};
-export function chartCamera(body,start,{span=SPAN,center=null}={}){
-  const world=body!=='sun'&&body!=='moon',step=world?MINUTE/4:MINUTE,lead=(world?20:40)*MINUTE;
-  const raw=sampleTrack(body,start-lead,start+60*MINUTE+lead,step);
+export function chartCamera(body,start,{span=SPAN,center=null,day=null}={}){
+  const view=viewOf(body),world=view==='world'&&!day,step=day?5*MINUTE:world?MINUTE/4:MINUTE,lead=(world?20:40)*MINUTE;
+  const raw=day?sampleTrack(body,day.start,day.end,step):sampleTrack(body,start-lead,start+60*MINUTE+lead,step);
   // Unwrap longitude so the route is continuous across the antimeridian.
   let turn=0;const track=raw.map((p,i)=>{
     if(i){const d=p.lon-raw[i-1].lon;if(d>180)turn-=360;else if(d<-180)turn+=360;}
-    return {...p,lon:p.lon+turn,hour:p.epoch>=start&&p.epoch<=start+60*MINUTE};
+    return {...p,lon:p.lon+turn,hour:day?true:p.epoch>=start&&p.epoch<=start+60*MINUTE};
   });
   const hour=track.filter(p=>p.hour),lons=hour.map(p=>p.lon),lats=hour.map(p=>p.lat);
   // By default the view centres the hour; with center (an epoch) the world
   // slides under a fixed index instead, the body always in the middle.
   const here=center===null?null:track.reduce((a,b)=>Math.abs(b.epoch-center)<Math.abs(a.epoch-center)?b:a);
-  const lon0=here?here.lon:(Math.max(...lons)+Math.min(...lons))/2;
-  let scale,k,lat0,y0;
-  if(world){
+  let lonMid=here?here.lon:(Math.max(...lons)+Math.min(...lons))/2,x0=W/2;
+  let scale,k,lat0,y0,normal;
+  if(day){
+    // The whole local day on one chart, north up, the day's shape fitted
+    // and centred (QZSS draws its figure-8 in a day).
+    const all=track.map(p=>p.lon),alat=track.map(p=>p.lat);lat0=(Math.max(...alat)+Math.min(...alat))/2;k=Math.cos(lat0*RAD);
+    lonMid=(Math.max(...all)+Math.min(...all))/2;scale=Math.min((W*.5)/Math.max(1,(Math.max(...all)-Math.min(...all))*k),(H-70)/Math.max(1,Math.max(...alat)-Math.min(...alat)));y0=(14+H-16)/2;
+    x0=W-16-(Math.max(...all)-Math.min(...all))*k*scale/2;
+  }
+  else if(world){
     // Fit the hour's longitudes; the band keeps its true proportions.
     scale=(W-16)/Math.max(180,Math.max(...lons)-Math.min(...lons));k=1;lat0=WORLD.south;y0=WORLD.bottom;
   }
-  else{
+  else if(body==='sun'||body==='moon'){
     lat0=(Math.max(...lats)+Math.min(...lats))/2;k=Math.cos(lat0*RAD);
     scale=span/Math.max(1,(Math.max(...lons)-Math.min(...lons))*k);y0=TRACK_Y;
   }
-  const toScreen=(lat,lon)=>({x:W/2+(lon-lon0)*k*scale,y:y0-(lat-lat0)*scale});
-  const toGround=(x,y)=>({lat:lat0+(y0-y)/scale,lon:lon0+(x-W/2)/(k*scale)});
+  else{
+    // A slow orbit's hour runs any way, often steeply north or south. The
+    // hour's two stations are SPAN pixels apart along the route, north
+    // stays up, and the route is set off-centre away from the side its
+    // figures take (above, or beside a route that runs north-south).
+    const a=hour[0],b=hour.at(-1);lat0=(a.lat+b.lat)/2;k=Math.cos(lat0*RAD);lonMid=(a.lon+b.lon)/2;
+    const sx=(b.lon-a.lon)*k,sy=-(b.lat-a.lat),len=Math.hypot(sx,sy)||1;scale=span/len;
+    normal={x:sy/len,y:-sx/len};if(normal.y>0)normal={x:-normal.x,y:-normal.y};
+    if(Math.abs(normal.y)<.3&&normal.x>0)normal={x:-normal.x,y:-normal.y};
+    x0=W/2-normal.x*30;y0=(14+H-16)/2+8-normal.y*30;
+  }
+  const toScreen=(lat,lon)=>({x:x0+(lon-lonMid)*k*scale,y:y0-(lat-lat0)*scale});
+  const toGround=(x,y)=>({lat:lat0+(y0-y)/scale,lon:lonMid+(x-x0)/(k*scale)});
   for(const p of track)Object.assign(p,toScreen(p.lat,p.lon));
   // Any other direction is drawn on the copy nearest the middle of the view.
   const project=(lat,lon)=>{
-    let best;for(const t of [-360,0,360]){const q=toScreen(lat,lon+t);if(!best||Math.abs(q.x-W/2)<Math.abs(best.x-W/2))best=q;}
+    let best;for(const t of [-360,0,360]){const q=toScreen(lat,lon+t);if(!best||Math.abs(q.x-x0)<Math.abs(best.x-x0))best=q;}
     return best;
   };
   const band=world?{top:Math.ceil(toScreen(WORLD.north,0).y),bottom:Math.floor(toScreen(WORLD.south,0).y)}:{top:0,bottom:H};
-  return {body,start,world,track,scale,band,toScreen,toGround,project,stations:[hour[0],hour.at(-1)],key:`${body}/${start}${here?`/${center}`:''}`};
+  const hours=day?track.filter(p=>(p.epoch-day.start)%(60*MINUTE)===0):null;
+  return {body,start,world,track,scale,band,toScreen,toGround,project,normal,wide:!!day,day:day?{...day,hours}:null,
+    stations:day?[track[0],track.at(-1)]:[hour[0],hour.at(-1)],key:`${body}/${day?day.start:start}${here?`/${center}`:''}`};
 }
 
 // Land coverage by bilinear interpolation of the quarter-degree atlas. Each
