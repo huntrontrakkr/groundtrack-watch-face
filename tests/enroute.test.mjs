@@ -94,8 +94,8 @@ test('the time scale reads like an instrument tape, running the way the route ru
   const on=draw(scene('sun',SUN,{readout:true})).out;
   assert.equal(on.figure.readout.y+on.figure.readout.h<=on.figure.index.y-6,true);
   for(const b of [on.figure.box,on.figure.nextBox])assert.ok(disjoint(on.figure.readout,b));
-  // Nothing on the chart hides under the scale's panel.
-  for(const s of draw(scene('moon',MOON_DAY)).out.stations)assert.ok(s.y>SCALE.panel);
+  // On the world band nothing hides under the scale's panel.
+  const band=draw(scene('iss',ISS));for(const s of band.out.stations)assert.ok(s.y>SCALE.panel);
 });
 
 test('the margin date is local, with the day of the year',()=>{
@@ -131,7 +131,7 @@ test('paper plates print night as a dot screen that deepens through twilight',()
   const state=scene('moon',MOON_DUSK,{plate:'sectional'}),{r,out}=draw(state),sun=position('sun',state.epoch).dir,ink=PLATES.sectional.screen.join();
   const bands={day:[0,0],night:[0,0]};
   for(let y=4;y<H-4;y++)for(let x=4;x<W-4;x++){
-    const i=y*W+x;if(y<SCALE.panel+2||Math.abs(y-r.camera.stations[0].y)<50)continue;
+    const i=y*W+x;if(Math.abs(y-r.camera.stations[0].y)<50)continue;
     // Lettering knocks the screen out; measure the open chart only.
     if([out.figure.box,out.figure.nextBox,...out.stations.map(s=>s.box)].some(b=>x>=b.x-2&&x<b.x+b.w+2&&y>=b.y-2&&y<b.y+b.h+2))continue;
     const a=dot(r.ground.dirs[i],sun),band=a>=SUNRISE_SINE?'day':a<CIVIL_TWILIGHT_SINE?'night':null;if(!band)continue;
