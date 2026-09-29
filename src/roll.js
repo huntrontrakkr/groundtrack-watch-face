@@ -27,23 +27,33 @@ function rollTo(tile,dir){
   return tile;
 }
 
-export function rollCamera(body,start,{span=180,trackY=140,rings=2}={}){
+export function rollCamera(body,start,{span=180,trackY=140,rings=2,day=null}={}){
   // A satellite's strip stays under one lap (about 92 min for the ISS), so
-  // the route never rolls back over a face it has already printed.
-  const world=body!=='sun'&&body!=='moon',step=world?MINUTE/4:MINUTE,lead=(world?10:40)*MINUTE;
-  const samples=sampleTrack(body,start-lead,start+60*MINUTE+lead,step);
+  // the route never rolls back over a face it has already printed. With
+  // day={start,end}, the strip is the whole local day instead, midnight to
+  // midnight, for the Sun and Moon, which take a day to circle the Earth.
+  const world=body!=='sun'&&body!=='moon',step=day?5*MINUTE:world?MINUTE/4:MINUTE,lead=(world?10:40)*MINUTE;
+  const from=day?day.start:start-lead,to=day?day.end:start+60*MINUTE+lead,samples=sampleTrack(body,from,to,step);
   // Roll along the route. Cells are keyed by lattice position; the route's
   // own printing always wins its cells.
   const cells=new Map(),path=[];let tile={face:faceOf(samples[0].dir),tri:TEMPLATE.map(p=>[...p])};tile.key=key(tile.tri);
   const flat=samples.map(s=>{
     tile=rollTo(tile,s.dir);
     if(!cells.has(tile.key)){const t={...tile,route:true};cells.set(tile.key,t);path.push(t);}
-    return {...s,tile:cells.get(tile.key),xy:flatPoint(forwardFace(tile.face,s.dir),tile.tri),hour:s.epoch>=start&&s.epoch<=start+60*MINUTE};
+    return {...s,tile:cells.get(tile.key),xy:flatPoint(forwardFace(tile.face,s.dir),tile.tri),hour:day?true:s.epoch>=start&&s.epoch<=start+60*MINUTE};
   });
-  const i0=flat.findIndex(p=>p.epoch===start),i1=flat.findIndex(p=>p.epoch===start+60*MINUTE),a=flat[i0].xy,b=flat[i1].xy;
+  const i0=flat.findIndex(p=>p.epoch===start),i1=flat.findIndex(p=>p.epoch===start+60*MINUTE),a=flat[day?0:i0].xy,b=flat[day?flat.length-1:i1].xy;
   // Similarity transform: this hour's stations on a horizontal line, SPAN
   // pixels apart, time running left to right.
-  const len=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/len,uy=(b[1]-a[1])/len,scale=span/len,mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  const len=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/len,uy=(b[1]-a[1])/len;let scale=span/len,mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  if(day){
+    // A path far from the equator unrolls as an arc, as a cone flattens into
+    // a fan. Fit the whole day's arc, not just its chord, and centre it.
+    const rs=flat.map(p=>p.xy[0]*ux+p.xy[1]*uy),rt=flat.map(p=>-p.xy[0]*uy+p.xy[1]*ux);
+    const s0=Math.min(...rs),s1=Math.max(...rs),t0=Math.min(...rt),t1=Math.max(...rt);
+    scale=Math.min(span/(s1-s0),110/Math.max(1e-9,t1-t0));
+    const sc=(s0+s1)/2,tc=(t0+t1)/2;mid=[sc*ux-tc*uy,sc*uy+tc*ux];
+  }
   const toScreenXY=p=>{const dx=p[0]-mid[0],dy=p[1]-mid[1];return {x:W/2+(dx*ux+dy*uy)*scale,y:trackY-(-dx*uy+dy*ux)*scale};};
   const toPlane=(x,y)=>{const s=(x-W/2)/scale,t=(trackY-y)/scale;return [mid[0]+s*ux-t*uy,mid[1]+s*uy+t*ux];};
   // A floating net: the faces the route rolls over, plus every face that
@@ -94,6 +104,6 @@ export function rollCamera(body,start,{span=180,trackY=140,rings=2}={}){
     return best||{x:-999,y:-999};
   };
   const track=flat.map(p=>({...p,...toScreenXY(p.xy)}));
-  return {body,start,world:false,fuller:true,wide:world,outside:(x,y)=>!locate(x,y),track,scale,band:{top:0,bottom:H},tiles,toScreen:project,toGround,project,
-    stations:[track[i0],track[i1]],key:`fuller/${body}/${start}/${span}`};
+  return {body,start,world:false,fuller:true,wide:world||!!day,outside:(x,y)=>!locate(x,y),track,scale,band:{top:0,bottom:H},tiles,toScreen:project,toGround,project,
+    stations:[track[i0],track[i1]],day:day?{...day,hours:track.filter(p=>(p.epoch-day.start)%(60*MINUTE)===0)}:null,key:`fuller/${body}/${day?day.start:start}/${span}`};
 }

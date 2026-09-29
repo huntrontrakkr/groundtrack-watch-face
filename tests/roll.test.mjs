@@ -49,3 +49,21 @@ test('the Enroute renderer draws a Fuller sheet in native colors, rose turned to
     assert.ok(out.figure.scale.x1>out.figure.scale.x0);
   }
 });
+
+test('the Sun and Moon roll out a whole local day, midnight to midnight, on screen',async()=>{
+  const {localDay}=await import('../src/enroute-render.js');
+  for(const [body,t,tz] of [['sun','2026-09-27T08:24:00Z','America/New_York'],['sun','2026-06-21T08:24:00Z','UTC'],['moon','2026-09-19T09:24:00Z','Asia/Kolkata'],['sun','2026-03-08T12:00:00Z','America/New_York']]){
+    const epoch=Date.parse(t),day=localDay(epoch,tz),cam=rollCamera(body,civilHour(epoch,tz),{span:192,day});
+    // One hour mark per local hour (23 or 25 across a DST change).
+    assert.equal(cam.day.hours.length,Math.round((day.end-day.start)/3600000)+1);
+    const xs=cam.track.map(p=>p.x),ys=cam.track.map(p=>p.y);
+    assert.ok(Math.min(...xs)>=3.9&&Math.max(...xs)<=196.1&&Math.min(...ys)>=0&&Math.max(...ys)<=H,`${body} ${t}`);
+    assert.ok(cam.track[0].x<cam.track.at(-1).x,'time runs left to right');
+    for(let i=1;i<cam.track.length;i++)assert.ok(Math.hypot(cam.track[i].x-cam.track[i-1].x,cam.track[i].y-cam.track[i-1].y)<4);
+  }
+  // Local midnight in any zone, including across both daylight-saving changes.
+  for(const [t,z,start,hours] of [['2026-03-08T12:00:00Z','America/New_York','2026-03-08T05:00:00.000Z',23],['2026-11-01T12:00:00Z','America/New_York','2026-11-01T04:00:00.000Z',25],
+    ['2026-09-27T08:24:00Z','Asia/Kolkata','2026-09-26T18:30:00.000Z',24],['2026-03-29T12:00:00Z','Europe/London','2026-03-29T00:00:00.000Z',23],['2026-09-27T23:59:00Z','UTC','2026-09-27T00:00:00.000Z',24]]){
+    const d=localDay(Date.parse(t),z);assert.equal(new Date(d.start).toISOString(),start,`${t} ${z}`);assert.equal((d.end-d.start)/3600000,hours,`${t} ${z}`);
+  }
+});

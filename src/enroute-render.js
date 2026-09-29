@@ -74,6 +74,7 @@ function figurePixels(text,size,x,y){
   return out;
 }
 const bounds=pixels=>{
+  if(!pixels.length)return null;
   const xs=pixels.map(p=>p[0]),ys=pixels.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys);
   return {x,y,w:Math.max(...xs)-x+1,h:Math.max(...ys)-y+1};
 };
@@ -169,7 +170,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // satellite during this hour are shown, each with its acquisition circle.
   const heard=s=>camera.track.some(p=>p.hour&&dot(p.dir,direction(s.lat,s.lon))>=Math.cos(ACQUISITION*RAD));
   for(const s of network.stations){
-    if(camera.wide&&!heard(s))continue;
+    if(camera.day||(camera.wide&&!heard(s)))continue;
     const p=camera.project(s.lat,s.lon),x=Math.round(p.x),y=Math.round(p.y);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
     const w=textWidth(LABEL,s.code),right=x+5+w<W-3,box={x:right?x-3:x-6-w,y:y-5,w:w+9,h:11};
@@ -198,7 +199,16 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // On the zoomed charts the route is itself the scale: a graduation every
   // minute, longer every five and fifteen, the quarters numbered beneath.
   // The world band keeps five-minute ties; its scale is in the panel above.
-  for(let i=1;i<track.length-1;i++){
+  // A whole-day strip is graduated in hours instead: a tick every hour,
+  // longer and numbered every three, longest at the two midnights.
+  if(camera.day)for(const p of camera.day.hours){
+    const i=track.indexOf(p),a=track[Math.max(0,i-1)],b=track[Math.min(track.length-1,i+1)],len=Math.hypot(b.x-a.x,b.y-a.y)||1;
+    let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
+    const hr=Math.round((p.epoch-camera.day.start)/3600000),size=hr%24===0?7:hr%3===0?5:3;
+    for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
+    if(hr%3===0){const hh=Number(clockParts(p.epoch,timeZone).h),label=String(clock24?(hr===24?24:hh):hh%12||12),lw=textWidth(LABEL,label);letter(textPixels(LABEL,label,Math.round(p.x+nx*9-lw/2)+1,Math.round(p.y+ny*9+9)),ink('route'),0);}
+  }
+  for(let i=1;i<track.length-1&&!camera.day;i++){
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);
     if((p.epoch-s0.epoch)%MINUTE||m<=0||m>=60||(camera.world&&m%5))continue;
     const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
@@ -208,7 +218,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // This hour's station is a VOR: a hexagon inside a compass rose, north up.
   // The next hour is an open triangle, a reporting point.
   const c0={x:Math.round(s0.x),y:Math.round(s0.y)},c1={x:Math.round(s1.x),y:Math.round(s1.y)},col=ink('ink');
-  if(!camera.world){
+  if(!camera.world&&!camera.day){
     // The rose turns to true north at the station; north is up on the
     // cylindrical charts, and anywhere on a rolled Fuller sheet.
     const R=16,g=s0,q0=camera.project(g.lat,g.lon),q1=camera.project(Math.min(89.9,g.lat+.5),g.lon),nl=Math.hypot(q1.x-q0.x,q1.y-q0.y)||1;
@@ -221,7 +231,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const x=cx-(row.length>>1)+dx,y=cy-(rows.length>>1)+dy;
     if(v==='#')plot(buf,x,y,col(cx,cy));else if(row.indexOf('#')<dx&&dx<row.lastIndexOf('#'))clear(x,y);
   }));
-  symbol(HEXAGON,c0.x,c0.y);plot(buf,c0.x,c0.y,col(c0.x,c0.y));symbol(TRIANGLE,c1.x,c1.y-1);
+  if(!camera.day){symbol(HEXAGON,c0.x,c0.y);plot(buf,c0.x,c0.y,col(c0.x,c0.y));symbol(TRIANGLE,c1.x,c1.y-1);}
   // The present: the body's own symbol on a knockout.
   const body=position(camera.body,epoch),p=camera.project(body.lat,body.lon),mx=Math.round(p.x),my=Math.round(p.y);
   const disc=(cx,cy,r,fn)=>{const n=Math.ceil(r);for(let dy=-n;dy<=n;dy++)for(let dx=-n;dx<=n;dx++)if(dx*dx+dy*dy<=r*r)fn(cx+dx,cy+dy,dx,dy);};
@@ -273,6 +283,16 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       const lw=textWidth(LABEL,parts.m),inner=[Math.min(gx+hw,nx+nw)+3,Math.max(gx,nx)-3-lw],lx=Math.max(inner[0],Math.min(inner[1],Math.round(ix-lw/2)));
       for(const [a,b] of textPixels(LABEL,parts.m,lx,B-10))plot(buf,a,b,sc());minuteBox={x:lx,y:B-18,w:lw,h:8};
     }
+  }else if(camera.day){
+    // On the day strip the present hour stands over the body; the strip's
+    // own figures carry the rest of the day.
+    const size=hour.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,size),gy=my-24-runHeight(size);
+    hourPixels=figurePixels(hour,size,place(mx,hw),gy);nextSolid=[];letter(hourPixels,ink('ink'));
+    index={x:mx,y:my};
+    if(readout){
+      const lw=textWidth(LABEL,parts.m),lx=Math.max(4,Math.min(W-4-lw,Math.round(mx-lw/2)));
+      letter(textPixels(LABEL,parts.m,lx,my-11),ink('mark'),1);minuteBox={x:lx,y:my-19,w:lw,h:8};
+    }
   }else{
     const size=hour.length>1||next.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,size),nw=runWidth(next,size),gy=c0.y-26-runHeight(size);
     hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);
@@ -314,9 +334,9 @@ export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
     const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,start=civilHour(epoch,timeZone);
-    const projection=state.projection==='fuller'?'fuller':'chart',geometryKey=`${projection}/${body}/${start}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
+    const projection=state.projection==='fuller'?'fuller':'chart',geometryKey=`${projection}/${body}/${start}/${timeZone}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
-      this.camera=projection==='fuller'?rollCamera(body,start,{span:body==='sun'||body==='moon'?SPAN:180}):chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
+      this.camera=projection==='fuller'?(body==='sun'||body==='moon'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
@@ -328,4 +348,15 @@ export class EnrouteRenderer{
     this.last={...out,rgba,start,zones,world:this.camera.world,time:clockParts(epoch,timeZone).text,stationsOnRoute:this.camera.stations.map(s=>({x:s.x,y:s.y,epoch:s.epoch}))};
     return this.last;
   }
+}
+
+// Local midnight to the next local midnight (23 or 25 hours across a DST
+// change), for the whole-day strip.
+export function localDay(epoch,timeZone){
+  // Subtracting the wall-clock time is off by an hour on a changeover day,
+  // so step until the local clock really reads midnight.
+  const wall=t=>{const p=clockParts(t,timeZone);return Number(p.h)*60+Number(p.m);};
+  const off=t=>{const m=wall(t);return m>12*60?m-24*60:m;};
+  const floor=t=>{let c=Math.floor(t/MINUTE)*MINUTE-wall(t)*MINUTE;for(let i=0;i<3&&off(c);i++)c-=off(c)*MINUTE;return c;};
+  const start=floor(epoch);return {start,end:floor(start+26*3600000)};
 }
