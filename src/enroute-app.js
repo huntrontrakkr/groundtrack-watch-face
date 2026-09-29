@@ -15,7 +15,7 @@ const NOTES={
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
   iss:'An archived orbit from 5 June 2019. The station laps most of the world in an hour, so the whole world is the chart.'
 };
-const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:false,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS};
+const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:false,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed'};
 let main,studyEpoch=state.epoch;
 const proofs={};
 function paint(canvas,buf){
@@ -24,8 +24,9 @@ function paint(canvas,buf){
 }
 function render(){
   const r=main.render(state);$('enroute-watch').getContext('2d').putImageData(new ImageData(r.rgba,W,H),0,0);
-  for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home,events:state.events}).buf);
-  for(const key of ['body','observation','plate','projection'])document.querySelectorAll(`[data-${key}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[key]===state[key])));
+  for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home,events:state.events,tape:state.tape}).buf);
+  $('time-scale').classList.toggle('muted',state.body==='sun'||state.body==='moon'||state.projection==='fuller');
+  for(const key of ['body','observation','plate','projection','tape'])document.querySelectorAll(`[data-${key}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[key]===state[key])));
   document.querySelectorAll('[data-observation]').forEach(b=>b.disabled=state.body!=='moon');$('moon-light').classList.toggle('muted',state.body!=='moon');
   $('enroute-minute').value=Math.round((state.epoch-r.start)/MINUTE);$('enroute-time').textContent=r.time;
   $('range-start').textContent=clockParts(r.start,state.timeZone).text;$('range-end').textContent=clockParts(r.start+60*MINUTE,state.timeZone).text;
@@ -113,6 +114,7 @@ try{
     state.observation=b.dataset.observation;state.epoch=OBSERVATIONS[state.observation];studyEpoch=state.epoch;render();
   }));
   document.querySelectorAll('[data-plate]').forEach(b=>b.addEventListener('click',()=>{state.plate=b.dataset.plate;render();}));
+  document.querySelectorAll('[data-tape]').forEach(b=>b.addEventListener('click',()=>{state.tape=b.dataset.tape;render();}));
   document.querySelectorAll('[data-projection]').forEach(b=>b.addEventListener('click',()=>{state.projection=b.dataset.projection;render();}));
   $('enroute-now').addEventListener('click',()=>{
     try{state.epoch=Math.floor(Date.now()/MINUTE)*MINUTE;render();}

@@ -40,7 +40,7 @@ export const CHARTS={
 // line at TRACK_Y. The ISS covers about 240 degrees of longitude in an hour,
 // so it gets the whole world in a band, with its hours set in the margins.
 export const SPAN=128,TRACK_Y=150,WORLD={south:-60,north:72,bottom:H-10};
-export function chartCamera(body,start,{span=SPAN}={}){
+export function chartCamera(body,start,{span=SPAN,center=null}={}){
   const world=body!=='sun'&&body!=='moon',step=world?MINUTE/4:MINUTE,lead=(world?20:40)*MINUTE;
   const raw=sampleTrack(body,start-lead,start+60*MINUTE+lead,step);
   // Unwrap longitude so the route is continuous across the antimeridian.
@@ -49,7 +49,10 @@ export function chartCamera(body,start,{span=SPAN}={}){
     return {...p,lon:p.lon+turn,hour:p.epoch>=start&&p.epoch<=start+60*MINUTE};
   });
   const hour=track.filter(p=>p.hour),lons=hour.map(p=>p.lon),lats=hour.map(p=>p.lat);
-  const lon0=(Math.max(...lons)+Math.min(...lons))/2;
+  // By default the view centres the hour; with center (an epoch) the world
+  // slides under a fixed index instead, the body always in the middle.
+  const here=center===null?null:track.reduce((a,b)=>Math.abs(b.epoch-center)<Math.abs(a.epoch-center)?b:a);
+  const lon0=here?here.lon:(Math.max(...lons)+Math.min(...lons))/2;
   let scale,k,lat0,y0;
   if(world){
     // Fit the hour's longitudes; the band keeps its true proportions.
@@ -68,7 +71,7 @@ export function chartCamera(body,start,{span=SPAN}={}){
     return best;
   };
   const band=world?{top:Math.ceil(toScreen(WORLD.north,0).y),bottom:Math.floor(toScreen(WORLD.south,0).y)}:{top:0,bottom:H};
-  return {body,start,world,track,scale,band,toScreen,toGround,project,stations:[hour[0],hour.at(-1)],key:`${body}/${start}`};
+  return {body,start,world,track,scale,band,toScreen,toGround,project,stations:[hour[0],hour.at(-1)],key:`${body}/${start}${here?`/${center}`:''}`};
 }
 
 // Land coverage by bilinear interpolation of the quarter-degree atlas. Each
