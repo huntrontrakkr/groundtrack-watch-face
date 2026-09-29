@@ -26,3 +26,16 @@ test('the minute flag flies between the route and the hour figures, all hour',()
     }
   }
 });
+
+test('on a slow orbit’s steep route the flag leans out on the figures’ side, clear of the figures',async()=>{
+  const {registerNominal}=await import('../src/nominal.js');registerNominal();
+  const r=new EnrouteRenderer(atlas,meters),day=Date.parse('2026-09-27T00:00:00Z');
+  for(let h=0;h<12;h++){
+    const out=r.render({body:'sat:36585',epoch:day+h*3600000+24*MINUTE,timeZone:'UTC',clock24:true,plate:'enroute',readout:'flag'}),{readout:flag,box,nextBox}=out.figure;
+    assert.ok(flag&&flag.x>=0&&flag.x+flag.w<=W&&flag.y>=0,`hour ${h}`);
+    for(const b of [box,nextBox])assert.ok(!overlap(flag,b),`hour ${h}: flag on a figure`);
+    // The flag stands off the route: none of the hour's track runs through it.
+    const through=r.camera.track.filter(p=>p.hour&&p.x>=flag.x&&p.x<flag.x+flag.w&&p.y>=flag.y&&p.y<flag.y+flag.h).length;
+    assert.equal(through,0,`hour ${h}: route through the flag`);
+  }
+});

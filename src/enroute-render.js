@@ -508,11 +508,14 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       // the minutes reversed out of the route's ink in the chart's
       // lettering. It flies ahead, toward the next hour, and turns back as
       // the next station comes near.
-      const tw=textWidth(LABEL,parts.m)-1,fh2=11,fw=tw+6,point=6,top=my-24,ahead=forward?1:-1,room=forward?c1.x-mx:mx-c1.x;
-      const d=room<fw+point+8?-ahead:ahead,staff=[],flag=[];
-      for(let y=top;y<=my-8;y++)staff.push([mx,y]);
-      for(let y=0;y<fh2;y++){const tip=Math.round(point*(1-Math.abs(2*y-(fh2-1))/(fh2-1)));for(let x=0;x<fw+tip;x++)flag.push([d>0?mx+1+x:mx-1-x,top+y]);}
-      const digits=textPixels(LABEL,parts.m,d>0?mx+4:mx-fw+2,top+10);
+      // On a slow orbit's steep route the staff leans out on the figures'
+      // side instead, and the flag flies away from the route.
+      const n=camera.normal||{x:0,y:-1},tw=textWidth(LABEL,parts.m)-1,fh2=11,fw=tw+6,point=6,ahead=forward?1:-1,room=forward?c1.x-mx:mx-c1.x;
+      const sx=Math.round(mx+n.x*20),top=Math.round(my+n.y*20)-(n.y<=0?4:0)-(n.y>0?fh2-4:0);
+      const d=Math.abs(n.x)>.5?Math.sign(n.x):room<fw+point+8?-ahead:ahead,staff=[],flag=[];
+      segment({x:mx+n.x*8,y:my+n.y*8},{x:sx,y:n.y<=0?top:top+fh2-1},(x,y)=>staff.push([x,y]));
+      for(let y=0;y<fh2;y++){const tip=Math.round(point*(1-Math.abs(2*y-(fh2-1))/(fh2-1)));for(let x=0;x<fw+tip;x++)flag.push([d>0?sx+1+x:sx-1-x,top+y]);}
+      const digits=textPixels(LABEL,parts.m,d>0?sx+4:sx-fw+2,top+10);
       letter([...staff,...flag],ink('route'),1);for(const [a,b] of digits)clear(a,b);
       minuteBox=bounds(flag);
     }else if(readout){
