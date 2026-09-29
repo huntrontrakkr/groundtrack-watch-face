@@ -92,7 +92,10 @@ test('the time scale reads like an instrument tape, running the way the route ru
     }
   }
   const on=draw(scene('sun',SUN,{readout:true})).out;
-  assert.equal(on.figure.readout.y+on.figure.readout.h<=on.figure.index.y-6,true);
+  // The time callout hangs below the route, clear of the hour figures and
+  // the date line, and reads the time in full.
+  assert.equal(on.figure.time,'4:24');
+  assert.ok(on.figure.readout.y>=on.figure.index.y+26&&on.figure.readout.y+on.figure.readout.h<=H-12);
   for(const b of [on.figure.box,on.figure.nextBox])assert.ok(disjoint(on.figure.readout,b));
   // On the world band nothing hides under the scale's panel.
   const band=draw(scene('iss',ISS));for(const s of band.out.stations)assert.ok(s.y>SCALE.panel);

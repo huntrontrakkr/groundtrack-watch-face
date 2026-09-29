@@ -43,7 +43,7 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // above a station's horizon (about 15.6 degrees of arc).
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
-export const FIGURE={scale:40,hour:80,hourTwo:72};
+export const FIGURE={scale:40,hour:80,hourTwo:72,minute:28,callout:28,calloutMinute:20};
 // The time scale registers with the route: its hour marks stand over the
 // two stations, 120 px apart on the zoomed charts, so each minute is exactly
 // two pixels and each graduation sits over its minute on the route. The ISS
@@ -178,7 +178,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // Tracking stations of the Mercury and Apollo networks, as small circled
   // points with their network codes. On the world band each also shows its
   // acquisition circle, as on the plotboards of the mission control rooms.
-  const stations=[],taken=[];
+  const stations=[],taken=[],type=[];
   // On a whole-orbit Fuller sheet only the stations that can hear the
   // satellite during this hour are shown, each with its acquisition circle.
   const heard=s=>camera.track.some(p=>p.hour&&dot(p.dir,direction(s.lat,s.lon))>=Math.cos(ACQUISITION*RAD));
@@ -195,7 +195,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     }
     for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(buf,x+dx,y+dy,ink('ink')(x,y));}
     plot(buf,x,y,ink('ink')(x,y));
-    letter(textPixels(LABEL,s.code,right?x+5:x-5-w,y+4),ink('ink'));
+    const code=textPixels(LABEL,s.code,right?x+5:x-5-w,y+4);type.push(bounds(code));letter(code,ink('ink'));
   }
   // The route, as the magenta line: bold behind the present, fine ahead,
   // dashed before and after the hour. Ticks every five minutes; the
@@ -219,14 +219,14 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const hr=Math.round((p.epoch-camera.day.start)/3600000),size=hr%24===0?7:hr%3===0?5:3;
     for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
-    if(hr%3===0){const hh=Number(clockParts(p.epoch,timeZone).h),label=String(clock24?(hr===24?24:hh):hh%12||12),lw=textWidth(LABEL,label);letter(textPixels(LABEL,label,Math.round(p.x+nx*9-lw/2)+1,Math.round(p.y+ny*9+9)),ink('route'),0);}
+    if(hr%3===0){const hh=Number(clockParts(p.epoch,timeZone).h),label=String(clock24?(hr===24?24:hh):hh%12||12),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*9-lw/2)+1,Math.round(p.y+ny*9+9));type.push(bounds(q));letter(q,ink('route'),0);}
   }
   for(let i=1;i<track.length-1&&!camera.day;i++){
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);
     if((p.epoch-s0.epoch)%MINUTE||m<=0||m>=60||(camera.world&&m%5))continue;
     const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const size=camera.world?(m%15===0?4:2):m%15===0?6:m%5===0?4:2;for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
-    if(!camera.world&&m%15===0){const label=String(m),lw=textWidth(LABEL,label);letter(textPixels(LABEL,label,Math.round(p.x+nx*8-lw/2)+1,Math.round(p.y+ny*8+9)),ink('route'),0);}
+    if(!camera.world&&m%15===0){const label=String(m),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*8-lw/2)+1,Math.round(p.y+ny*8+9));type.push(bounds(q));letter(q,ink('route'),0);}
   }
   // This hour's station is a VOR: a hexagon inside a compass rose, north up.
   // The next hour is an open triangle, a reporting point.
@@ -275,6 +275,29 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const outline=(solid,ring)=>{const inside=new Set(solid.map(([a,b])=>a+','+b)),near=[];for(let r=1;r<=ring;r++)near.push([r,0],[-r,0],[0,r],[0,-r]);return solid.filter(([a,b])=>near.some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));};
   const place=(end,w)=>Math.max(4,Math.min(W-4-w,Math.round(end-w/2)));
   let hourPixels,nextSolid,index,minuteBox=null;
+  // A time callout, labelled the way a chart labels a feature: the time in
+  // full, the minutes smaller on the same baseline as on a cockpit clock,
+  // hung from a shoulder, the cartographer's elbow leader, that runs back
+  // to the body. The leader is cased with a hairline of paper so it crosses
+  // relief cleanly, and it breaks for lettering, as a printed line does.
+  const callout=({big,small,x:bx,y:by,up,reach})=>{
+    const gap=gapFor(big),colon=gapFor(big)+1,hw=runWidth(hour,big),cw=glyph(small,':').width,mw=runWidth(parts.m,small),fw=hw+colon+cw+colon+mw;
+    const fh=runHeight(big),sh=runHeight(small),sy=up?by-reach:by+reach;
+    const open=([x,y])=>!type.some(b=>x>=b.x-2&&x<b.x+b.w+2&&y>=b.y-2&&y<b.y+b.h+2);
+    // Hang the time on whichever side keeps it on the face and its leader
+    // clearest of lettering, toward the middle of the face if both do.
+    const layout=side=>{
+      const sx=bx+side*10,fx=Math.max(4,Math.min(W-4-fw,side>0?sx+2:sx-2-fw)),d=Math.hypot(sx-bx,sy-by),line=[];
+      segment({x:bx+(sx-bx)/d*9,y:by+(sy-by)/d*9},{x:sx,y:sy},(x,y)=>line.push([x,y]));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
+      const shown=line.filter(open),fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
+      return {fx,shown,score:(fits?0:1000)+(line.length-shown.length)*10+(side===(bx<W/2?1:-1)?0:1)};
+    };
+    const {fx,shown}=[layout(1),layout(-1)].sort((a,b)=>a.score-b.score)[0];
+    const fy=up?sy-3-fh:sy+3,mx0=fx+hw+colon;
+    const figure=[...figurePixels(hour,big,fx,fy),...figurePixels(':',small,mx0,fy+fh-sh),...figurePixels(parts.m,small,mx0+cw+colon,fy+fh-sh)];
+    letter(shown,ink('ink'));letter(figure,ink('ink'));
+    return {figure,box:bounds(figure)};
+  };
   if(camera.world){
     const {baseline:B,panel:P}=SCALE,sc=()=>pal.spaceInk,fill=pal.route[0];
     for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);
@@ -298,25 +321,20 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     }
   }else if(camera.day){
     // A whole day is too long a scale to read minutes from, so the strip
-    // carries the time in full, hours and minutes, over the body; the
-    // strip's own figures carry the rest of the day.
-    // It stands in the open paper above the net where there is room, tied
-    // to the body by a dotted leader, like a callout on a chart.
-    const time=`${hour}:${parts.m}`,size=FIGURE.scale,hw=runWidth(time,size),fh=runHeight(size);
-    const netTop=Math.max(0,Math.min(...camera.tiles.map(t=>t.box[1]))),above=my-18-fh;
-    const gy=netTop>=fh+16?Math.round((netTop-fh)/2):above>=4?above:my+18;
-    hourPixels=figurePixels(time,size,place(mx,hw),gy);nextSolid=[];letter(hourPixels,ink('ink'));
-    if(gy+fh<my-18)for(let y=gy+fh+5;y<=my-10;y+=2)plot(buf,mx,y,ink('ink')(mx,y));
-    index={x:mx,y:my};
+    // carries a time callout, in the open paper above the net where there
+    // is room, otherwise below the body.
+    const fh=runHeight(FIGURE.scale),netTop=Math.max(0,Math.min(...camera.tiles.map(t=>t.box[1]))),up=netTop>=fh+16||my-26-fh>=4;
+    const reach=netTop>=fh+16?my-(Math.round((netTop-fh)/2)+fh+3):26;
+    const c=callout({big:FIGURE.scale,small:FIGURE.minute,x:mx,y:my,up,reach});
+    hourPixels=c.figure;nextSolid=[];index={x:mx,y:my};
   }else{
     const size=hour.length>1||next.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,size),nw=runWidth(next,size),gy=c0.y-26-runHeight(size);
     hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);
     letter(hourPixels,ink('ink'));letter(outline(nextSolid,2),ink('ink'));
     index={x:ix,y:c0.y};
     if(readout){
-      // Optional digital minute, set plainly over the body.
-      const lw=textWidth(LABEL,parts.m),lx=Math.max(4,Math.min(W-4-lw,Math.round(mx-lw/2)));
-      letter(textPixels(LABEL,parts.m,lx,c0.y-11),ink('mark'),1);minuteBox={x:lx,y:c0.y-19,w:lw,h:8};
+      // Optional time callout, under the route, clear of the hour figures.
+      minuteBox=callout({big:FIGURE.callout,small:FIGURE.calloutMinute,x:mx,y:my,up:false,reach:26}).box;
     }
   }
   // Margins: the ISS archive and altitude; otherwise the date in the chart's
@@ -334,7 +352,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'));
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,
-    figure:{hour,minute:parts.m,next,time:camera.day?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // The calendar date where the watch is, and its day of the year.
 const dateFormats=new Map();

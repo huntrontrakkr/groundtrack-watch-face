@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {rollCamera,W,H} from '../src/roll.js';
 import {NEIGHBORS,F} from '../src/fuller.js';
-import {EnrouteRenderer} from '../src/enroute-render.js';
+import {EnrouteRenderer,PLATES} from '../src/enroute-render.js';
 import {decodeRelief} from '../src/relief.js';
 import {civilHour} from '../src/chart-render.js';
 import {angularDistance,direction} from '../src/geometry.js';
@@ -68,7 +68,7 @@ test('the Sun and Moon roll out a whole local day, midnight to midnight, on scre
   }
 });
 
-test('the day strip carries the time in full, hours and minutes, clear of the strip',()=>{
+test('the day strip carries a time callout, hours and minutes, clear of the strip',()=>{
   const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
   for(const [body,t,tz,clock24,time] of [['sun','2026-09-27T08:24:00Z','America/New_York',false,'4:24'],['moon','2026-09-15T12:24:00Z','UTC',true,'12:24'],['sun','2026-09-27T08:07:00Z','UTC',false,'8:07']]){
     const r=new EnrouteRenderer(atlas,meters),out=r.render({body,epoch:Date.parse(t),timeZone:tz,clock24,plate:'enroute',projection:'fuller'});
@@ -76,5 +76,8 @@ test('the day strip carries the time in full, hours and minutes, clear of the st
     const {box}=out.figure;assert.ok(box.x>=4&&box.x+box.w<=196&&box.y>=0);
     // The figure never lands on the rolled route.
     for(const p of r.camera.track)assert.ok(!(p.x>=box.x&&p.x<box.x+box.w&&p.y>=box.y&&p.y<box.y+box.h),`${body} ${t}`);
+    // A leader ties it to the body: ink in every row between the two.
+    const {x:mx,y:my}=out.marker,inkColor=PLATES.enroute.ink[0].join(),above=box.y<my,[y0,y1]=above?[box.y+box.h+4,Math.round(my)-10]:[Math.round(my)+10,box.y-4];
+    for(let y=y0;y<=y1;y++){let hit=false;for(let x=Math.round(mx)-14;x<=Math.round(mx)+14;x++){const i=(y*200+x)*3;if([out.buf[i],out.buf[i+1],out.buf[i+2]].join()===inkColor)hit=true;}assert.ok(hit,`${body} ${t} leader row ${y}`);}
   }
 });

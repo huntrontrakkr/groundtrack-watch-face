@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 root = Path(__file__).resolve().parent.parent
 WEIGHT = 600
-HEIGHTS = {'40': 34, '72': 49, '80': 55}  # scale panel (ISS); two-digit and single-digit hours on the chart
+HEIGHTS = {'20': 17, '28': 24, '40': 34, '72': 49, '80': 55}  # callout minutes and hours; scale panel (ISS); two-digit and single-digit hours on the chart
 
 
 def font(size):
