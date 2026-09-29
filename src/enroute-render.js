@@ -42,9 +42,11 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // above a station's horizon (about 15.6 degrees of arc).
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
-export const FIGURE={hour:80,hourTwo:72};
+export const FIGURE={scale:40};
+// The time scale's panel: 180 px for 60 minutes, three pixels a minute.
+export const SCALE={x0:10,x1:190,baseline:46,panel:67};
 // Chart lettering: Departure Mono, drawn on the display's own pixel grid.
-const LABEL=departure.regular,TAG=departure.double;
+const LABEL=departure.regular;
 
 function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];}
 function segment(a,b,fn){
@@ -100,7 +102,7 @@ export function contourLevel(relief,land,i){
 
 const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['....#....','...#.#...','...#.#...','..#...#..','..#...#..','.#.....#.','#########'];
-export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,tag=true}){
+export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false}){
   const pal=PLATES[plate],buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
   const zoneAt=(x,y)=>light[Math.max(0,Math.min(H-1,Math.round(y)))*W+Math.max(0,Math.min(W-1,Math.round(x)))];
@@ -132,7 +134,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   };
   // Graticule: small crosses every five degrees (thirty on the world band)
   // and degree ticks along the edges of the map, like a chart's neatline.
-  const step=camera.world?30:5,minor=camera.world?10:1,{top,bottom}=camera.band,inBand=y=>y>=top&&y<=bottom;
+  const step=camera.world?30:5,minor=camera.world?10:1,{bottom}=camera.band,top=camera.world?camera.band.top:SCALE.panel,inBand=y=>y>=top&&y<=bottom;
   const g0=camera.toGround(0,bottom),g1=camera.toGround(W,top);
   for(let lat=Math.ceil(g0.lat/step)*step;lat<=g1.lat;lat+=step)for(let lon=Math.ceil(g0.lon/step)*step;lon<=g1.lon;lon+=step){
     const p=camera.toScreen(lat,lon),x=Math.round(p.x),y=Math.round(p.y);if(!inBand(y))continue;
@@ -180,7 +182,6 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);if(m%5||m===0||m===60)continue;
     const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const size=m%15===0?4:2;for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
-    if(m%15===0&&!camera.world){const label=String(m);letter(textPixels(LABEL,label,Math.round(p.x+nx*6-textWidth(LABEL,label)/2),Math.round(p.y+ny*6+8)),ink('route'),0);}
   }
   // This hour's station is a VOR: a hexagon inside a compass rose, north up.
   // The next hour is an open triangle, a reporting point.
@@ -214,42 +215,41 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     for(let k=-5;k<=5;k++){plot(buf,mx+k,my,mk);if(Math.abs(k)>=3){plot(buf,mx+k,my-1,mk);plot(buf,mx+k,my+1,mk);}}
     for(let k=-2;k<=2;k++)for(let d=-1;d<=1;d++)plot(buf,mx+d,my+k,mk);
   }
-  // The hours stand over their stations: this hour large, the next smaller.
+  // The hour is read on a scale across the top of the face, built like an
+  // instrument tape or a chart's scale bar: a baseline with minute, five-
+  // minute and quarter-hour graduations, tall hour marks at both ends with
+  // their figures, and a solid triangular index at the present minute. The
+  // scale runs the way the route does, so its ends match the stations below.
   const parts=clockParts(epoch,timeZone),h=Number(parts.h),hour=String(clock24?h:h%12||12),next=String(clock24?(h+1)%24:(h+1)%12||12);
-  // Both hours share one size and one baseline; the next is drawn in outline.
-  const big=hour.length>1||next.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,big),nw=runWidth(next,big);
-  const gx=Math.max(8,Math.min(W-8-hw,Math.round(c0.x-hw/2))),gy=camera.world?Math.round((top-runHeight(big))/2)-4:c0.y-26-runHeight(big);
-  const nx=Math.max(8,Math.min(W-8-nw,Math.round(c1.x-nw/2))),ny=gy;
-  const hourPixels=figurePixels(hour,big,gx,gy),nextSolid=figurePixels(next,big,nx,ny),inside=new Set(nextSolid.map(([a,b])=>a+','+b));
-  const nextPixels=nextSolid.filter(([a,b])=>[[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]].some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));
-  letter(hourPixels,ink('ink'));letter(nextPixels,ink('ink'));
-  // The minute rides with the body in a data block, as a radar display tags
-  // a target: a leader line from the symbol to a boxed readout. It points
-  // toward the middle of the screen so it never leaves the chart.
-  let tagBox=null;
-  const dataBlock=(ax,ay,down,color,reach=12)=>{
-    const text=parts.m,tw=textWidth(TAG,text),bw=tw+5,bh=20,side=ax>W/2?-1:1;
-    const ex=ax+side*Math.min(reach,12),ey=ay+(down?reach:-reach),bx=side>0?ex:ex-bw+1,by=down?ey:ey-bh+1;
-    const box={x:Math.max(2,Math.min(W-2-bw,bx)),y:by,w:bw,h:bh};
-    segment({x:ax+side*5,y:ay+(down?5:-5)},{x:ex,y:ey},(x,y)=>{clear(x+1,y);clear(x-1,y);});
-    segment({x:ax+side*5,y:ay+(down?5:-5)},{x:ex,y:ey},(x,y)=>plot(buf,x,y,color));
-    for(let y=box.y-1;y<=box.y+box.h;y++)for(let x=box.x-1;x<=box.x+box.w;x++)clear(x,y);
-    for(let x=box.x;x<box.x+box.w;x++){plot(buf,x,box.y,color);plot(buf,x,box.y+box.h-1,color);}
-    for(let y=box.y;y<box.y+box.h;y++){plot(buf,box.x,y,color);plot(buf,box.x+box.w-1,y,color);}
-    for(const [a,b] of textPixels(TAG,text,box.x+3,box.y+box.h-3))plot(buf,a,b,color);
-    tagBox=box;
-  };
-  if(camera.world){
-    // The ISS hour as a railway between its two figures: ties every five
-    // minutes, bold where the hour has run, a diamond at the present.
-    const left=Math.min(gx+hw,nx+nw)+7,right=Math.max(gx,nx)-7,ty=gy+Math.round(runHeight(big)/2),forward=nx>gx;
-    const f=Math.max(0,Math.min(1,(epoch-s0.epoch)/(60*MINUTE))),at=m=>forward?left+(right-left)*m/60:right-(right-left)*m/60;
-    const tx=Math.round(at(f*60)),rc=ink('route');
-    for(let x=left;x<=right;x++){plot(buf,x,ty,rc(x,ty));if(forward?x<=tx:x>=tx)plot(buf,x,ty-1,rc(x,ty));}
-    for(let m=0;m<=60;m+=5){const x=Math.round(at(m)),len=m%15===0?4:2;for(let d=1;d<=len;d++){plot(buf,x,ty-1-d,rc(x,ty));plot(buf,x,ty+d,rc(x,ty));}}
-    for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const r=Math.abs(dx)+Math.abs(dy);if(r<=4)clear(tx+dx,ty+dy);if(r<=3)plot(buf,tx+dx,ty+dy,mk);}
-    if(tag)dataBlock(tx,ty,true,ink('mark')(tx,ty));
-  }else if(tag)dataBlock(mx,my,true,mk,20);
+  const {x0:X0,x1:X1,baseline:B,panel:P}=SCALE,forward=c1.x>c0.x,at=m=>forward?X0+(X1-X0)*m/60:X1-(X1-X0)*m/60;
+  const minutes=Math.max(0,Math.min(60,(epoch-s0.epoch)/MINUTE)),ix=Math.round(at(Math.floor(minutes)));
+  for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);
+  const sc=()=>pal.spaceInk,fill=pal.route[0];
+  for(let x=0;x<W;x++)plot(buf,x,P-1,sc());
+  for(let x=X0;x<=X1;x++){plot(buf,x,B,sc());if(forward?x<=ix:x>=ix)plot(buf,x,B+1,fill);}
+  for(let m=0;m<=60;m++){
+    const x=Math.round(at(m)),len=m%60===0?12:m%15===0?6:m%5===0?4:2;
+    for(let d=1;d<=len;d++)plot(buf,x,B+d,sc());
+    if(m%60===0)for(let d=1;d<=6;d++)plot(buf,x,B-d,sc());
+    if(m%15===0&&m%60){const label=String(m),lw=textWidth(LABEL,label);for(const [a,b] of textPixels(LABEL,label,x-Math.floor(lw/2)+1,B+17))plot(buf,a,b,sc());}
+  }
+  // Both hours share one size; this hour is solid, the next in outline.
+  const size=FIGURE.scale,hw=runWidth(hour,size),nw=runWidth(next,size),place=(end,w)=>end===X0?X0+3:X1-w-2;
+  const gx=place(forward?X0:X1,hw),nx=place(forward?X1:X0,nw),gy=4;
+  const hourPixels=figurePixels(hour,size,gx,gy),nextSolid=figurePixels(next,size,nx,gy),inside=new Set(nextSolid.map(([a,b])=>a+','+b));
+  const nextPixels=nextSolid.filter(([a,b])=>[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));
+  for(const [a,b] of hourPixels)plot(buf,a,b,sc());for(const [a,b] of nextPixels)plot(buf,a,b,sc());
+  // The index: a solid triangle on the graduations, pointing at the minute.
+  for(let k=0;k<6;k++)for(let d=-k;d<=k;d++){plot(buf,ix+d,B-7+k,pal.space);}
+  for(let k=0;k<5;k++)for(let d=-k;d<=k;d++)plot(buf,ix+d,B-6+k,sc());
+  let minuteBox=null;
+  if(readout){
+    // Optional digital minute, set plainly over the index.
+    const lw=textWidth(LABEL,parts.m),lo=Math.min(gx,nx)===X0+3?X0+3+Math.max(hw,nw)+3:X0+3,hi=X1-2-Math.max(hw,nw)-3-lw;
+    const lx=Math.max(Math.min(lo,hi),Math.min(Math.max(lo,hi),Math.round(ix-lw/2)));
+    for(const [a,b] of textPixels(LABEL,parts.m,lx,B-10))plot(buf,a,b,sc());
+    minuteBox={x:lx,y:B-18,w:lw,h:8};
+  }
   // Margins: the ISS archive and altitude; otherwise the date in the chart's
   // own terms, with the day of the year as mission control kept it.
   const margin=(l,r,y,color)=>{letter(textPixels(LABEL,l,6,y),color,1);letter(textPixels(LABEL,r,W-6-textWidth(LABEL,r),y),color,1);};
@@ -265,7 +265,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'));
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,
-    figure:{hour,minute:parts.m,next,box:bounds(hourPixels),nextBox:bounds(nextSolid),tag:tagBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,box:bounds(hourPixels),nextBox:bounds(nextSolid),index:{x:ix,y:B},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // The calendar date where the watch is, and its day of the year.
 const dateFormats=new Map();
@@ -279,15 +279,15 @@ export function localDate(epoch,timeZone){
 export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24,plate}=state,tag=state.tag!==false,start=civilHour(epoch,timeZone);
+    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,start=civilHour(epoch,timeZone);
     const geometryKey=`${body}/${start}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
       this.camera=chartCamera(body,start);this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
-    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${tag}`;if(this.sceneKey===sceneKey)return this.last;
-    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,tag});
+    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}`;if(this.sceneKey===sceneKey)return this.last;
+    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout});
     const zones=[0,0,0];for(const z of this.light)zones[z]++;
     this.sceneKey=sceneKey;this.stats.renders++;
     const rgba=new Uint8ClampedArray(W*H*4);for(let i=0;i<W*H;i++){rgba.set(out.buf.subarray(i*3,i*3+3),i*4);rgba[i*4+3]=255;}

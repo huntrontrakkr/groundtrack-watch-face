@@ -37,7 +37,7 @@ test('a live satellite gets the world band, its symbol, track and element note',
     registerElements(fixtureTLE(NOW-7200000,norad),'test');
     const r=new EnrouteRenderer(atlas,meters),out=r.render({body:bodyId(norad),epoch:NOW,timeZone:'UTC',clock24:true,plate:'enroute'});
     assert.equal(out.world,true);assert.deepEqual([out.figure.hour,out.figure.next],['14','15']);
-    assert.ok(out.figure.tag.y+out.figure.tag.h<r.camera.band.top);
+    assert.ok(out.figure.index.y<r.camera.band.top);
     for(let i=0;i<out.buf.length;i++)assert.equal(out.buf[i]%85,0);
   }
   assert.equal(chartCamera(bodyId(25544),civilHour(NOW,'UTC')).world,true);

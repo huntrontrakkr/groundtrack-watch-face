@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {EnrouteRenderer,renderEnroute,reliefLayer,contourLevel,localDate,PLATES,CONTOURS,ACQUISITION,W,H} from '../src/enroute-render.js';
+import {EnrouteRenderer,renderEnroute,reliefLayer,contourLevel,localDate,PLATES,CONTOURS,ACQUISITION,SCALE,W,H} from '../src/enroute-render.js';
 import {decodeRelief,reliefAt,reliefMeters,RELIEF_BYTES} from '../src/relief.js';
 import {chartCamera,groundLayer,lightLayer,civilHour,LAND} from '../src/chart-render.js';
 import {position,MINUTE} from '../src/ephemeris.js';
@@ -68,21 +68,25 @@ test('the time figure reads the hour and minute for a whole day and clears the r
   }
 });
 
-test('the minute rides with the body in a data block, clear of the hours and the route',()=>{
-  for(const [body,epoch] of [['sun',SUN],['moon',MOON_DUSK]]){
-    const r=new EnrouteRenderer(atlas,meters),start=civilHour(epoch,'America/New_York');
+test('the time scale reads like an instrument tape, running the way the route runs',()=>{
+  for(const [body,epoch] of [['sun',SUN],['moon',MOON_DUSK],['iss',ISS]]){
+    const r=new EnrouteRenderer(atlas,meters),start=civilHour(epoch,'America/New_York');let last=null;
     for(let m=0;m<60;m++){
-      const out=r.render(scene(body,start+m*MINUTE)),t=out.figure.tag;
-      assert.ok(t&&t.x>=1&&t.x+t.w<=199&&t.y+t.h<=H-12,`${body} ${m}: ${JSON.stringify(t)}`);
-      assert.ok(t.y>=out.stationsOnRoute[0].y+14,'below the route and its quarter marks');
-      assert.ok(Math.hypot(t.x+t.w/2-out.marker.x,t.y-out.marker.y)<40,'near its symbol');
-      for(const b of [out.figure.box,out.figure.nextBox])assert.ok(disjoint(t,b));
+      const out=r.render(scene(body,start+m*MINUTE)),{index}=out.figure,[s0,s1]=out.stationsOnRoute,forward=s1.x>s0.x;
+      // Three pixels a minute from this hour's end of the scale.
+      assert.equal(index.x,forward?SCALE.x0+3*m:SCALE.x1-3*m,`${body} ${m}`);
+      if(last!==null)assert.equal(Math.sign(index.x-last),forward?1:-1);last=index.x;
+      // This hour's figure stands at this hour's end, the next at the other.
+      const {box,nextBox}=out.figure;assert.ok(forward?box.x<nextBox.x:box.x>nextBox.x);
+      for(const b of [box,nextBox])assert.ok(b.y>=2&&b.y+b.h<index.y-6&&b.x>=SCALE.x0&&b.x+b.w<=SCALE.x1+1);
+      assert.equal(out.figure.readout,null);
     }
   }
-  const off=draw(scene('sun',SUN,{tag:false})).out;assert.equal(off.figure.tag,null);assert.notDeepEqual(off.buf,draw(scene('sun',SUN)).out.buf);
-  // The ISS hour runs on a track between its figures, its tag above the band.
-  const {r,out}=draw(scene('iss',ISS));assert.ok(out.figure.tag.y+out.figure.tag.h<r.camera.band.top-8);
-  assert.ok(out.figure.tag.x>=out.figure.box.x+out.figure.box.w-12&&out.figure.tag.x+out.figure.tag.w<=out.figure.nextBox.x+12);
+  const on=draw(scene('sun',SUN,{readout:true})).out;
+  assert.equal(on.figure.readout.y+on.figure.readout.h<=on.figure.index.y-6,true);
+  for(const b of [on.figure.box,on.figure.nextBox])assert.ok(disjoint(on.figure.readout,b));
+  // Nothing on the chart hides under the scale's panel.
+  for(const s of draw(scene('moon',MOON_DAY)).out.stations)assert.ok(s.y>SCALE.panel);
 });
 
 test('the margin date is local, with the day of the year',()=>{
@@ -118,7 +122,7 @@ test('paper plates print night as a dot screen that deepens through twilight',()
   const state=scene('moon',MOON_DUSK,{plate:'sectional'}),{r,out}=draw(state),sun=position('sun',state.epoch).dir,ink=PLATES.sectional.screen.join();
   const bands={day:[0,0],night:[0,0]};
   for(let y=4;y<H-4;y++)for(let x=4;x<W-4;x++){
-    const i=y*W+x;if(Math.abs(y-r.camera.stations[0].y)<50)continue;
+    const i=y*W+x;if(y<SCALE.panel+2||Math.abs(y-r.camera.stations[0].y)<50)continue;
     // Lettering knocks the screen out; measure the open chart only.
     if([out.figure.box,out.figure.nextBox,...out.stations.map(s=>s.box)].some(b=>x>=b.x-2&&x<b.x+b.w+2&&y>=b.y-2&&y<b.y+b.h+2))continue;
     const a=dot(r.ground.dirs[i],sun),band=a>=SUNRISE_SINE?'day':a<CIVIL_TWILIGHT_SINE?'night':null;if(!band)continue;

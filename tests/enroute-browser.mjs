@@ -49,9 +49,9 @@ try{
   await page.locator('[data-body="sun"]').click();await page.locator('.art-options summary').click();await page.locator('#enroute-zone').selectOption('Asia/Kolkata');
   assert.equal(await page.locator('#enroute-time').textContent(),'13:54');
   assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['1','54','2']);
-  assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.tag));
-  await page.locator('#enroute-tag').uncheck();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.tag),null);
-  await page.locator('#enroute-tag').check();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.tag));
+  assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
+  await page.locator('#enroute-readout').check();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
+  await page.locator('#enroute-readout').uncheck();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
   await page.locator('#enroute-24').check();assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.next];}),['13','14']);
   // Live satellites: CelesTrak is intercepted, so no network is used. One
   // satellite answers with fresh elements, another with an error.
