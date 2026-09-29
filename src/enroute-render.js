@@ -65,12 +65,25 @@ const textPixels=(font,text,x,baseline)=>{
 };
 const textWidth=(font,text)=>[...text].reduce((s,c)=>s+font[c].a,0);
 const gapFor=size=>Math.round(size/16);
-const runWidth=(text,size)=>[...text].reduce((s,c)=>s+numerals.sizes[size][c].width,0)+gapFor(size)*(text.length-1);
+// The figure set is digits only; the colon is drawn to match: two rounded
+// square dots the weight of the strokes, one on the baseline and one at
+// the height of the figures' middle bar.
+const colons=new Map();
+function glyph(size,c){
+  const set=numerals.sizes[size];if(c!==':')return set[c];
+  if(!colons.has(size)){
+    const h=set['0'].height,d=Math.max(3,Math.round(h/7)),top=Math.round(h*.3),rows=[];
+    for(let y=0;y<h;y++){const r=y>=top&&y<top+d?y-top:y>=h-d?y-(h-d):-1;rows.push(r<0?'.'.repeat(d):[...Array(d)].map((_,x)=>(x===0||x===d-1)&&(r===0||r===d-1)&&d>3?'.':'#').join(''));}
+    colons.set(size,{width:d,height:h,rows});
+  }
+  return colons.get(size);
+}
+const runWidth=(text,size)=>[...text].reduce((s,c)=>s+glyph(size,c).width,0)+gapFor(size)*(text.length-1);
 const runHeight=size=>numerals.sizes[size]['0'].height;
 // Figures sit on a shared baseline; the tallest glyph sets the top.
 function figurePixels(text,size,x,y){
-  const set=numerals.sizes[size],h=Math.max(...[...text].map(c=>set[c].height)),out=[];let cx=x;
-  for(const c of text){const g=set[c];for(let yy=0;yy<g.height;yy++)for(let xx=0;xx<g.width;xx++)if(g.rows[yy][xx]==='#')out.push([cx+xx,y+h-g.height+yy]);cx+=g.width+gapFor(size);}
+  const h=Math.max(...[...text].map(c=>glyph(size,c).height)),out=[];let cx=x;
+  for(const c of text){const g=glyph(size,c);for(let yy=0;yy<g.height;yy++)for(let xx=0;xx<g.width;xx++)if(g.rows[yy][xx]==='#')out.push([cx+xx,y+h-g.height+yy]);cx+=g.width+gapFor(size);}
   return out;
 }
 const bounds=pixels=>{
@@ -284,15 +297,17 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       for(const [a,b] of textPixels(LABEL,parts.m,lx,B-10))plot(buf,a,b,sc());minuteBox={x:lx,y:B-18,w:lw,h:8};
     }
   }else if(camera.day){
-    // On the day strip the present hour stands over the body; the strip's
-    // own figures carry the rest of the day.
-    const size=hour.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,size),gy=my-24-runHeight(size);
-    hourPixels=figurePixels(hour,size,place(mx,hw),gy);nextSolid=[];letter(hourPixels,ink('ink'));
+    // A whole day is too long a scale to read minutes from, so the strip
+    // carries the time in full, hours and minutes, over the body; the
+    // strip's own figures carry the rest of the day.
+    // It stands in the open paper above the net where there is room, tied
+    // to the body by a dotted leader, like a callout on a chart.
+    const time=`${hour}:${parts.m}`,size=FIGURE.scale,hw=runWidth(time,size),fh=runHeight(size);
+    const netTop=Math.max(0,Math.min(...camera.tiles.map(t=>t.box[1]))),above=my-18-fh;
+    const gy=netTop>=fh+16?Math.round((netTop-fh)/2):above>=4?above:my+18;
+    hourPixels=figurePixels(time,size,place(mx,hw),gy);nextSolid=[];letter(hourPixels,ink('ink'));
+    if(gy+fh<my-18)for(let y=gy+fh+5;y<=my-10;y+=2)plot(buf,mx,y,ink('ink')(mx,y));
     index={x:mx,y:my};
-    if(readout){
-      const lw=textWidth(LABEL,parts.m),lx=Math.max(4,Math.min(W-4-lw,Math.round(mx-lw/2)));
-      letter(textPixels(LABEL,parts.m,lx,my-11),ink('mark'),1);minuteBox={x:lx,y:my-19,w:lw,h:8};
-    }
   }else{
     const size=hour.length>1||next.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,size),nw=runWidth(next,size),gy=c0.y-26-runHeight(size);
     hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);
@@ -319,7 +334,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'));
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,
-    figure:{hour,minute:parts.m,next,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,time:camera.day?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // The calendar date where the watch is, and its day of the year.
 const dateFormats=new Map();

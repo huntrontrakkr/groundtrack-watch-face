@@ -67,3 +67,14 @@ test('the Sun and Moon roll out a whole local day, midnight to midnight, on scre
     const d=localDay(Date.parse(t),z);assert.equal(new Date(d.start).toISOString(),start,`${t} ${z}`);assert.equal((d.end-d.start)/3600000,hours,`${t} ${z}`);
   }
 });
+
+test('the day strip carries the time in full, hours and minutes, clear of the strip',()=>{
+  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
+  for(const [body,t,tz,clock24,time] of [['sun','2026-09-27T08:24:00Z','America/New_York',false,'4:24'],['moon','2026-09-15T12:24:00Z','UTC',true,'12:24'],['sun','2026-09-27T08:07:00Z','UTC',false,'8:07']]){
+    const r=new EnrouteRenderer(atlas,meters),out=r.render({body,epoch:Date.parse(t),timeZone:tz,clock24,plate:'enroute',projection:'fuller'});
+    assert.equal(out.figure.time,time);
+    const {box}=out.figure;assert.ok(box.x>=4&&box.x+box.w<=196&&box.y>=0);
+    // The figure never lands on the rolled route.
+    for(const p of r.camera.track)assert.ok(!(p.x>=box.x&&p.x<box.x+box.w&&p.y>=box.y&&p.y<box.y+box.h),`${body} ${t}`);
+  }
+});
