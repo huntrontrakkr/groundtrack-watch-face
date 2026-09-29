@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 const url=process.env.GROUNDTRACK_URL||'http://127.0.0.1:5195';
+const page04=`${url}/study-04.html`;
 const server=process.env.GROUNDTRACK_URL?null:spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port','5195','--strictPort'],{stdio:'pipe'});
 let logs='';server?.stdout.on('data',d=>logs+=d);server?.stderr.on('data',d=>logs+=d);
 let browser;
@@ -11,7 +12,7 @@ try{
   let ready=false;for(let i=0;i<60;i++){try{if((await fetch(url)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}assert.ok(ready,logs);
   browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1280,height:1100},deviceScaleFactor:1});
   const failures=[];page.on('pageerror',e=>failures.push(e.message));page.on('response',r=>{if(r.status()>=400)failures.push(`${r.status()} ${r.url()}`);});
-  await page.goto(url);await page.waitForFunction(()=>window.groundtrackRelief?.ready);
+  await page.goto(page04);await page.waitForFunction(()=>window.groundtrackRelief?.ready);
   assert.equal(await page.locator('#relief-time').textContent(),'08:24');
   assert.deepEqual(await page.evaluate(()=>groundtrackRelief.main.last.hours.map(h=>h.value)),['8','9']);
   let combinations=0;
