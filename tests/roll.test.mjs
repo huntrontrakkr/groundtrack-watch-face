@@ -22,16 +22,22 @@ test('the rolled route is continuous: it never crosses a cut',()=>{
   }
 });
 
-test('the hour runs left to right on a horizontal line, and the sheet covers the screen',()=>{
-  const cam=rollCamera('iss',civilHour(ISS,'UTC')),[s0,s1]=cam.stations;
-  assert.ok(Math.abs(s1.x-s0.x-180)<1e-6&&Math.abs(s1.y-s0.y)<1e-6);
-  let misses=0;for(let y=0;y<H;y+=3)for(let x=0;x<W;x+=3)if(Number.isNaN(cam.toGround(x+.5,y+.5).lat))misses++;
-  assert.equal(misses,0);
-  // Screen positions invert to the right place on Earth.
-  for(const p of cam.track.filter((p,i)=>i%7===0&&p.x>=0&&p.x<W&&p.y>=0&&p.y<H)){const g=cam.toGround(p.x,p.y);assert.ok(angularDistance(direction(g.lat,g.lon),p.dir)<.01);}
-  // Folds join true icosahedron neighbours; cuts are recorded, never on the route's own faces.
-  const folds=cam.tiles.flatMap(t=>t.edges.filter(e=>!e.cut)),cuts=cam.tiles.flatMap(t=>t.edges.filter(e=>e.cut));
-  assert.ok(folds.length>cuts.length&&cuts.length>0);
+test('the hour runs left to right, on a floating net with no cuts',()=>{
+  for(let hour=-12;hour<12;hour++){
+    const epoch=ISS+hour*3600000,cam=rollCamera('iss',civilHour(epoch,'UTC')),[s0,s1]=cam.stations;
+    assert.ok(Math.abs(s1.x-s0.x-180)<1e-6&&Math.abs(s1.y-s0.y)<1e-6);
+    // Every edge inside the net is a true fold; the rest is the net's outline.
+    const edges=cam.tiles.flatMap(t=>t.edges);
+    assert.equal(edges.filter(e=>e.cut).length,0);assert.ok(edges.some(e=>e.outline)&&edges.some(e=>!e.outline));
+    // A true net: each face printed once, so no place appears beside a copy
+    // of itself.
+    const faces=cam.tiles.map(t=>t.face);assert.equal(new Set(faces).size,faces.length);
+    // Inside the net, screen positions invert to the right place on Earth;
+    // outside it is plain paper.
+    let paper=0;for(let y=0;y<H;y+=3)for(let x=0;x<W;x+=3){if(cam.outside(x+.5,y+.5))paper++;}
+    assert.ok(paper>0);
+    for(const p of cam.track.filter((p,i)=>i%7===0&&!cam.outside(p.x,p.y))){const g=cam.toGround(p.x,p.y);assert.ok(angularDistance(direction(g.lat,g.lon),p.dir)<.01);}
+  }
 });
 
 test('the Enroute renderer draws a Fuller sheet in native colors, rose turned to north',()=>{

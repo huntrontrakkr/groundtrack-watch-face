@@ -84,7 +84,7 @@ export function groundLayer(camera,atlas){
   const land=new Uint8Array(W*H),dirs=new Array(W*H).fill(null),space=new Uint8Array(W*H);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=y*W+x;
-    if(y<camera.band.top||y>camera.band.bottom){space[i]=1;continue;}
+    if(y<camera.band.top||y>camera.band.bottom||camera.outside?.(x+.5,y+.5)){space[i]=1;continue;}
     let c=0;for(const [dx,dy] of SAMPLES){const g=camera.toGround(x+dx,y+dy);c+=coverage(atlas,g.lat,g.lon);}
     const g=camera.toGround(x+.5,y+.5);land[i]=c>=2?1:0;dirs[i]=direction(g.lat,g.lon);
   }

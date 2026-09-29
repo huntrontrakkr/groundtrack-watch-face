@@ -36,18 +36,21 @@ This cloud build environment blocks celestrak.org, so the tests replace CelesTra
 
 ## Spike: rolling Fuller
 
-Studies 03 and 04 used a fixed icosahedral net. Because only five faces meet at a vertex, any flat net has cuts, and routes broke at them. The spike (`src/roll.js`, *Projection → Rolling Fuller* on the page) rolls the icosahedron across the plane along the route instead, printing each Gray–Fuller face as it touches down. The route therefore never crosses a cut. The rest of the screen is filled outward from that strip on the same triangular lattice. It is an infinite tiling, generated only as far as the view needs. Where the icosahedron really folds, the edge is a quiet dotted line; where two printings of the Earth meet without matching, it is a solid cut line.
+Studies 03 and 04 used a fixed icosahedral net. A flat triangle grid puts six triangles around every corner, but the icosahedron has only five, so any flat net must cut the Earth somewhere, and routes broke at those cuts. This is geometry, not a rendering fault: a sphere cannot lie flat without stretching or tearing.
 
-Choices that keep it clean:
-- The camera turns the sheet so the hour always runs left to right, like a ruler. The compass rose on this hour's station turns to true north, because north is no longer up.
-- On a whole-orbit sheet the graticule crosses go (the lattice is the grid) and only the 2,000 m and 4,000 m contours remain.
-- Only the tracking stations that can hear the satellite during this hour are shown, each with its acquisition circle.
+The spike (`src/roll.js`, *Projection → Rolling Fuller* on the page) rolls the icosahedron across the plane along the route instead, printing each Gray–Fuller face as it touches down, so the route never meets a cut. A first version then filled the whole screen outward from that strip, an endless tiling. It worked, but the fill order scattered cuts wherever two directions met, and the result looked broken.
 
-It suits satellites best. On the Gray–Fuller faces great circles are nearly straight, so an ISS hour, about 240° of orbit, unrolls across four to five faces as a near-straight graduated line. Small kinks remain where it crosses a face edge, because the transform is not exactly gnomonic, and the Earth's rotation bends the ground track slightly. For the Sun and Moon an hour covers only a fraction of one face, so the sheet mostly shows a single tilted triangle.
+The current version is a **floating net**, a true net of the icosahedron grown from the route. The faces the route rolls over come first; then up to two rings of neighbours are added, nearest the middle of the hour first. Each face is printed at most once, so no place ever appears beside a copy of itself, and a face joins only where it truly meets every face already printed beside it. Neighbouring faces are therefore always consecutive on the globe, and the net contains no cuts at all. A satellite's strip is also kept under one lap (the hour plus ten minutes either side, against the ISS's 92-minute orbit), so the route never rolls back over its own faces. Folds inside it are quiet dotted lines, its outline is inked, and the rest of the view is plain paper (or dark glass on the Plotboard). The camera turns the net so the hour runs left to right like a ruler, and the compass rose points to true north, because north is no longer up. On a whole-orbit net only the 2,000 m and 4,000 m contours remain, and only the tracking stations that can hear the satellite during this hour are drawn, each with its acquisition circle.
+
+It suits satellites best. On the Gray–Fuller faces great circles are nearly straight, so an ISS hour, about 240° of orbit, unrolls into a zigzag band of four or five faces, with the orbit as a near-straight graduated line through the middle. Small kinks remain at face edges, because the transform is not exactly gnomonic and the Earth turns beneath the orbit. For the Sun and Moon an hour covers only part of one face, so the net fills the view as a single tilted triangle.
 
 ![Rolling Fuller spike proofs](screenshots/study-06-fuller-contact-sheet.png)
 
-Tests check that the rolled route never jumps (consecutive samples share a face or truly adjacent faces), that the hour runs horizontally left to right, that every on-screen pixel inverts to the right place on Earth, and that folds and cuts are both present and classified.
+Tests check the following:
+- The rolled route never jumps.
+- The hour runs horizontally left to right.
+- For every hour of the archive day, the net holds no cuts (only folds and its outline) and prints no face twice.
+- Every point inside the net inverts to the right place on Earth.
 
 ## Plates
 

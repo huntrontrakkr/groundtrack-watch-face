@@ -142,10 +142,9 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // and degree ticks along the edges of the map, like a chart's neatline.
   const step=camera.world?30:5,minor=camera.world?10:1,{bottom}=camera.band,top=camera.band.top,inBand=y=>y>=top&&y<=bottom;
   if(camera.fuller){
-    // Rolling Fuller: fold lines where the icosahedron bends, dotted and
-    // quiet; cut lines, solid, where two printings of the Earth meet.
+    // Rolling Fuller: the net's outline in ink, folds inside it dotted.
     for(const t of camera.tiles)for(const e of t.edges){
-      let n=0;segment(e.a,e.b,(x,y)=>{if(e.cut||(n++%4===0))plot(buf,x,y,ink('grid')(x,y));});
+      let n=0;segment(e.a,e.b,(x,y)=>{if(e.outline)plot(buf,x,y,pal.spaceInk);else if(e.cut||(n++%4===0))plot(buf,x,y,ink('grid')(x,y));});
     }
   }else{
   const g0=camera.toGround(0,bottom),g1=camera.toGround(W,top);

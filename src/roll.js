@@ -4,7 +4,8 @@
 // plane along the route instead, printing each face as it touches down, so
 // the route never meets a cut. The rest of the view is filled outward from
 // that strip on the same triangular lattice; where two printings disagree
-// the edge is a cut, drawn as such. On the Gray–Fuller faces great circles
+// the edge would be a cut, so the view keeps only a floating net around
+// the route: no cuts at all. On the Gray–Fuller faces great circles
 // are nearly straight, so a satellite's hour unrolls into a near-straight
 // line. The camera turns the plane so time always runs left to right.
 import {sampleTrack,MINUTE} from './ephemeris.js';
@@ -26,8 +27,10 @@ function rollTo(tile,dir){
   return tile;
 }
 
-export function rollCamera(body,start,{span=180,trackY=140}={}){
-  const world=body!=='sun'&&body!=='moon',step=world?MINUTE/4:MINUTE,lead=(world?20:40)*MINUTE;
+export function rollCamera(body,start,{span=180,trackY=140,rings=2}={}){
+  // A satellite's strip stays under one lap (about 92 min for the ISS), so
+  // the route never rolls back over a face it has already printed.
+  const world=body!=='sun'&&body!=='moon',step=world?MINUTE/4:MINUTE,lead=(world?10:40)*MINUTE;
   const samples=sampleTrack(body,start-lead,start+60*MINUTE+lead,step);
   // Roll along the route. Cells are keyed by lattice position; the route's
   // own printing always wins its cells.
@@ -43,20 +46,39 @@ export function rollCamera(body,start,{span=180,trackY=140}={}){
   const len=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/len,uy=(b[1]-a[1])/len,scale=span/len,mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
   const toScreenXY=p=>{const dx=p[0]-mid[0],dy=p[1]-mid[1];return {x:W/2+(dx*ux+dy*uy)*scale,y:trackY-(-dx*uy+dy*ux)*scale};};
   const toPlane=(x,y)=>{const s=(x-W/2)/scale,t=(trackY-y)/scale;return [mid[0]+s*ux-t*uy,mid[1]+s*uy+t*ux];};
-  // Fill the screen outward from the route strip, one lattice step at a time.
+  // A floating net: the faces the route rolls over, plus every face that
+  // truly touches them across an edge. A lattice cell that two faces would
+  // claim is left empty, so the net holds no cuts at all; the rest of the
+  // view is plain paper.
   const onScreen=tri=>{const q=tri.map(toScreenXY);return Math.max(...q.map(p=>p.x))>-2&&Math.min(...q.map(p=>p.x))<W+2&&Math.max(...q.map(p=>p.y))>-2&&Math.min(...q.map(p=>p.y))<H+2;};
-  const queue=[...path];
-  for(let i=0;i<queue.length&&queue.length<2000;i++)for(let e=0;e<3;e++){
-    const n=across(queue[i],e);if(cells.has(n.key)||!onScreen(n.tri))continue;
-    const t={face:n.face,tri:n.tri,key:n.key,route:false};cells.set(n.key,t);queue.push(t);
+  // A true net: every face at most once, and a face joins only where it
+  // truly meets every face already printed beside it, so neighbours are
+  // always consecutive on the globe. It grows ring by ring from the route,
+  // nearest the middle of the hour first.
+  const printed=new Set(path.map(t=>t.face));
+  let frontier=path;
+  for(let ring=0;ring<rings;ring++){
+    const candidates=[];
+    for(const t of frontier)for(let e=0;e<3;e++){const n=across(t,e);if(!cells.has(n.key)&&!printed.has(n.face)&&onScreen(n.tri))candidates.push(n);}
+    const mid=toScreenXY([(a[0]+b[0])/2,(a[1]+b[1])/2]),dist=n=>{const c=toScreenXY(centre(n.tri));return Math.hypot(c.x-mid.x,c.y-mid.y);};
+    candidates.sort((p,q)=>dist(p)-dist(q));
+    const added=[];
+    for(const n of candidates){
+      if(cells.has(n.key)||printed.has(n.face))continue;
+      const t={face:n.face,tri:n.tri,key:n.key,route:false};
+      const fits=[0,1,2].every(e=>{const m=across(t,e),there=cells.get(m.key);return !there||there.face===m.face;});
+      if(!fits)continue;
+      cells.set(n.key,t);printed.add(n.face);added.push(t);
+    }
+    frontier=added;
   }
   const tiles=[...cells.values()].filter(t=>onScreen(t.tri));
   for(const t of tiles){
     t.screen=t.tri.map(toScreenXY);
     const xs=t.screen.map(p=>p.x),ys=t.screen.map(p=>p.y);t.box=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
-    // An edge is a fold where the neighbour printed there is the face the
-    // icosahedron really has across it; otherwise it is a cut.
-    t.edges=EDGES.map((_,e)=>{const n=across(t,e),there=cells.get(n.key);return {a:t.screen[EDGES[e][0]],b:t.screen[EDGES[e][1]],cut:!!there&&there.face!==n.face};});
+    // Inside the net every shared edge is a true fold of the icosahedron;
+    // an edge with nothing printed beyond it is the net's outline.
+    t.edges=EDGES.map((_,e)=>{const n=across(t,e),there=cells.get(n.key);return {a:t.screen[EDGES[e][0]],b:t.screen[EDGES[e][1]],cut:!!there&&there.face!==n.face,outline:!there};});
   }
   const locate=(x,y)=>{
     const p=toPlane(x,y);
@@ -72,6 +94,6 @@ export function rollCamera(body,start,{span=180,trackY=140}={}){
     return best||{x:-999,y:-999};
   };
   const track=flat.map(p=>({...p,...toScreenXY(p.xy)}));
-  return {body,start,world:false,fuller:true,wide:world,track,scale,band:{top:0,bottom:H},tiles,toScreen:project,toGround,project,
+  return {body,start,world:false,fuller:true,wide:world,outside:(x,y)=>!locate(x,y),track,scale,band:{top:0,bottom:H},tiles,toScreen:project,toGround,project,
     stations:[track[i0],track[i1]],key:`fuller/${body}/${start}/${span}`};
 }
