@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {EnrouteRenderer,renderEnroute,reliefLayer,contourLevel,localDate,PLATES,CONTOURS,ACQUISITION,SCALE,W,H} from '../src/enroute-render.js';
+import {EnrouteRenderer,renderEnroute,reliefLayer,contourLevel,localDate,PLATES,CONTOURS,ACQUISITION,SCALE,SPAN,W,H} from '../src/enroute-render.js';
 import {decodeRelief,reliefAt,reliefMeters,RELIEF_BYTES} from '../src/relief.js';
 import {chartCamera,groundLayer,lightLayer,civilHour,LAND} from '../src/chart-render.js';
 import {position,MINUTE} from '../src/ephemeris.js';
@@ -73,12 +73,21 @@ test('the time scale reads like an instrument tape, running the way the route ru
     const r=new EnrouteRenderer(atlas,meters),start=civilHour(epoch,'America/New_York');let last=null;
     for(let m=0;m<60;m++){
       const out=r.render(scene(body,start+m*MINUTE)),{index}=out.figure,[s0,s1]=out.stationsOnRoute,forward=s1.x>s0.x;
-      // Three pixels a minute from this hour's end of the scale.
-      assert.equal(index.x,forward?SCALE.x0+3*m:SCALE.x1-3*m,`${body} ${m}`);
+      // Even graduations from this hour's end: two pixels a minute over the
+      // zoomed route, whose ends are the stations; three on the ISS band.
+      const {x0,x1}=out.figure.scale,step=(x1-x0)/60;assert.ok(Number.isInteger(step));
+      assert.equal(index.x,forward?x0+step*m:x1-step*m,`${body} ${m}`);
+      if(!out.world){
+        assert.deepEqual([x0,x1],[Math.min(s0.x,s1.x),Math.max(s0.x,s1.x)].map(Math.round));
+        // The index stands over the body on the route.
+        assert.ok(Math.abs(index.x-out.marker.x)<=2,`${body} ${m}: index ${index.x}, body ${out.marker.x}`);
+      }
       if(last!==null)assert.equal(Math.sign(index.x-last),forward?1:-1);last=index.x;
       // This hour's figure stands at this hour's end, the next at the other.
       const {box,nextBox}=out.figure;assert.ok(forward?box.x<nextBox.x:box.x>nextBox.x);
-      for(const b of [box,nextBox])assert.ok(b.y>=2&&b.y+b.h<index.y-6&&b.x>=SCALE.x0&&b.x+b.w<=SCALE.x1+1);
+      for(const b of [box,nextBox])assert.ok(b.y>=2&&b.y+b.h<index.y-6&&b.x>=4&&b.x+b.w<=196);
+      // Each figure is centred over its own end mark.
+      assert.ok(Math.abs(box.x+box.w/2-(forward?x0:x1))<=Math.max(3,box.x<6||box.x+box.w>194?20:3));
       assert.equal(out.figure.readout,null);
     }
   }
@@ -149,7 +158,7 @@ test('caches follow the clock: chart by the hour, light by the minute, plate las
   const minute={...r.stats};r.render({...state,epoch:state.epoch+MINUTE,plate:'plotboard'});assert.equal(r.stats.lightBuilds,minute.lightBuilds);assert.equal(r.stats.renders,minute.renders+1);
   r.render({...state,epoch:state.epoch+60*MINUTE});assert.equal(r.stats.geometryBuilds,first.geometryBuilds+1);
   // A standalone render of the cached layers matches the renderer.
-  const camera=chartCamera('moon',civilHour(state.epoch,state.timeZone)),ground=groundLayer(camera,atlas);
+  const camera=chartCamera('moon',civilHour(state.epoch,state.timeZone),{span:SPAN}),ground=groundLayer(camera,atlas);
   const direct=renderEnroute({camera,ground,relief:reliefLayer(camera,meters),light:lightLayer(ground,state.epoch),plate:'enroute',epoch:state.epoch,timeZone:state.timeZone,clock24:false});
   assert.deepEqual(direct.buf,new EnrouteRenderer(atlas,meters).render(state).buf);
 });

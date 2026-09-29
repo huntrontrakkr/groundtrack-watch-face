@@ -43,8 +43,11 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
 export const FIGURE={scale:40};
-// The time scale's panel: 180 px for 60 minutes, three pixels a minute.
-export const SCALE={x0:10,x1:190,baseline:46,panel:67};
+// The time scale registers with the route: its hour marks stand over the
+// two stations, 120 px apart on the zoomed charts, so each minute is exactly
+// two pixels and each graduation sits over its minute on the route. The ISS
+// world band spans 180 px, three pixels a minute.
+export const SPAN=120,SCALE={x0:10,x1:190,baseline:46,panel:67};
 // Chart lettering: Departure Mono, drawn on the display's own pixel grid.
 const LABEL=departure.regular;
 
@@ -221,7 +224,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // their figures, and a solid triangular index at the present minute. The
   // scale runs the way the route does, so its ends match the stations below.
   const parts=clockParts(epoch,timeZone),h=Number(parts.h),hour=String(clock24?h:h%12||12),next=String(clock24?(h+1)%24:(h+1)%12||12);
-  const {x0:X0,x1:X1,baseline:B,panel:P}=SCALE,forward=c1.x>c0.x,at=m=>forward?X0+(X1-X0)*m/60:X1-(X1-X0)*m/60;
+  const {baseline:B,panel:P}=SCALE,X0=camera.world?SCALE.x0:Math.min(c0.x,c1.x),X1=camera.world?SCALE.x1:Math.max(c0.x,c1.x),forward=c1.x>c0.x,at=m=>forward?X0+(X1-X0)*m/60:X1-(X1-X0)*m/60;
   const minutes=Math.max(0,Math.min(60,(epoch-s0.epoch)/MINUTE)),ix=Math.round(at(Math.floor(minutes)));
   for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);
   const sc=()=>pal.spaceInk,fill=pal.route[0];
@@ -234,7 +237,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     if(m%15===0&&m%60){const label=String(m),lw=textWidth(LABEL,label);for(const [a,b] of textPixels(LABEL,label,x-Math.floor(lw/2)+1,B+17))plot(buf,a,b,sc());}
   }
   // Both hours share one size; this hour is solid, the next in outline.
-  const size=FIGURE.scale,hw=runWidth(hour,size),nw=runWidth(next,size),place=(end,w)=>end===X0?X0+3:X1-w-2;
+  const size=FIGURE.scale,hw=runWidth(hour,size),nw=runWidth(next,size),place=(end,w)=>Math.max(4,Math.min(W-4-w,Math.round(end-w/2)));
   const gx=place(forward?X0:X1,hw),nx=place(forward?X1:X0,nw),gy=4;
   const hourPixels=figurePixels(hour,size,gx,gy),nextSolid=figurePixels(next,size,nx,gy),inside=new Set(nextSolid.map(([a,b])=>a+','+b));
   const nextPixels=nextSolid.filter(([a,b])=>[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));
@@ -245,8 +248,8 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   let minuteBox=null;
   if(readout){
     // Optional digital minute, set plainly over the index.
-    const lw=textWidth(LABEL,parts.m),lo=Math.min(gx,nx)===X0+3?X0+3+Math.max(hw,nw)+3:X0+3,hi=X1-2-Math.max(hw,nw)-3-lw;
-    const lx=Math.max(Math.min(lo,hi),Math.min(Math.max(lo,hi),Math.round(ix-lw/2)));
+    const lw=textWidth(LABEL,parts.m),inner=[Math.min(gx+hw,nx+nw)+3,Math.max(gx,nx)-3-lw];
+    const lx=Math.max(inner[0],Math.min(inner[1],Math.round(ix-lw/2)));
     for(const [a,b] of textPixels(LABEL,parts.m,lx,B-10))plot(buf,a,b,sc());
     minuteBox={x:lx,y:B-18,w:lw,h:8};
   }
@@ -265,7 +268,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'));
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,
-    figure:{hour,minute:parts.m,next,box:bounds(hourPixels),nextBox:bounds(nextSolid),index:{x:ix,y:B},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,box:bounds(hourPixels),nextBox:bounds(nextSolid),index:{x:ix,y:B},scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // The calendar date where the watch is, and its day of the year.
 const dateFormats=new Map();
@@ -282,7 +285,7 @@ export class EnrouteRenderer{
     const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,start=civilHour(epoch,timeZone);
     const geometryKey=`${body}/${start}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
-      this.camera=chartCamera(body,start);this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
+      this.camera=chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}

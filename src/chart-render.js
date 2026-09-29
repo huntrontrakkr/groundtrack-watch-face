@@ -40,7 +40,7 @@ export const CHARTS={
 // line at TRACK_Y. The ISS covers about 240 degrees of longitude in an hour,
 // so it gets the whole world in a band, with its hours set in the margins.
 export const SPAN=128,TRACK_Y=150,WORLD={south:-60,north:72,bottom:H-10};
-export function chartCamera(body,start){
+export function chartCamera(body,start,{span=SPAN}={}){
   const world=body!=='sun'&&body!=='moon',step=world?MINUTE/4:MINUTE,lead=(world?20:40)*MINUTE;
   const raw=sampleTrack(body,start-lead,start+60*MINUTE+lead,step);
   // Unwrap longitude so the route is continuous across the antimeridian.
@@ -57,7 +57,7 @@ export function chartCamera(body,start){
   }
   else{
     lat0=(Math.max(...lats)+Math.min(...lats))/2;k=Math.cos(lat0*RAD);
-    scale=SPAN/Math.max(1,(Math.max(...lons)-Math.min(...lons))*k);y0=TRACK_Y;
+    scale=span/Math.max(1,(Math.max(...lons)-Math.min(...lons))*k);y0=TRACK_Y;
   }
   const toScreen=(lat,lon)=>({x:W/2+(lon-lon0)*k*scale,y:y0-(lat-lat0)*scale});
   const toGround=(x,y)=>({lat:lat0+(y0-y)/scale,lon:lon0+(x-W/2)/(k*scale)});
