@@ -12,6 +12,19 @@ Natural Earth 1:50m land data is public domain, distributed through world-atlas.
 https://www.naturalearthdata.com/about/terms-of-use/
 No live map tiles or map-service credentials are used.
 
+Relief (public/relief.bin) is a quarter-degree grid resampled offline by
+tools/generate-relief.mjs from the AWS Open Data Terrain Tiles (Tilezen Joerd,
+terrarium encoding, zoom 3). At that zoom the tiles' source headers list only:
+  Global ETOPO1 terrain data U.S. National Oceanic and Atmospheric Administration
+  (Amante and Eakins, 2009; not subject to copyright protection in the U.S.)
+  GMTED2010 terrain data courtesy of the U.S. Geological Survey (public domain)
+The grid is smoothed and generalized: not for navigation. No tiles are fetched
+at runtime. https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+
+Tracking-station positions (data/tracking-stations.json) are approximate, from
+public histories of NASA's Mercury and Apollo Manned Space Flight Networks.
+No NASA insignia or logotypes are used.
+
 ISS fixture: historical June 2019 TLE from the Satellite.js README.
 https://github.com/shashwatak/satellite-js
 The fixture is not current telemetry and is restricted to its epoch in code.

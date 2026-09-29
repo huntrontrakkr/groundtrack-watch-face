@@ -1,0 +1,20 @@
+{
+  "width": 1440,
+  "height": 720,
+  "bytes": 1036800,
+  "sampling": "0.25 degree cell centres, row 0 at 90N, column 0 at 180W; mean of nine bilinear samples per cell",
+  "encoding": "code 0-63: depth -11000*((63-code)/63)^2 m; code 64-255: height 8850*((code-64)/191)^2 m",
+  "source": "AWS Open Data Terrain Tiles (Tilezen Joerd), terrarium PNG, zoom 3",
+  "imagerySources": {
+    "etopo1": 57,
+    "gmted": 244
+  },
+  "attribution": [
+    "Global ETOPO1 terrain data U.S. National Oceanic and Atmospheric Administration",
+    "GMTED2010 terrain data courtesy of the U.S. Geological Survey"
+  ],
+  "range": {
+    "highest": 6053,
+    "deepest": -9238
+  }
+}

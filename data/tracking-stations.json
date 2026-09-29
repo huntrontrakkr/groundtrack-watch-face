@@ -1,0 +1,29 @@
+{
+  "note": "Historic NASA tracking stations of the Mercury (1961-63) and Apollo (1967-75) Manned Space Flight Networks, by their network codes. Positions are approximate, rounded to about 0.1 degree from public histories of the networks; they place a chart symbol, not a survey point.",
+  "stations": [
+    {"code": "CNV", "name": "Cape Canaveral", "lat": 28.5, "lon": -80.6, "network": "Mercury"},
+    {"code": "BDA", "name": "Bermuda", "lat": 32.35, "lon": -64.66, "network": "Mercury, Apollo"},
+    {"code": "CYI", "name": "Grand Canary Island", "lat": 27.76, "lon": -15.63, "network": "Mercury, Apollo"},
+    {"code": "KNO", "name": "Kano", "lat": 12.0, "lon": 8.5, "network": "Mercury"},
+    {"code": "ZZB", "name": "Zanzibar", "lat": -6.2, "lon": 39.2, "network": "Mercury"},
+    {"code": "MUC", "name": "Muchea", "lat": -31.6, "lon": 115.9, "network": "Mercury"},
+    {"code": "WOM", "name": "Woomera", "lat": -31.2, "lon": 136.8, "network": "Mercury"},
+    {"code": "CTN", "name": "Canton Island", "lat": -2.8, "lon": -171.7, "network": "Mercury"},
+    {"code": "HAW", "name": "Kauai, Hawaii", "lat": 22.13, "lon": -159.66, "network": "Mercury, Apollo"},
+    {"code": "CAL", "name": "Point Arguello", "lat": 34.6, "lon": -120.6, "network": "Mercury"},
+    {"code": "GYM", "name": "Guaymas", "lat": 27.96, "lon": -110.72, "network": "Mercury, Apollo"},
+    {"code": "WHS", "name": "White Sands", "lat": 32.4, "lon": -106.4, "network": "Mercury"},
+    {"code": "TEX", "name": "Corpus Christi", "lat": 27.65, "lon": -97.38, "network": "Mercury, Apollo"},
+    {"code": "EGL", "name": "Eglin", "lat": 30.4, "lon": -86.8, "network": "Mercury"},
+    {"code": "GDS", "name": "Goldstone", "lat": 35.34, "lon": -116.87, "network": "Apollo"},
+    {"code": "MAD", "name": "Madrid", "lat": 40.46, "lon": -4.17, "network": "Apollo"},
+    {"code": "HSK", "name": "Honeysuckle Creek", "lat": -35.58, "lon": 148.98, "network": "Apollo"},
+    {"code": "CRO", "name": "Carnarvon", "lat": -24.91, "lon": 113.72, "network": "Apollo"},
+    {"code": "GWM", "name": "Guam", "lat": 13.31, "lon": 144.73, "network": "Apollo"},
+    {"code": "ACN", "name": "Ascension Island", "lat": -7.95, "lon": -14.33, "network": "Apollo"},
+    {"code": "ANG", "name": "Antigua", "lat": 17.02, "lon": -61.75, "network": "Apollo"},
+    {"code": "GBM", "name": "Grand Bahama", "lat": 26.63, "lon": -78.24, "network": "Apollo"},
+    {"code": "MIL", "name": "Merritt Island", "lat": 28.51, "lon": -80.69, "network": "Apollo"},
+    {"code": "TAN", "name": "Tananarive", "lat": -19.0, "lon": 47.3, "network": "Apollo"}
+  ]
+}

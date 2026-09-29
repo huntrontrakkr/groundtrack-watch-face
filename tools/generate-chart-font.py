@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 root = Path(__file__).resolve().parent.parent
-SIZES = [72, 80, 104]
+SIZES = [36, 72, 80, 104]
 sizes = {}
 for size in SIZES:
     font = ImageFont.truetype(str(root / 'assets/fonts/FiraSans-Medium.ttf'), size)
