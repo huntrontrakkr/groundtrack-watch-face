@@ -61,6 +61,13 @@ try{
   assert.deepEqual(await page.evaluate(()=>{const h=groundtrackEnroute.state.home;return [h.lat,h.lon];}),[51.48,0]);
   assert.equal(await page.locator('#home-select').inputValue(),'here');assert.match(await page.locator('#home-status').textContent(),/51\.48°N/);
   await page.locator('#home-select').selectOption('Europe/London');assert.equal(await page.evaluate(()=>groundtrackEnroute.state.home.name),'London');
+  // Events: add one in the displayed hour; it stands on the route, is listed,
+  // and can be removed again.
+  await page.locator('#event-time').fill('13:40');await page.locator('#event-label').fill('Gate b12');await page.locator('#event-form button').click();
+  assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.events.some(e=>e.label==='GATE B12')));
+  assert.match(await page.locator('#event-list').textContent(),/13:40 GATE B12/);
+  await page.locator('[aria-label="Remove GATE B12"]').click();
+  assert.ok(await page.evaluate(()=>!groundtrackEnroute.main.last.events.some(e=>e.label==='GATE B12')));
   // Live satellites: CelesTrak is intercepted, so no network is used. One
   // satellite answers with fresh elements, another with an error.
   const requests=[];

@@ -149,11 +149,13 @@ export function contourLevel(relief,land,i,levels=CONTOURS){
   return 0;
 }
 
+// A compulsory reporting point: the filled triangle.
+const FIX=['....#....','...###...','...###...','..#####..','..#####..','.#######.','#########'];
 // An airport with services: a ring with four ticks, as on a sectional.
 const AIRPORT=['.....#.....','.....#.....','....###....','...#...#...','..#.....#..','###.....###','..#.....#..','...#...#...','....###....','.....#.....','.....#.....'];
 const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['....#....','...#.#...','...#.#...','..#...#..','..#...#..','.#.....#.','#########'];
-export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null}){
+export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[]}){
   const pal=PLATES[plate],buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
   const zoneAt=(x,y)=>light[Math.max(0,Math.min(H-1,Math.round(y)))*W+Math.max(0,Math.min(W-1,Math.round(x)))];
@@ -426,6 +428,24 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       minuteBox=callout({big:FIGURE.callout,small:FIGURE.calloutMinute,x:mx,y:my,up:false,reach:26}).box;
     }
   }
+  // Events are compulsory reporting points: a filled triangle on the route
+  // at the event's minute, where the open triangle is the next hour's
+  // optional one, with its name set above. The name gives way to the hour
+  // figures, the callout and the network; the triangle always shows.
+  const fixes=[];
+  for(const e of events){
+    const i=track.findIndex((q,k)=>k>0&&track[k-1].epoch<=e.epoch&&q.epoch>=e.epoch);if(i<0)continue;
+    const a=track[i-1],b=track[i];if(jump(a,b))continue;
+    const f=(e.epoch-a.epoch)/((b.epoch-a.epoch)||1),x=Math.round(a.x+(b.x-a.x)*f),y=Math.round(a.y+(b.y-a.y)*f);
+    if(x<5||x>W-6||y<top+8||y>bottom-4||camera.outside?.(x,y))continue;
+    const col=ink('ink');
+    FIX.forEach((row,dy)=>[...row].forEach((v,dx)=>{const px=x+dx-4,py=y+dy-4;if(v==='#')plot(buf,px,py,col(x,y));else if(row.indexOf('#')<dx&&dx<row.lastIndexOf('#'))clear(px,py);}));
+    const name=e.label,lw=textWidth(LABEL,name),lx=Math.max(4,Math.min(W-4-lw,x-Math.floor(lw/2))),text=textPixels(LABEL,name,lx,y-7),box=bounds(text);
+    const clearOf=[...taken,...type,...fixes.map(q=>q.box).filter(Boolean),hourPixels.length?bounds(hourPixels):null,nextSolid.length?bounds(nextSolid):null,minuteBox].filter(Boolean);
+    const free=box.y>=(home?14:2)&&!clearOf.some(o=>!(o.x+o.w+1<=box.x||box.x+box.w+1<=o.x||o.y+o.h+1<=box.y||box.y+box.h+1<=o.y));
+    if(free)letter(text,col);
+    fixes.push({label:name,epoch:e.epoch,x,y,box:free?box:null});
+  }
   // Home on top of the route and figures, on its own knockout.
   if(homeMark){
     const {x,y,code}=homeMark,col=ink('mark');
@@ -464,7 +484,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // set of the Sun or Moon there, in local time.
     if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
   }
-  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,
+  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
     figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
 }
 // Local clock time in the chart's four figures, 24-hour, no colon.
@@ -491,15 +511,15 @@ export function localDate(epoch,timeZone){
 export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,start=civilHour(epoch,timeZone);
+    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,events=state.events||[],start=civilHour(epoch,timeZone);
     const projection=state.projection==='fuller'?'fuller':'chart',geometryKey=`${projection}/${body}/${start}/${timeZone}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
       this.camera=projection==='fuller'?(body==='sun'||body==='moon'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
-    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${home?`${home.code}${home.lat},${home.lon}`:''}`;if(this.sceneKey===sceneKey)return this.last;
-    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home});
+    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
+    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events});
     const zones=[0,0,0];for(const z of this.light)zones[z]++;
     this.sceneKey=sceneKey;this.stats.renders++;
     const rgba=new Uint8ClampedArray(W*H*4);for(let i=0;i<W*H;i++){rgba.set(out.buf.subarray(i*3,i*3+3),i*4);rgba[i*4+3]=255;}

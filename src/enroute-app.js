@@ -4,6 +4,8 @@ import {MINUTE} from './ephemeris.js';
 import {clockParts} from './render.js';
 import {CATALOG,registerElements,elementsFor,bodyId,catalogEntry,FRESH} from './satellites.js';
 import {HOMES} from './home.js';
+import {localDay} from './enroute-render.js';
+import {STUDY_EVENTS,eventLabel,atLocal} from './events.js';
 const $=id=>document.getElementById(id);
 // Frozen study moments; Moonlight is one Moon over three evenings.
 export const OBSERVATIONS={day:Date.parse('2026-09-15T12:24:00Z'),dusk:Date.parse('2026-09-19T09:24:00Z'),night:Date.parse('2026-09-20T10:24:00Z')};
@@ -13,7 +15,7 @@ const NOTES={
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
   iss:'An archived orbit from 5 June 2019. The station laps most of the world in an hour, so the whole world is the chart.'
 };
-const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:false,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York']};
+const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:false,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS};
 let main,studyEpoch=state.epoch;
 const proofs={};
 function paint(canvas,buf){
@@ -22,11 +24,19 @@ function paint(canvas,buf){
 }
 function render(){
   const r=main.render(state);$('enroute-watch').getContext('2d').putImageData(new ImageData(r.rgba,W,H),0,0);
-  for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home}).buf);
+  for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home,events:state.events}).buf);
   for(const key of ['body','observation','plate','projection'])document.querySelectorAll(`[data-${key}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[key]===state[key])));
   document.querySelectorAll('[data-observation]').forEach(b=>b.disabled=state.body!=='moon');$('moon-light').classList.toggle('muted',state.body!=='moon');
   $('enroute-minute').value=Math.round((state.epoch-r.start)/MINUTE);$('enroute-time').textContent=r.time;
   $('range-start').textContent=clockParts(r.start,state.timeZone).text;$('range-end').textContent=clockParts(r.start+60*MINUTE,state.timeZone).text;
+  // The events of the displayed local day, in order, each removable.
+  const day=localDay(state.epoch,state.timeZone),list=$('event-list');list.replaceChildren();
+  for(const e of state.events.filter(e=>e.epoch>=day.start&&e.epoch<day.end).sort((a,b)=>a.epoch-b.epoch)){
+    const li=document.createElement('li'),remove=document.createElement('button');
+    li.textContent=`${clockParts(e.epoch,state.timeZone).text} ${e.label} `;remove.textContent='Remove';remove.setAttribute('aria-label',`Remove ${e.label}`);
+    remove.addEventListener('click',()=>{state.events=state.events.filter(x=>x!==e);render();});li.append(remove);list.append(li);
+  }
+  if(!list.children.length){const li=document.createElement('li');li.textContent='No events this day.';list.append(li);}
   $('home-select').value=state.home?(Object.keys(HOMES).find(k=>HOMES[k]===state.home)||'here'):'none';
   $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-readout').checked=state.readout;
   const sat=catalogEntry(state.body),elements=elementsFor(state.body);
@@ -114,6 +124,13 @@ try{
   $('enroute-zone').addEventListener('change',()=>{state.timeZone=$('enroute-zone').value;render();});
   $('enroute-24').addEventListener('change',()=>{state.clock24=$('enroute-24').checked;render();});
   $('home-select').addEventListener('change',()=>{const v=$('home-select').value;if(v==='here'){locate();return;}state.home=v==='none'?null:HOMES[v];$('home-status').textContent='';render();});
+  // A new event at a local time on the displayed day, in the clock zone.
+  $('event-form').addEventListener('submit',event=>{
+    event.preventDefault();
+    const [h,m]=$('event-time').value.split(':').map(Number),label=eventLabel($('event-label').value);
+    if(!Number.isFinite(h)||!Number.isFinite(m)||!label)return;
+    state.events=[...state.events,{epoch:atLocal(state.epoch,state.timeZone,h,m),label}];$('event-label').value='';render();
+  });
   $('enroute-readout').addEventListener('change',()=>{state.readout=$('enroute-readout').checked;render();});
-  render();window.groundtrackEnroute={ready:true,state,main,render,track,demos:DEMOS,observations:OBSERVATIONS};
+  render();window.groundtrackEnroute={ready:true,state,main,render,track,demos:DEMOS,observations:OBSERVATIONS,events:STUDY_EVENTS};
 }catch(error){$('enroute-caption').textContent=`The chart could not load: ${error.message}. Please reload.`;console.error(error);}
