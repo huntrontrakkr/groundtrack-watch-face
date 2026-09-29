@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {EnrouteRenderer,renderEnroute,reliefLayer,contourLevel,PLATES,CONTOURS,ACQUISITION,W,H} from '../src/enroute-render.js';
+import {EnrouteRenderer,renderEnroute,reliefLayer,contourLevel,localDate,PLATES,CONTOURS,ACQUISITION,W,H} from '../src/enroute-render.js';
 import {decodeRelief,reliefAt,reliefMeters,RELIEF_BYTES} from '../src/relief.js';
 import {chartCamera,groundLayer,lightLayer,civilHour,LAND} from '../src/chart-render.js';
 import {position,MINUTE} from '../src/ephemeris.js';
@@ -66,6 +66,31 @@ test('the time figure reads the hour and minute for a whole day and clears the r
       assert.ok(disjoint(box,nextBox),'figures must not touch');assert.ok(disjoint(box,rose),`hour ${hour}: figure over the rose`);
     }
   }
+});
+
+test('the minute rides with the body in a data block, clear of the hours and the route',()=>{
+  for(const [body,epoch] of [['sun',SUN],['moon',MOON_DUSK]]){
+    const r=new EnrouteRenderer(atlas,meters),start=civilHour(epoch,'America/New_York');
+    for(let m=0;m<60;m++){
+      const out=r.render(scene(body,start+m*MINUTE)),t=out.figure.tag;
+      assert.ok(t&&t.x>=1&&t.x+t.w<=199&&t.y+t.h<=H-12,`${body} ${m}: ${JSON.stringify(t)}`);
+      assert.ok(t.y>=out.stationsOnRoute[0].y+14,'below the route and its quarter marks');
+      assert.ok(Math.hypot(t.x+t.w/2-out.marker.x,t.y-out.marker.y)<40,'near its symbol');
+      for(const b of [out.figure.box,out.figure.nextBox])assert.ok(disjoint(t,b));
+    }
+  }
+  const off=draw(scene('sun',SUN,{tag:false})).out;assert.equal(off.figure.tag,null);assert.notDeepEqual(off.buf,draw(scene('sun',SUN)).out.buf);
+  // The ISS hour runs on a track between its figures, its tag above the band.
+  const {r,out}=draw(scene('iss',ISS));assert.ok(out.figure.tag.y+out.figure.tag.h<r.camera.band.top-8);
+  assert.ok(out.figure.tag.x>=out.figure.box.x+out.figure.box.w-12&&out.figure.tag.x+out.figure.tag.w<=out.figure.nextBox.x+12);
+});
+
+test('the margin date is local, with the day of the year',()=>{
+  assert.deepEqual(localDate(SUN,'America/New_York'),{year:2026,month:9,day:27,dayOfYear:270});
+  assert.equal(localDate(Date.parse('2026-01-01T12:00:00Z'),'UTC').dayOfYear,1);
+  assert.equal(localDate(Date.parse('2024-12-31T12:00:00Z'),'UTC').dayOfYear,366);
+  assert.deepEqual(localDate(Date.parse('2026-03-01T02:00:00Z'),'America/New_York'),{year:2026,month:2,day:28,dayOfYear:59});
+  assert.equal(localDate(Date.parse('2026-12-31T20:00:00Z'),'Asia/Kolkata').year,2027);
 });
 
 test('the marker travels from this hour toward the next',()=>{
