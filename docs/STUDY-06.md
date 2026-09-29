@@ -34,6 +34,21 @@ On a watch, the phone would fetch and propagate the elements and send the watch 
 
 This cloud build environment blocks celestrak.org, so the tests replace CelesTrak with an intercepted fixture: the 2019 ISS elements moved to the current epoch. Real requests happen only in a viewer's browser.
 
+## Spike: rolling Fuller
+
+Studies 03 and 04 used a fixed icosahedral net. Because only five faces meet at a vertex, any flat net has cuts, and routes broke at them. The spike (`src/roll.js`, *Projection → Rolling Fuller* on the page) rolls the icosahedron across the plane along the route instead, printing each Gray–Fuller face as it touches down. The route therefore never crosses a cut. The rest of the screen is filled outward from that strip on the same triangular lattice. It is an infinite tiling, generated only as far as the view needs. Where the icosahedron really folds, the edge is a quiet dotted line; where two printings of the Earth meet without matching, it is a solid cut line.
+
+Choices that keep it clean:
+- The camera turns the sheet so the hour always runs left to right, like a ruler. The compass rose on this hour's station turns to true north, because north is no longer up.
+- On a whole-orbit sheet the graticule crosses go (the lattice is the grid) and only the 2,000 m and 4,000 m contours remain.
+- Only the tracking stations that can hear the satellite during this hour are shown, each with its acquisition circle.
+
+It suits satellites best. On the Gray–Fuller faces great circles are nearly straight, so an ISS hour, about 240° of orbit, unrolls across four to five faces as a near-straight graduated line. Small kinks remain where it crosses a face edge, because the transform is not exactly gnomonic, and the Earth's rotation bends the ground track slightly. For the Sun and Moon an hour covers only a fraction of one face, so the sheet mostly shows a single tilted triangle.
+
+![Rolling Fuller spike proofs](screenshots/study-06-fuller-contact-sheet.png)
+
+Tests check that the rolled route never jumps (consecutive samples share a face or truly adjacent faces), that the hour runs horizontally left to right, that every on-screen pixel inverts to the right place on Earth, and that folds and cuts are both present and classified.
+
 ## Plates
 
 | Plate | Reference | Paper | Lines | Type | Route |

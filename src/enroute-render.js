@@ -4,11 +4,12 @@
 // time set like a chart's maximum elevation figure, and the tracking
 // stations of NASA's early networks. Whole RGB222 pixels in a plain buffer.
 import {position,moonLight,MINUTE} from './ephemeris.js';
-import {dot,RAD} from './geometry.js';
+import {dot,RAD,direction} from './geometry.js';
 import {clockParts} from './render.js';
 import {SUNRISE_SINE,CIVIL_TWILIGHT_SINE} from './solar.js';
 import {chartCamera,groundLayer,lightLayer,civilHour,LAND,SPACE,COAST,W,H} from './chart-render.js';
 import {reliefAt} from './relief.js';
+import {rollCamera} from './roll.js';
 import numerals from '../data/enroute-font.json' with {type:'json'};
 import departure from '../data/departure-font.json' with {type:'json'};
 import network from '../data/tracking-stations.json' with {type:'json'};
@@ -95,11 +96,11 @@ export function reliefLayer(camera,meters){
   return e;
 }
 // A contour pixel is on the high side of a level that a neighbor falls below.
-export function contourLevel(relief,land,i){
+export function contourLevel(relief,land,i,levels=CONTOURS){
   if(!land[i])return 0;
-  const level=v=>CONTOURS.filter(c=>v>=c).length,k=level(relief[i]);
+  const level=v=>levels.filter(c=>v>=c).length,k=level(relief[i]);
   if(!k)return 0;
-  for(const j of [i-1,i+1,i-W,i+W])if(j>=0&&j<W*H&&land[j]&&level(relief[j])<k)return CONTOURS[k-1];
+  for(const j of [i-1,i+1,i-W,i+W])if(j>=0&&j<W*H&&land[j]&&level(relief[j])<k)return levels[k-1];
   return 0;
 }
 
@@ -112,10 +113,12 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const base=i=>mat[i]===SPACE?pal.space:(land[i]?pal.land:pal.water)[light[i]];
   const ink=key=>(x,y)=>pal[key][zoneAt(x,y)];
   // Ground: water, land, coastline, contours and the continental shelf edge.
+  // A whole-orbit Fuller sheet keeps only the 2,000 and 4,000 m contours.
+  const levels=camera.wide?[2000,4000]:CONTOURS;
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=y*W+x,z=light[i];let c=base(i);
     if(mat[i]!==SPACE){
-      const level=contourLevel(relief,land,i);
+      const level=contourLevel(relief,land,i,levels);
       if(level&&(level!==CONTOURS[0]||((x+y)&1)===0))c=pal.contour[z];
       else if(mat[i]===COAST)c=pal.coast[z];
       else if(!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF))c=pal.shelf[z];
@@ -138,6 +141,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // Graticule: small crosses every five degrees (thirty on the world band)
   // and degree ticks along the edges of the map, like a chart's neatline.
   const step=camera.world?30:5,minor=camera.world?10:1,{bottom}=camera.band,top=camera.band.top,inBand=y=>y>=top&&y<=bottom;
+  if(camera.fuller){
+    // Rolling Fuller: fold lines where the icosahedron bends, dotted and
+    // quiet; cut lines, solid, where two printings of the Earth meet.
+    for(const t of camera.tiles)for(const e of t.edges){
+      let n=0;segment(e.a,e.b,(x,y)=>{if(e.cut||(n++%4===0))plot(buf,x,y,ink('grid')(x,y));});
+    }
+  }else{
   const g0=camera.toGround(0,bottom),g1=camera.toGround(W,top);
   for(let lat=Math.ceil(g0.lat/step)*step;lat<=g1.lat;lat+=step)for(let lon=Math.ceil(g0.lon/step)*step;lon<=g1.lon;lon+=step){
     const p=camera.toScreen(lat,lon),x=Math.round(p.x),y=Math.round(p.y);if(!inBand(y))continue;
@@ -151,17 +161,22 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const y=Math.round(camera.toScreen(lat,0).y),len=lat%step===0?4:2;if(!inBand(y))continue;
     for(let d=0;d<len;d++){plot(buf,d,y,ink('grid')(d,y));plot(buf,W-1-d,y,ink('grid')(W-1-d,y));}
   }
+  }
   // Tracking stations of the Mercury and Apollo networks, as small circled
   // points with their network codes. On the world band each also shows its
   // acquisition circle, as on the plotboards of the mission control rooms.
   const stations=[],taken=[];
+  // On a whole-orbit Fuller sheet only the stations that can hear the
+  // satellite during this hour are shown, each with its acquisition circle.
+  const heard=s=>camera.track.some(p=>p.hour&&dot(p.dir,direction(s.lat,s.lon))>=Math.cos(ACQUISITION*RAD));
   for(const s of network.stations){
+    if(camera.wide&&!heard(s))continue;
     const p=camera.project(s.lat,s.lon),x=Math.round(p.x),y=Math.round(p.y);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
     const w=textWidth(LABEL,s.code),right=x+5+w<W-3,box={x:right?x-3:x-6-w,y:y-5,w:w+9,h:11};
     if(taken.some(b=>b.x<box.x+box.w&&box.x<b.x+b.w&&b.y<box.y+box.h&&box.y<b.y+b.h))continue;
     taken.push(box);stations.push({code:s.code,x,y,box});
-    if(camera.world)for(let bearing=0;bearing<360;bearing+=5){
+    if(camera.world||camera.wide)for(let bearing=0;bearing<360;bearing+=5){
       const q=destination(s.lat,s.lon,ACQUISITION,bearing),r=camera.project(q.lat,q.lon);
       if(Math.abs(r.x-x)<W/2&&inBand(r.y))plot(buf,r.x,r.y,ink('grid')(r.x,r.y));
     }
@@ -186,7 +201,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // The world band keeps five-minute ties; its scale is in the panel above.
   for(let i=1;i<track.length-1;i++){
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);
-    if(m<=0||m>=60||(camera.world&&m%5))continue;
+    if((p.epoch-s0.epoch)%MINUTE||m<=0||m>=60||(camera.world&&m%5))continue;
     const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const size=camera.world?(m%15===0?4:2):m%15===0?6:m%5===0?4:2;for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
     if(!camera.world&&m%15===0){const label=String(m),lw=textWidth(LABEL,label);letter(textPixels(LABEL,label,Math.round(p.x+nx*8-lw/2)+1,Math.round(p.y+ny*8+9)),ink('route'),0);}
@@ -195,10 +210,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // The next hour is an open triangle, a reporting point.
   const c0={x:Math.round(s0.x),y:Math.round(s0.y)},c1={x:Math.round(s1.x),y:Math.round(s1.y)},col=ink('ink');
   if(!camera.world){
-    const R=16;
-    for(let a=0;a<720;a++){const t=a*Math.PI/360;plot(buf,c0.x+Math.round(Math.sin(t)*R),c0.y-Math.round(Math.cos(t)*R),col(c0.x,c0.y));}
-    for(let a=0;a<360;a+=30){const t=a*RAD,len=a%90===0?5:3;for(let r=R-len;r<R;r++)plot(buf,c0.x+Math.round(Math.sin(t)*r),c0.y-Math.round(Math.cos(t)*r),col(c0.x,c0.y));}
-    for(let k=0;k<3;k++)for(let d=-k;d<=k;d++)plot(buf,c0.x+d,c0.y-R-4+k,col(c0.x,c0.y));
+    // The rose turns to true north at the station; north is up on the
+    // cylindrical charts, and anywhere on a rolled Fuller sheet.
+    const R=16,g=s0,q0=camera.project(g.lat,g.lon),q1=camera.project(Math.min(89.9,g.lat+.5),g.lon),nl=Math.hypot(q1.x-q0.x,q1.y-q0.y)||1;
+    const north=camera.fuller?Math.atan2((q1.x-q0.x)/nl,-(q1.y-q0.y)/nl):0,at=(t,r)=>[c0.x+Math.round(Math.sin(t+north)*r),c0.y-Math.round(Math.cos(t+north)*r)];
+    for(let a=0;a<720;a++){const [x,y]=at(a*Math.PI/360,R);plot(buf,x,y,col(c0.x,c0.y));}
+    for(let a=0;a<360;a+=30){const len=a%90===0?5:3;for(let r=R-len;r<R;r++){const [x,y]=at(a*RAD,r);plot(buf,x,y,col(c0.x,c0.y));}}
+    for(let k=0;k<3;k++)for(let d=-k;d<=k;d++){const r=R+4-k,x=c0.x+Math.round(Math.sin(north)*r+Math.cos(north)*d),y=c0.y-Math.round(Math.cos(north)*r-Math.sin(north)*d);plot(buf,x,y,col(c0.x,c0.y));}
   }
   const symbol=(rows,cx,cy)=>rows.forEach((row,dy)=>[...row].forEach((v,dx)=>{
     const x=cx-(row.length>>1)+dx,y=cy-(rows.length>>1)+dy;
@@ -297,9 +315,9 @@ export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
     const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,start=civilHour(epoch,timeZone);
-    const geometryKey=`${body}/${start}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
+    const projection=state.projection==='fuller'?'fuller':'chart',geometryKey=`${projection}/${body}/${start}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
-      this.camera=chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
+      this.camera=projection==='fuller'?rollCamera(body,start,{span:body==='sun'||body==='moon'?SPAN:180}):chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}

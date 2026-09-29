@@ -72,6 +72,10 @@ try{
   assert.equal(await page.evaluate(()=>groundtrackEnroute.state.body),'sat:20580');
   await page.locator('[data-body="sun"]').click();await page.locator('#enroute-now').click();
   assert.ok(await page.evaluate(()=>Math.abs(groundtrackEnroute.state.epoch-Date.now())<120000));
+  // The rolling Fuller spike: same controls, the icosahedron rolled along the route.
+  await page.locator('[data-projection="fuller"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.camera.fuller));
+  assert.equal(await page.evaluate(()=>{const d=document.getElementById('enroute-watch').getContext('2d').getImageData(0,0,200,228).data,o=groundtrackEnroute.main.last.rgba;let n=0;for(let i=0;i<d.length;i++)if(d[i]!==o[i])n++;return n;}),0);
+  await page.locator('[data-projection="chart"]').click();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.camera.fuller),undefined);
   await page.locator('[data-body="iss"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.world));assert.match(await page.locator('#enroute-caption').textContent(),/ISS/);
   await page.reload();await page.waitForFunction(()=>window.groundtrackEnroute?.ready);await page.screenshot({path:'docs/screenshots/study-06-workshop.png',fullPage:true});
   for(const width of [320,390]){await page.setViewportSize({width,height:844});const scroll=await page.evaluate(()=>[document.documentElement.scrollWidth,innerWidth,[...document.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>innerWidth+.5).slice(0,4).map(e=>e.tagName+'#'+e.id+'.'+e.className)]);assert.ok(scroll[0]<=scroll[1],JSON.stringify(scroll));await page.screenshot({path:`test-results/enroute-mobile-${width}.png`,fullPage:true});}
