@@ -62,7 +62,7 @@ Tests check the following:
 | **Hypsometric** | jet navigation chart layer tints | green lowland to tan and brown peaks; sea deepens off the shelf | olive contours, cobalt coast | navy | magenta |
 | **Night red** | red cockpit lighting | outlines on black; coasts dim where it is night | dark red contours | light red | red |
 | **Green CRT** | mission control console phosphor | green land on black; night in scan lines | green contours and coast | pale green | green |
-| **Sunlight** | one-color chart, for bright sun | white, with coastal waterlines on the zoomed charts | dotted black contours | black | black, cased in white |
+| **Sunlight** | one-color chart, for bright sun | white, with coastal waterlines on the zoomed charts | dotted black contours | black | black, cased in white; heavier on the Fuller sheets |
 
 ## Data
 

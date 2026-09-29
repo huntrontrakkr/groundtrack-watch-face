@@ -247,16 +247,20 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // quarter hours are longer and carry their minute, like a plotted track.
   const track=camera.track,now=Math.floor(epoch/MINUTE)*MINUTE,[s0,s1]=camera.stations,jump=(a,b)=>Math.abs(b.x-a.x)>W/2;
   // A one-ink plate cases the route in white, so it reads over waterlines.
+  // On the Fuller sheets, where the route is small against busy faces, it
+  // is also drawn heavier: two pixels ahead of the body, three behind.
+  const heavy=pal.mono&&camera.fuller,casing=heavy?2:1;
   if(pal.mono)for(let i=1;i<track.length;i++){
     const a=track[i-1],b=track[i];if(jump(a,b)||!(a.hour&&b.hour))continue;
-    segment(a,b,(x,y)=>{for(let dy=-2;dy<=2;dy++)for(let dx=-1;dx<=1;dx++)clear(x+dx,y+dy);});
+    segment(a,b,(x,y)=>{for(let dy=-casing-1;dy<=casing+1;dy++)for(let dx=-casing;dx<=casing;dx++)clear(x+dx,y+dy);});
   }
   for(let i=1;i<track.length;i++){
     const a=track[i-1],b=track[i];if(jump(a,b))continue;
     const hour=a.hour&&b.hour,bold=hour&&b.epoch<=now,steep=Math.abs(b.y-a.y)>Math.abs(b.x-a.x);
     segment(a,b,(x,y)=>{
       if(!hour){if(((x+y)>>1)%2===0)plot(buf,x,y,ink('route')(x,y));return;}
-      plot(buf,x,y,ink('route')(x,y));if(bold)plot(buf,steep?x+1:x,steep?y:y-1,ink('route')(x,y));
+      plot(buf,x,y,ink('route')(x,y));if(bold||heavy)plot(buf,steep?x+1:x,steep?y:y-1,ink('route')(x,y));
+      if(bold&&heavy)plot(buf,steep?x-1:x,steep?y:y+1,ink('route')(x,y));
     });
   }
   // On the zoomed charts the route is itself the scale: a graduation every
