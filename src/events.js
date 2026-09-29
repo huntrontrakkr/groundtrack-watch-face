@@ -9,7 +9,7 @@ import {MINUTE} from './ephemeris.js';
 // five-letter name code, all capitals and pronounceable, so it can be read
 // aloud (ICAO's 5LNC). The code is made from the event's own title; the
 // title itself stays with the event for the page.
-const VOWEL=/[AEIOUY]/,STOP=new Set(['A','AN','THE','OF','TO','WITH','W','AND','FOR','AT','IN','ON','MY']);
+const VOWEL=/[AEIOUY]/;
 // Pronounceable: at least one vowel and never more than three consonants
 // in a row.
 export const pronounceable=code=>VOWEL.test(code)&&!/[^AEIOUY]{4}/.test(code);
@@ -21,21 +21,18 @@ const repair=code=>{
 };
 export const nameCode=title=>repair(baseCode(title));
 function baseCode(title){
+  // The title's longest word carries it (wade<>Chiles weekly standup is a
+  // standup); a tie goes to the later word, as titles end on their noun.
   const words=String(title).normalize('NFD').toUpperCase().replace(/[^A-Z ]/g,' ').split(/\s+/).filter(Boolean);
-  const kept=words.filter(w=>!STOP.has(w)),use=kept.length?kept:words;
-  if(!use.length)return 'EVENT';
-  // A long first word stands alone; short words are run together.
-  let word=use[0];for(let i=1;i<use.length&&word.length<5;i++)word+=use[i];
+  if(!words.length)return 'EVENT';
+  const word=words.reduce((a,b)=>b.length>=a.length?b:a);
   if(word.length<5)return (word+word.at(-1).repeat(5)).slice(0,5);
-  if(word.length===5&&pronounceable(word))return word;
   // Drop vowels from the end, keeping the first letter, as the name codes
   // do (DINNER, DINNR); failing that, the word's first five letters.
   let short=word;
-  for(let i=short.length-1;i>0&&short.length>5;i--)if(VOWEL.test(short[i])&&short[i]!=='Y')short=short.slice(0,i)+short.slice(i+1);
-  if(short.length>5)short=short.slice(0,5);
-  if(pronounceable(short))return short;
-  const head=word.slice(0,5);if(pronounceable(head))return head;
-  return head.replace(/^(.)(.)/,(_,a,b)=>VOWEL.test(a)?a+b:a+'A');
+  for(let i=short.length-1;i>0&&short.length>5;i--)if(/[AEIOU]/.test(short[i]))short=short.slice(0,i)+short.slice(i+1);
+  if(pronounceable(short.slice(0,5)))return short.slice(0,5);
+  return word.slice(0,5);
 }
 // Codes are unique on a chart, as they are worldwide: a repeat changes its
 // last letter.

@@ -64,8 +64,8 @@ try{
   // Events: add one in the displayed hour; it stands on the route, is listed,
   // and can be removed again.
   await page.locator('#event-time').fill('13:40');await page.locator('#event-label').fill('Gate b12');await page.locator('#event-form button').click();
-  assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.events.some(e=>e.label==='GATEB')));
-  assert.match(await page.locator('#event-list').textContent(),/13:40 GATEB Gate b12/);
+  assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.events.some(e=>e.label==='GATEE')));
+  assert.match(await page.locator('#event-list').textContent(),/13:40 GATEE Gate b12/);
   // A second event of the same name gets its own code.
   await page.locator('#event-time').fill('13:50');await page.locator('#event-label').fill('Gate B12');await page.locator('#event-form button').click();
   assert.equal(await page.evaluate(()=>new Set(groundtrackEnroute.state.events.filter(e=>e.title.toUpperCase()==='GATE B12').map(e=>e.label)).size),2);

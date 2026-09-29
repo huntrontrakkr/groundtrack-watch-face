@@ -11,7 +11,7 @@ const SUN=Date.parse('2026-09-27T08:24:00Z'),ISS=Date.parse('2019-06-05T12:24:00
 const overlap=(a,b)=>!(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
 
 test('events are named with five-letter name codes, made from their titles',()=>{
-  const cases={Standup:'STAND',Dinner:'DINNR',Run:'RUNNN','Gate B12':'GATEB','Lunch w/ Sam':'LUNCH','School run':'SCHOL',Doctor:'DOCTR','café ☕':'CAFEE','1:1':'EVENT','':'EVENT'};
+  const cases={Standup:'STAND',Dinner:'DINNR',Run:'RUNNN','wade<>Chiles weekly standup':'STAND','Flight to Boston':'BOSTN','Gate B12':'GATEE','Lunch w/ Sam':'LUNCH','School run':'SCHOL',Doctor:'DOCTR','café ☕':'CAFEE','1:1':'EVENT','':'EVENT'};
   for(const [title,code] of Object.entries(cases))assert.equal(nameCode(title),code,title);
   // Whatever the title, a code is five capitals and can be said aloud.
   for(const title of ['Strength training','Rhythm','Pick up kids','Flight to Boston','xxxxxxxxxx','a b c','Q','Ürgent sync!!','Tsktsktsk','1:1 with Ana',...Object.keys(cases)]){
