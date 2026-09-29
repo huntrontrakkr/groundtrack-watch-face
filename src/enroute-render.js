@@ -46,14 +46,14 @@ export const PLATES={
     screen:hex('#000055'),space:hex('#FFFFFF'),spaceInk:hex('#000055')},
   // Red cockpit lighting, which keeps the eye's night vision: reds only,
   // drawn as outlines on black; coasts dim where it is night.
-  red:{name:'Night red',note:'Cockpit red: every ink a red, nothing to dazzle',night:'zones',
+  red:{name:'Night red',note:'Cockpit red: every ink a red, nothing to dazzle',night:'zones',terminator:hex('#FF5555'),nightDots:hex('#AA0000'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#AA0000','#AA0000','#550000']),
     contour:inks(['#550000','#550000','#550000']),shelf:inks(['#550000','#550000','#550000']),grid:inks(['#550000','#550000','#550000']),
     route:inks(['#FF0000','#FF0000','#FF0000']),ink:inks(['#FF5555','#FF5555','#FF5555']),mark:inks(['#FFAAAA','#FFAAAA','#FFAAAA']),
     space:hex('#000000'),spaceInk:hex('#FF5555')},
   // The green phosphor of the consoles: one green at several brightnesses,
   // and night drawn with dark scan lines, dusk with every fourth line.
-  crt:{name:'Green CRT',note:'Console phosphor: one green, night in scan lines',night:'zones',scan:true,
+  crt:{name:'Green CRT',note:'Console phosphor: one green, night in scan lines',night:'zones',scan:true,terminator:hex('#55FF55'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#005500','#005500','#005500']),coast:inks(['#00AA00','#00AA00','#00AA00']),
     contour:inks(['#00AA00','#00AA00','#00AA00']),shelf:inks(['#005500','#005500','#005500']),grid:inks(['#005500','#005500','#005500']),
     route:inks(['#00FF00','#00FF00','#00FF00']),ink:inks(['#AAFFAA','#AAFFAA','#AAFFAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
@@ -182,6 +182,16 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // Console night: dark scan lines, every other line by night and every
     // fourth through twilight.
     if(pal.scan&&z&&y%(z===2?2:4)===1)c=pal.space;
+    // The dark plates draw the terminator itself, as the plotboards did:
+    // dashed where the Sun sets, dotted where twilight ends.
+    if(pal.terminator&&ground.dirs[i]){
+      // Traced from the Sun's height at each pixel, not the dithered zones.
+      const h=dot(ground.dirs[i],sun),cross=level=>[x>0?i-1:-1,x<W-1?i+1:-1,i-W,y<H-1?i+W:-1].some(j=>j>=0&&ground.dirs[j]&&(dot(ground.dirs[j],sun)>=level)!==(h>=level));
+      if(cross(SUNRISE_SINE)&&((x+y)>>1)%3!==2)c=pal.terminator;
+      else if(cross(CIVIL_TWILIGHT_SINE)&&(x+y)%3===0)c=pal.terminator;
+      // Outline plates tint the night side with a sparse dot screen.
+      else if(pal.nightDots&&z===2&&x%4===0&&y%4===((x>>2)&1)*2)c=pal.nightDots;
+    }
     buf.set(c,i*3);
   }
   // Paper plates show night as a regular dot tint, deepening through civil

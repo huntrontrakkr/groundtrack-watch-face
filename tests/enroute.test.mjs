@@ -165,3 +165,17 @@ test('caches follow the clock: chart by the hour, light by the minute, plate las
   const direct=renderEnroute({camera,ground,relief:reliefLayer(camera,meters),light:lightLayer(ground,state.epoch),plate:'enroute',epoch:state.epoch,timeZone:state.timeZone,clock24:false});
   assert.deepEqual(direct.buf,new EnrouteRenderer(atlas,meters).render(state).buf);
 });
+
+test('the dark plates draw the terminator: dashed at sunset, dotted where twilight ends',()=>{
+  // Each scene drawn with and without the terminator: it adds a line at
+  // nightfall and nothing in full daylight.
+  const changed=(state,plate)=>{
+    const pal=PLATES[plate],keep=pal.terminator,dots=pal.nightDots,a=draw(scene(...state,{plate})).out.buf;
+    pal.terminator=null;pal.nightDots=null;let b;try{b=draw(scene(...state,{plate})).out.buf;}finally{pal.terminator=keep;pal.nightDots=dots;}
+    let n=0;for(let i=0;i<a.length;i+=3)if(a[i]!==b[i]||a[i+1]!==b[i+1]||a[i+2]!==b[i+2])n++;return n;
+  };
+  for(const plate of ['red','crt']){
+    assert.ok(changed(['moon',MOON_DUSK],plate)>100,plate);
+    assert.equal(changed(['sun',SUN],plate),0,plate);
+  }
+});
