@@ -49,8 +49,10 @@ try{
   assert.equal(await page.locator('input[name=readout]:checked').getAttribute('value'),'flag');
   assert.equal(await page.locator('input[name=numerals]:checked').getAttribute('value'),'even');
   assert.ok(await page.locator('input[name=clock24]').isChecked());
-  // Enroute's options only: no time scale for the world band.
+  // Enroute's options only: no time scale for the world band, nor how its
+  // minutes fall on the route.
   assert.equal(await page.locator('input[name=tape]').count(),0);
+  assert.equal(await page.locator('input[name=transfer]').count(),0);
   assert.equal(await page.locator('#title').textContent(),'Groundtrack Enroute');
   assert.match(await page.locator('#preset-note').textContent(),/Greenwich/);
   assert.ok(await page.locator('#coords').isHidden());

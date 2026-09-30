@@ -59,6 +59,11 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
       ['iss-events',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[0,12,40,55],{EVENTS:JSON.stringify([{epoch:'2026-09-30T13:12:00Z',title:'Launch'},{epoch:'2026-09-30T13:40:00Z',title:'Call'}])}],
       ['iss-tape-events',['sat:25544','2026-09-30T13:00:00Z','sectional','noflag'],[0,30,59],{TAPE:'tape',EVENTS:JSON.stringify([{epoch:'2026-09-30T13:12:00Z',title:'Launch'},{epoch:'2026-09-30T13:05:00Z',title:'Tea'}])}],
       ['qzs-events',['sat:42738','2026-09-27T05:00:00Z','crt','noflag'],[0,30],{EVENTS:JSON.stringify([{epoch:'2026-09-27T09:00:00Z',title:'Breakfast'},{epoch:'2026-09-27T05:40:00Z',title:'Walk'}])}],
+      // How the fixed tape's minutes fall on the route, in each style.
+      ['iss-vernier',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[0,33],{TRANSFER:'vernier'}],
+      ['n20-comb',['sat:43013','2026-09-30T17:00:00Z','enroute','noflag'],[10,40],{TRANSFER:'comb'}],
+      ['ls9-chevrons',['sat:49260','2026-10-01T09:00:00Z','red','flag'],[0,59],{TRANSFER:'chevrons'}],
+      ['iss-chevrons',['sat:25544','2026-09-30T02:00:00Z','console','noflag'],[21],{TRANSFER:'chevrons'}],
       // The world sliding too: a scene for each minute.
       ['iss-slide-23',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[23],{TAPE:'slide'}],
       ['ls9-slide-47',['sat:49260','2026-10-01T09:00:00Z','hypsometric','flag'],[47],{TAPE:'slide'}],
@@ -91,7 +96,7 @@ test('a minute drawn over the last draws only what changed, and the same pixels'
       // Console, the night crossing this hour's and the next hour's
       // stations.
       ['sun-console',['sun','2026-09-27T20:00:00Z','console','flag']],['iss-console',['sat:25544','2026-09-30T02:00:00Z','console','flag']],
-      ['iss-tape',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],{TAPE:'tape'}],
+      ['iss-tape',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],{TAPE:'tape'}],['n20-comb',['sat:43013','2026-09-30T17:00:00Z','sunlight','flag'],{TRANSFER:'comb'}],
       ['sun-events',['sun','2026-09-27T08:00:00Z','enroute','flag'],{EVENTS:JSON.stringify([{epoch:'2026-09-27T08:45:00Z',title:'Run'},{epoch:'2026-09-27T08:47:00Z',title:'Standup'}])}],
       ['moon-events',['moon','2026-09-19T09:00:00Z','console','callout'],{EVENTS:JSON.stringify([{epoch:'2026-09-19T09:50:00Z',title:'Run'},{epoch:'2026-09-19T09:10:00Z',title:'Lecture'}])}],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
     ]){

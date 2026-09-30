@@ -65,8 +65,8 @@ registerNominal();
 // With tape 'slide' the world scrolls under the index each minute: the
 // scene is for one minute of the hour.
 // events: [{epoch, label}] (label a five-letter name code, src/events.js).
-export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,readout=flag?'flag':false,numerals='even',zone='utc',span='day',tape='fixed',minute=0,events=[],timeZone='UTC',clock24=true,home=null}){
-  const state={body,epoch:start+(tape==='slide'?minute*MINUTE:0),timeZone,clock24,plate:plateKey,home,events,readout:readout==='callout'?true:readout,numerals,zone,span,tape};
+export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,readout=flag?'flag':false,numerals='even',zone='utc',span='day',tape='fixed',transfer='off',minute=0,events=[],timeZone='UTC',clock24=true,home=null}){
+  const state={body,epoch:start+(tape==='slide'?minute*MINUTE:0),timeZone,clock24,plate:plateKey,home,events,readout:readout==='callout'?true:readout,numerals,zone,span,tape,transfer};
   const r=new EnrouteRenderer(atlas,meters);r.render(state);
   const cam=r.camera,pal=PLATES[plateKey];
   if(cam.fuller)throw new Error('Rolling Fuller is not exported');
@@ -82,7 +82,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,re
   const tintProbe=['#550000','#550055','#5500AA','#5500FF','#555500','#555555','#5555AA'];
   if(pal.tints)probe.tints=pal.tints.map(([l],k)=>[l,hex(tintProbe[k])]);
   if(pal.depths)probe.depths=pal.depths.map(([l],k)=>[l,hex(tintProbe[5+k])]);
-  const base=renderEnroute({camera:cam,ground:r.ground,relief:r.relief,light:r.light,plate:probe,epoch:start,timeZone,clock24,home:state.home,events,readout:state.readout,numerals,zone,tape,layers:'base'});
+  const base=renderEnroute({camera:cam,ground:r.ground,relief:r.relief,light:r.light,plate:probe,epoch:start,timeZone,clock24,home:state.home,events,readout:state.readout,numerals,zone,tape,transfer,layers:'base'});
   const LAYER={[PROBE.grid]:6,[PROBE.route]:7,[PROBE.ink]:8,[PROBE.mark]:9,[PROBE.spaceInk]:10,[PROBE.space]:11};
   const key=i=>'#'+[0,1,2].map(k=>base.buf[i*3+k].toString(16).padStart(2,'0')).join('').toUpperCase();
   const classes=new Uint8Array(W*H);

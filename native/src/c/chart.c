@@ -815,6 +815,41 @@ static bool finish_draw(ChartBuild *b){
     FigureRun run;figure_run(hour,size,gx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,0,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
     figure_run(next,size,nx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,1,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
     tape_lo=(int16_t)((gx+hw<nx+nw?gx+hw:nx+nw)+3);tape_hi=(int16_t)((gx>nx?gx:nx)-3-text_width("00"));
+    // How the tape's even minutes fall on the route, in a strip under the
+    // tape (renderEnroute()'s transfer): the route's own minutes ticked, a
+    // stroke from each five minutes leaning toward its place on the route,
+    // or chevrons where the route squeezes (in) or stretches (out).
+    if(FACE_WORLD&&in->transfer){
+      #define AT(m) (forward?X0+(double)(X1-X0)*(m)/60:X1-(double)(X1-X0)*(m)/60)
+      // The route's point at minute m of the hour (every minute is one of
+      // its points, the step dividing a minute), and whether it is on the band.
+      #define AT_ROUTE(m) (((T_OF(b,h0)+(m)*60-b->t0)%b->step==0&&(T_OF(b,h0)+(m)*60-b->t0)/b->step<count)?(T_OF(b,h0)+(m)*60-b->t0)/b->step:-1)
+      #define ON(m) (AT_ROUTE(m)>=0)
+      #define RX(m) (track[AT_ROUTE(m)].a)
+      #define ON_BAND(m) (ON(m)&&RX(m)>=0&&RX(m)<W)
+      const int t0=P+1;
+      if(in->transfer==1){
+        for(int m=0;m<=60;m++)if(ON_BAND(m)){const int len=m%15==0?5:m%5==0?3:1;for(int d=0;d<len;d++)plot(&cv,RX(m),t0+d,L_SPACE_INK);}
+      }else if(in->transfer==2){
+        for(int m=0;m<=60;m+=5)if(ON_BAND(m)){
+          const double a=AT(m),v=(RX(m)-a)/6,lean=v>4?4:v<-4?-4:v;
+          for(int d=0;d<6;d++)plot(&cv,a+lean*d/5,t0+d,L_SPACE_INK);
+        }
+      }else{
+        static const int8_t IN[6][2]={{-3,0},{-2,1},{-3,2},{3,0},{2,1},{3,2}},OUT[6][2]={{-2,0},{-3,1},{-2,2},{2,0},{3,1},{2,2}};
+        for(int m=5;m<=55;m+=5){
+          if(!ON_BAND(m))continue;
+          const double k=!ON(m-1)||!ON(m+1)?1:fabs(RX(m+1)-RX(m-1))/fabs(AT(m+1)-AT(m-1));if(k>=0.7&&k<=1.4)continue;
+          const int cx=(int)js_round(AT(m));
+          for(int j=0;j<6;j++){const int8_t *d=k<0.7?IN[j]:OUT[j];plot(&cv,cx+d[0],t0+1+d[1],L_SPACE_INK);}
+        }
+      }
+      #undef ON_BAND
+      #undef RX
+      #undef ON
+      #undef AT_ROUTE
+      #undef AT
+    }
   }else if(!day){
     // The hour figures: this hour solid over its rose, the next outlined.
     const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;

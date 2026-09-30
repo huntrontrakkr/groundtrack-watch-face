@@ -35,6 +35,7 @@ typedef struct {
   int numerals;              // the callout's figures (ENR_COLON ... ENR_ACCENT)
   bool zone_body;            // the margin's time in the nautical zone under the body, not Zulu
   int tape;                  // the world band's time scale: 0 fixed, 1 a sliding tape, 2 the world sliding too
+  int transfer;              // on the fixed tape, how its minutes fall on the route: 0 off, 1 vernier, 2 comb, 3 chevrons
   int minute;                // with the world sliding, the minute of the hour the chart is for
   // Events, set on the route as compulsory reporting points: their times
   // (Unix seconds) and five-letter name codes.

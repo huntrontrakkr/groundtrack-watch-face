@@ -24,6 +24,9 @@ typedef struct {
   uint8_t numerals,zone_body;
   // The world band's time scale: 0 fixed, 1 a sliding tape, 2 the world too.
   uint8_t tape;
+  // On the fixed tape, how its minutes fall on the route: 0 off, 1 a
+  // vernier, 2 a comb, 3 chevrons.
+  uint8_t transfer;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);

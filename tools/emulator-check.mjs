@@ -5,7 +5,7 @@
 //
 //   node tools/emulator-check.mjs <out-dir> [body] [plate] [flag|noflag|callout] [zone]
 //
-// NUMERALS, MARGIN, SPAN, TAPE and CLOCK24 give the phone's other settings
+// NUMERALS, MARGIN, SPAN, TAPE, TRANSFER and CLOCK24 give the phone's other settings
 // (native/pkjs/main.js; defaults even, utc, day, fixed, 1), EVENTS_STORED its
 // events as it keeps them.
 //
@@ -45,7 +45,7 @@ if(at===null)throw new Error('No screenshot within one minute');
 const shot=decodePNG(readFileSync(shotFile));
 if(shot.width!==W||shot.height!==H)throw new Error(`Screenshot is ${shot.width}x${shot.height}, not ${W}x${H}`);
 const start=civilHour(at,zone),minute=Math.floor((at-start)/MINUTE);
-const e=process.env,{renderer,state}=buildScene({body,start,plate,readout:flagArg==='noflag'?false:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',minute,events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null});
+const e=process.env,{renderer,state}=buildScene({body,start,plate,readout:flagArg==='noflag'?false:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',minute,events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null});
 const ref=Buffer.from(renderer.render({...state,epoch:start+minute*MINUTE}).buf);
 
 // Side by side: watch, browser, differences in red over a faded browser frame.

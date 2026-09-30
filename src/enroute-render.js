@@ -189,7 +189,7 @@ const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['...
 // native watch renderer: no night, no body, no bold route behind it, no
 // minute readout and no Zulu time. It also returns each pixel's ground
 // class and what, if anything, was drawn over it.
-export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed',numerals='colon',zone='utc',layers='all'}){
+export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed',numerals='colon',zone='utc',transfer='off',layers='all'}){
   const baseOnly=layers==='base';if(baseOnly){readout=false;}
   // Pixels drawn before the route (early) may be covered by its bold line.
   const trace=baseOnly?new Uint8Array(W*H):null,overlay=baseOnly?new Uint8Array(W*H):null,beforeRoute=baseOnly?new Uint8Array(W*H):null,stages=baseOnly?new Uint8Array(W*H):null;TRACE=trace;EARLY=beforeRoute;STAGE=stages;early=true;stage=0;
@@ -522,6 +522,29 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       for(let k=0;k<6;k++)for(let d=-k;d<=k;d++)plot(buf,ix+d,B-7+k,pal.space);
       for(let k=0;k<5;k++)for(let d=-k;d<=k;d++)plot(buf,ix+d,B-6+k,sc());
     }
+    // How the tape's even minutes fall on the route, in a strip a few
+    // pixels deep under the tape: the route covers the band unevenly,
+    // squeezed where the orbit crosses the equator and stretched where it
+    // turns. 'vernier' ticks the route's own minutes under the tape's;
+    // 'comb' hangs a stroke from each five minutes of the tape, leaning
+    // toward where that minute falls on the route; 'chevrons' point in
+    // where the minutes squeeze and out where they stretch.
+    if(transfer!=='off'){
+      const t0=P+1,s0t=s0.epoch,routeX=m=>{const q=track.find(p=>p.epoch===s0t+m*MINUTE);return q?q.x:null;},onBand=x=>x!==null&&x>=0&&x<W;
+      if(transfer==='vernier'){
+        for(let m=0;m<=60;m++){const x=routeX(m);if(!onBand(x))continue;const len=m%15===0?5:m%5===0?3:1;for(let d=0;d<len;d++)plot(buf,x,t0+d,sc());}
+      }else if(transfer==='comb'){
+        for(let m=0;m<=60;m+=5){const a=at(m),b=routeX(m);if(!onBand(b))continue;const lean=Math.max(-4,Math.min(4,(b-a)/6));
+          for(let d=0;d<6;d++)plot(buf,a+lean*d/5,t0+d,sc());}
+      }else if(transfer==='chevrons'){
+        for(let m=5;m<=55;m+=5){
+          const x=routeX(m),a=routeX(m-1),b=routeX(m+1);if(!onBand(x))continue;
+          const k=a===null||b===null?1:Math.abs(b-a)/Math.abs(at(m+1)-at(m-1));if(k>=0.7&&k<=1.4)continue;
+          const cx=Math.round(at(m)),px=k<0.7?[[-3,0],[-2,1],[-3,2],[3,0],[2,1],[3,2]]:[[-2,0],[-3,1],[-2,2],[2,0],[3,1],[2,2]];
+          for(const [dx,dy] of px)plot(buf,cx+dx,t0+1+dy,sc());
+        }
+      }
+    }
     index={x:ix,y:B};tapeAt={x0:X0,x1:X1,baseline:B,inner:[Math.min(gx+hw,nx+nw)+3,Math.max(gx,nx)-3-textWidth(LABEL,'00')]};
     if(readout){
       const lw=textWidth(LABEL,parts.m),inner=[Math.min(gx+hw,nx+nw)+3,Math.max(gx,nx)-3-lw],lx=Math.max(inner[0],Math.min(inner[1],Math.round(ix-lw/2)));
@@ -699,8 +722,8 @@ export class EnrouteRenderer{
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
-    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${tape}/${numerals}/${zone}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
-    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events,tape,numerals,zone});
+    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${tape}/${numerals}/${zone}/${state.transfer||'off'}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
+    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events,tape,numerals,zone,transfer:state.transfer||'off'});
     const zones=[0,0,0];for(const z of this.light)zones[z]++;
     this.sceneKey=sceneKey;this.stats.renders++;
     const rgba=new Uint8ClampedArray(W*H*4);for(let i=0;i<W*H;i++){rgba.set(out.buf.subarray(i*3,i*3+3),i*4);rgba[i*4+3]=255;}

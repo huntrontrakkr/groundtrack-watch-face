@@ -68,6 +68,10 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       ['sat:42738','2026-09-27T05:00:00Z','sunlight',false,'America/New_York',{events:[ev('2026-09-27T09:00:00Z','Breakfast'),ev('2026-09-27T21:00:00Z','Supper')]}]);
     // The world band's sliding tape.
     cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{tape:'tape'}],['sat:43013','2026-09-30T17:00:00Z','console',false,'UTC',{tape:'tape',clock24:false}]);
+    // How the fixed tape's minutes fall on the route, in each style.
+    cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{transfer:'vernier'}],['sat:43013','2026-09-30T17:00:00Z','enroute',false,'UTC',{transfer:'comb'}],
+      ['sat:49260','2026-10-01T09:00:00Z','red',true,'America/New_York',{transfer:'chevrons'}],['sat:25544','2026-09-30T13:00:00Z','console',false,'UTC',{transfer:'chevrons',readout:'callout'}],
+      ['sat:20580','2026-09-30T05:00:00Z','sectional',true,'UTC',{transfer:'comb'}],['sat:48274','2026-09-30T21:00:00Z','enroute',true,'America/New_York',{transfer:'vernier',clock24:false}]);
     cases.forEach((c,k)=>{if(!c[5])c[5]=options[k%options.length];});
     for(const [body,iso,plate,flag,zone,more] of cases){
       const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null,o={flag,...more};

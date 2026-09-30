@@ -81,8 +81,10 @@ function pump(){
 // band, 2 the whole day, times 2) and its code (3 characters), then the
 // callout's figures (0 colon, 1 plain, 2 even, 3 mono, 4 accent), the
 // margin's time (0 Zulu, 1 the nautical zone under the body) and the world
-// band's time scale (0 fixed, 1 a sliding tape, 2 the world sliding too).
-var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide'];
+// band's time scale (0 fixed, 1 a sliding tape, 2 the world sliding too)
+// and, on the fixed tape, how its minutes fall on the route (0 off, 1 a
+// vernier, 2 a comb, 3 chevrons).
+var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide'],TRANSFERS=['off','vernier','comb','chevrons'];
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
 function view(body){var v=viewOf(body);return v==='day'&&setting('span','day')==='hour'?'hour':v;}
 function watchSettings(){
@@ -95,7 +97,8 @@ function watchSettings(){
   bytes.push((entry&&entry.symbol==='station'?1:0)|(sat?VIEWS.indexOf(view(body)):0)<<1);
   var code=entry?entry.code:'';for(var k=0;k<3;k++)bytes.push(k<code.length?code.charCodeAt(k):0);
   var tape=TAPES.indexOf(setting('tape','fixed'));
-  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape);
+  var transfer=TRANSFERS.indexOf(setting('transfer','off'));
+  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -233,7 +236,7 @@ Pebble.addEventListener('showConfiguration',function(){
   function open(position){
     if(opened)return;opened=true;
     var config={settings:{body:currentBody(),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),
-      margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},events:storedEvents(),
+      margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},events:storedEvents(),
       face:FACE,bodies:BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
@@ -254,6 +257,7 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(chosen.margin==='utc'||chosen.margin==='body')localStorage.setItem('margin',chosen.margin);
   if(chosen.span==='day'||chosen.span==='hour')localStorage.setItem('span',chosen.span);
   if(TAPES.indexOf(chosen.tape)>=0)localStorage.setItem('tape',chosen.tape);
+  if(TRANSFERS.indexOf(chosen.transfer)>=0)localStorage.setItem('transfer',chosen.transfer);
   if(chosen.clock24==='1'||chosen.clock24==='0')localStorage.setItem('clock24',chosen.clock24);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
   if(chosen.events&&chosen.events.length!==undefined)saveEvents(chosen.events);
