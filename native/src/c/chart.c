@@ -101,6 +101,7 @@ typedef struct {
   MapCursor cursor;bool started;int last;       // last row decoded
   int row[ROW_SLOTS];uint8_t land[ROW_SLOTS][MAP_WIDTH/8];
   uint8_t *relief;int c0,n;                     // the columns under the chart: ROW_SLOTS rows of n from c0
+  float meters[256];                            // relief codes to metres (from tables.bin)
   const MapPack *pack;MapWork *work;
 } Rows;
 static int slot_of(Rows *r,int row){for(int i=0;i<ROW_SLOTS;i++)if(r->row[i]==row)return i;return -1;}
@@ -127,7 +128,6 @@ static bool need_rows(Rows *r,int lo,int hi){
   }
   return true;
 }
-static float meters(int code){float f;const uint32_t b=RELIEF_METERS_BITS[code];memcpy(&f,&b,4);return f;}
 static int map_row(Rows *r,int y){y=y<0?0:y>719?719:y;return slot_of(r,y);}
 // chart-render.js coverage(): bilinear land between cell centres.
 static double coverage(Rows *r,double lat,double lon){
@@ -141,7 +141,7 @@ static double coverage(Rows *r,double lat,double lon){
 static double relief_at(Rows *r,double lat,double lon){
   const double u=(wrap(lon)+180)*4-.5,v=(90-lat)*4-.5,i=floor(u),j=floor(v),fu=u-i,fv=v-j;
   const int s0=map_row(r,(int)j),s1=map_row(r,(int)j+1);
-  #define AT(s,xx) ((s)<0?0.0:(double)meters(r->relief[(s)*r->n+((((int)(xx)%1440)+1440)%1440-r->c0+1440)%1440]))
+  #define AT(s,xx) ((s)<0?0.0:(double)(r->meters)[r->relief[(s)*r->n+((((int)(xx)%1440)+1440)%1440-r->c0+1440)%1440]])
   return (AT(s0,i)*(1-fu)+AT(s0,i+1)*fu)*(1-fv)+(AT(s1,i)*(1-fu)+AT(s1,i+1)*fu)*fv;
   #undef AT
 }
@@ -446,6 +446,16 @@ typedef struct {Px scratch[SCRATCH];Box taken[64];Px home_code[64];double sb[72]
 // Point i is at t0 + i*step seconds from the hour (see make_track).
 typedef struct {double a,b;} TrackPoint;
 // The figures of one size, loaded while they are drawn.
+// A plate from tables.bin (see tools/generate-native-data.mjs).
+static bool read_plate(const ChartSources *src,int k,Plate *p){
+  uint8_t t[100];if(src->tables(src->table_source,TABLE_PLATE_AT(k),t,100)!=100)return false;
+  memset(p,0,sizeof *p);
+  p->flags=(uint16_t)(t[0]|t[1]<<8);memcpy(p->zoned,t+2,27);
+  p->space=t[29];p->space_ink=t[30];p->screen=t[31];p->waterline=t[32];p->terminator=t[33];p->night_dots=t[34];
+  p->tint_count=t[35];memcpy(p->tints,t+36,5);memcpy(p->tint_limits,t+41,40);
+  p->depth_count=t[81];memcpy(p->depths,t+82,2);memcpy(p->depth_limits,t+84,16);
+  return true;
+}
 // Into `room` (the build's arena, past what it holds), of `space` bytes.
 static uint8_t *load_figures(const ChartSources *src,int size,int *base,uint8_t *room,size_t space){
   int s=0;while(s<5&&FIGURE_SIZES[s]!=size)s++;
@@ -460,7 +470,7 @@ static uint8_t *load_figures(const ChartSources *src,int size,int *base,uint8_t 
 // rows at a time, then the drawing and the scene.
 struct ChartBuild {
   ChartInput in;ChartSources src;
-  TrackPoint *track;int count,h0,h1,t0,step;Cam cam;
+  TrackPoint *track;int count,h0,h1,t0,step;Cam cam;Plate plate;
   uint8_t *classes;MapPack pack;MapWork *map_work;Ground *ground;Rows *rows;RunSink sink;
   // Then the scene, its minutes made a few at a time, with home's circle's
   // bearings.
@@ -508,8 +518,9 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   memset(b,0,sizeof *b);b->in=*in_;b->src=*src_;
   b->sink.arena=src_->alloc(RUN_ARENA);if(!b->sink.arena){src_->release(b);return NULL;}
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
-  const Plate *pal=&PLATES[in->plate];
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
+  if(in->plate<0||in->plate>=TABLE_PLATES||!read_plate(src,in->plate,&b->plate))FAIL;
+  const Plate *pal=&b->plate;
   // chartCamera(). The track is kept only while the camera is set, and made
   // again for the drawing: the ground needs the memory.
   TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*((track_to(in)-track_from(in))/track_step(in)+1));if(!track)FAIL;
@@ -565,6 +576,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   b->map_work=alloc(sizeof(MapWork));b->ground=alloc(sizeof(Ground));b->rows=alloc(sizeof(Rows));b->sink.alloc=alloc;
   if(!b->map_work||!b->ground||!b->rows||!map_pack_open(&b->pack,src->map,src->map_source,alloc))FAIL;
   {Rows *const rows=b->rows;memset(rows,0,sizeof *rows);rows->pack=&b->pack;rows->work=b->map_work;for(int i=0;i<ROW_SLOTS;i++)rows->row[i]=-1;
+  {uint8_t m[1024];if(src->tables(src->table_source,TABLE_METERS_AT,m,1024)!=1024)FAIL;memcpy(rows->meters,m,1024);}
   // Only the map's columns under the chart are kept.
   const double lonL=glon(&b->cam,0),lonR=glon(&b->cam,W),span=(lonR-lonL)*4+4;
   if(span>=MAP_WIDTH){rows->c0=0;rows->n=MAP_WIDTH;}
@@ -611,7 +623,7 @@ static void civil_from_days(int32_t z,int *y,int *m,int *d){
 // build then aborted by the caller).
 static bool finish_draw(ChartBuild *b){
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
-  const Plate *pal=&PLATES[in->plate];
+  const Plate *pal=&b->plate;
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   const int count=b->count,h0=b->h0,h1=b->h1;const Cam cam=b->cam;const bool world=cam.world;
   const int top=cam.top,bottom=cam.bottom;
@@ -629,14 +641,19 @@ static bool finish_draw(ChartBuild *b){
   b->sink.tail=NULL;
   if(y!=H)FAIL;}
   // The track again, on the screen.
-  _Static_assert(sizeof(TrackPoint)*401+sizeof(Draw)+8<=RUN_ARENA,"the arena holds the track and the drawing");
+  _Static_assert(sizeof(TrackPoint)*401+sizeof(Draw)+sizeof(Station)*TABLE_STATIONS+8<=RUN_ARENA,"the arena holds the track, the drawing and the stations");
   _Static_assert(sizeof(TrackPoint)*401+sizeof(EnrPoint)*401+8<=RUN_ARENA,"the arena holds the track and the points");
   TrackPoint *const track=(TrackPoint *)b->sink.arena;
   if(make_track(in,src,track)!=count)FAIL;
   for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
   draw=(Draw *)(b->sink.arena+((sizeof(TrackPoint)*count+7)&~7u));
-  // Past the drawing's lists, room in the arena for the figures' bitmaps.
-  uint8_t *const room=(uint8_t *)(draw+1);const size_t room_size=RUN_ARENA-(size_t)(room-b->sink.arena);
+  // Past the drawing's lists, the stations, then room for the figures' bitmaps.
+  Station *const stations=(Station *)(draw+1);
+  for(int k=0;k<TABLE_STATIONS;k++){
+    uint8_t t[20];if(src->tables(src->table_source,TABLE_STATION_AT(k),t,20)!=20)FAIL;
+    memcpy(stations[k].code,t,4);stations[k].code[3]=0;memcpy(&stations[k].lat,t+4,8);memcpy(&stations[k].lon,t+12,8);
+  }
+  uint8_t *const room=(uint8_t *)(stations+TABLE_STATIONS);const size_t room_size=RUN_ARENA-(size_t)(room-b->sink.arena);
   scratch=draw->scratch;
   Canvas cv={classes,true,0};
   uint8_t ring[2*120];
@@ -680,16 +697,16 @@ static bool finish_draw(ChartBuild *b){
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
   if(world)bearings(5,draw->sb,draw->cb);
-  for(unsigned s=0;s<(day?0:sizeof STATIONS/sizeof STATIONS[0]);s++){
-    double qx,qy;project(&cam,STATIONS[s].lat,STATIONS[s].lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
+  for(unsigned s=0;s<(day?0:TABLE_STATIONS);s++){
+    double qx,qy;project(&cam,stations[s].lat,stations[s].lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
-    const int w=text_width(STATIONS[s].code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
+    const int w=text_width(stations[s].code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
     if(overlaps(taken,taken_n,box))continue;
     if(taken_n<64)taken[taken_n++]=box;
-    if(world){const int n=circle_pixels(&cam,STATIONS[s].lat,STATIONS[s].lon,acquisition,5,draw->sb,draw->cb,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
+    if(world){const int n=circle_pixels(&cam,stations[s].lat,stations[s].lon,acquisition,5,draw->sb,draw->cb,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++){const int r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(&cv,x+dx,y+dy,L_INK);}
     plot(&cv,x,y,L_INK);
-    const int n=text_pixels(STATIONS[s].code,right?x+5:x-5-w,y+4,scratch);AVOID(bounds_of(scratch,n));letter(&cv,scratch,n,L_INK,1);
+    const int n=text_pixels(stations[s].code,right?x+5:x-5-w,y+4,scratch);AVOID(bounds_of(scratch,n));letter(&cv,scratch,n,L_INK,1);
   }
   // The route: cased in white on a one-ink plate; dashed outside the hour.
   #define JUMP(p,q) (fabs(track[q].a-track[p].a)>W/2)

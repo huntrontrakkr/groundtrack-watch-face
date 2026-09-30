@@ -51,6 +51,7 @@ typedef const Segment *(*SegmentFn)(void *context,int32_t day);
 typedef struct {
   MapReadFn map;void *map_source;
   MapReadFn figures;void *figure_source;
+  MapReadFn tables;void *table_source;   // native/resources/tables.bin
   SegmentFn segment;void *segment_context;
   // A satellite's segment for a time (in Unix seconds), and home's pass line
   // at a time into out (24 characters, '°' as 0x7f; empty for none).

@@ -176,8 +176,8 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
     }
   }
   // The sources stay valid while the build runs.
-  static ResHandle map,figures;map=resource_get_handle(RESOURCE_ID_MAP_PACK);figures=resource_get_handle(RESOURCE_ID_FIGURES);
-  const ChartSources src={.map=resource_read,.map_source=&map,.figures=resource_read,.figure_source=&figures,
+  static ResHandle map,figures,tables;map=resource_get_handle(RESOURCE_ID_MAP_PACK);figures=resource_get_handle(RESOURCE_ID_FIGURES);tables=resource_get_handle(RESOURCE_ID_TABLES);
+  const ChartSources src={.map=resource_read,.map_source=&map,.figures=resource_read,.figure_source=&figures,.tables=resource_read,.table_source=&tables,
     .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,
     .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc};
   #undef days

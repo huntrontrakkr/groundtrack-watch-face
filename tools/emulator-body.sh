@@ -6,8 +6,10 @@
 # CLOCK24 set the rest, as tools/emulator-check.mjs reads them.
 set -e
 store="$HOME/.local/share/pebble-sdk/4.33.1/emery/localstorage/a0f61ba3-4580-4bf9-a71c-0a83f3d35600"
-pkill -f "[p]ypkjs --qemu" || true
-sleep 1
+# The emulator too: pebble-tool starts a fresh one when the phone
+# simulator has gone, and the old one would be left running.
+for p in $(ps -eo pid,args | awk '/toolchain\/bin\/qemu-pebble |python -m pypkjs/ && !/awk/ {print $1}'); do kill "$p"; done
+sleep 2
 python3 - "$store" "$1" "${2:-crt}" "${3:-flag}" "${NUMERALS:-even}" "${MARGIN:-utc}" "${SPAN:-day}" "${CLOCK24:-1}" <<'PY'
 import dbm.dumb,sys
 d=dbm.dumb.open(sys.argv[1],'w')

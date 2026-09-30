@@ -43,7 +43,11 @@ static void f64(double v){uint8_t b[8];memcpy(b,&v,8);fwrite(b,1,8,out);}
 
 int main(int argc,char **argv){
   if(argc<4){fprintf(stderr,"usage: chart_test map.pack figures.bin out.scene < input\n");return 2;}
-  size_t n;Mem m,f;m.data=slurp(argv[1],&n);m.length=n;f.data=slurp(argv[2],&n);f.length=n;if(!m.data||!f.data){fprintf(stderr,"no pack or figures\n");return 2;}
+  size_t n;Mem m,f,tb;m.data=slurp(argv[1],&n);m.length=n;f.data=slurp(argv[2],&n);f.length=n;
+  // tables.bin beside figures.bin.
+  char tables[1024];snprintf(tables,sizeof tables,"%.*stables.bin",(int)(strrchr(argv[2],'/')?strrchr(argv[2],'/')-argv[2]+1:0),argv[2]);
+  tb.data=slurp(tables,&n);tb.length=n;
+  if(!m.data||!f.data||!tb.data){fprintf(stderr,"no pack, figures or tables\n");return 2;}
   ChartInput in;memset(&in,0,sizeof in);
   char line[8192],key[32],value[8000];
   while(fgets(line,sizeof line,stdin)){
@@ -67,7 +71,7 @@ int main(int argc,char **argv){
     else if(!strcmp(key,"rise"))snprintf(in.rise_left,sizeof in.rise_left,"%s",value);
     else if(!strcmp(key,"set"))snprintf(in.rise_right,sizeof in.rise_right,"%s",value);
   }
-  const ChartSources src={.map=mem_read,.map_source=&m,.figures=mem_read,.figure_source=&f,.segment=seg_for,
+  const ChartSources src={.map=mem_read,.map_source=&m,.figures=mem_read,.figure_source=&f,.tables=mem_read,.table_source=&tb,.segment=seg_for,
     .satellite=sat_for,.pass_line=pass_for,.alloc=counted,.release=uncounted,.resize=recounted};
   EnrScene *scene=chart_build(&in,&src);
   if(!scene){fprintf(stderr,"build failed\n");return 1;}

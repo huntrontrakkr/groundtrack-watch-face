@@ -46,7 +46,7 @@ At its peak a build holds about 66 KB; a finished hour 24–34 KB. A first versi
 |---|---|
 | Relief alone, deflated | 438 KB |
 | Relief and land, packed, 79°N–66°S | 236 KB (`--world`: 270 KB) |
-| All resources, with the figures | 248 KB of the app store's 256 KB (1 MB side-loaded) |
+| All resources, with the figures and tables | 250 KB of the app store's 256 KB (1 MB side-loaded) |
 
 `native/src/c/map_pack.c` decodes it: 1.6 KB of code, 3 rows of working memory, reading the resource through a 256-byte buffer.
 
@@ -102,8 +102,8 @@ These are measurements of the code in the emulator and on the host, not of a wat
 
 | | |
 |---|---|
-| App code and static data | 62 KB of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call) |
-| Heap free at launch | 69 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
+| App code and static data | 60 KB of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call) |
+| Heap free at launch | 71 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
 | Building the hour, in the emulator | 0.7–1.1 seconds of work, in slices |
 | Radio for the Sun and Moon | settings on launch; about 10 KB of segments every few weeks |
 | Radio for a satellite | GPS about 2.5 KB of segments and passes every day or two; a fast satellite (hour-long segments) about 13 KB every two to three days |
@@ -136,7 +136,7 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 ## Open questions and next steps
 
 1. **The other views and options:** the world band's moving tapes; events; Rolling Fuller; and Plotboard's per-anchor zones.
-2. **Code space.** 62 of 64 KB, and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
+2. **Code space.** 60 of 64 KB (the plates, stations and relief heights are a resource, `native/resources/tables.bin`, read while a chart is built), and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
 3. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the `.pbw`, are unchecked.
 4. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.
 5. **Energy on a watch.** The emulator's instruction counts guide the work; current is measured only on a watch, as `docs/ENERGY.md` sets out. No battery claim is made until then.
