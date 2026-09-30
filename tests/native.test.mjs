@@ -52,10 +52,11 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
     ]){
       for(const f of run(dir,name,args,minutes,more))assert.equal(f.differ,0,`${name} minute ${f.minute}: first difference at ${f.first}`);
     }
-    // Plotboard's inks change with night; the browser colors a symbol by
-    // the zone at its anchor, the native core pixel by pixel, so the two
-    // may differ where a symbol straddles the terminator, and nowhere else.
-    for(const f of run(dir,'moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','noflag'],[0,47]))assert.ok(f.differ<=0.002*200*228,`minute ${f.minute}: ${f.differ}`);
+    // Plotboard's ink changes with night, and the browser inks some symbols
+    // by one point's night: the watch does too.
+    for(const f of run(dir,'moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','noflag'],[0,12,24,36,47,59]))assert.equal(f.differ,0,`moon-plotboard minute ${f.minute}: first difference at ${f.first}`);
+    for(const f of run(dir,'iss-plotboard',['sat:25544','2026-09-30T02:00:00Z','plotboard','flag'],[0,20,40]))assert.equal(f.differ,0,`iss-plotboard minute ${f.minute}: first difference at ${f.first}`);
+    for(const f of run(dir,'sun-plotboard',['sun','2026-09-27T20:00:00Z','plotboard','callout'],[0,30,59]))assert.equal(f.differ,0,`sun-plotboard minute ${f.minute}: first difference at ${f.first}`);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -72,7 +73,10 @@ test('a minute drawn over the last draws only what changed, and the same pixels'
       ['moon-sunlight',['moon','2026-09-19T09:00:00Z','sunlight','flag']],['gps-crt',['sat:36585','2026-09-27T13:00:00Z','crt','flag']],
       ['iss-crt',['sat:25544','2026-09-30T13:00:00Z','crt','flag']],['ls9-plotboard',['sat:49260','2026-10-01T09:00:00Z','plotboard','flag']],
       ['qzs-hypsometric',['sat:42738','2026-09-27T05:00:00Z','hypsometric','noflag']],
-      ['sun-callout',['sun','2026-09-27T08:00:00Z','enroute','callout'],{NUMERALS:'accent'}],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
+      ['sun-callout',['sun','2026-09-27T08:00:00Z','enroute','callout'],{NUMERALS:'accent'}],
+      // Plotboard, the night crossing this hour's and the next hour's
+      // stations.
+      ['sun-plotboard',['sun','2026-09-27T20:00:00Z','plotboard','flag']],['iss-plotboard',['sat:25544','2026-09-30T02:00:00Z','plotboard','flag']],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
     ]){
       execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,'0'],{stdio:'pipe',env:{...env,...more}});
       const r=JSON.parse(execFileSync('native/host/harness',[join(dir,`${name}.scene`),join(dir,name),'-u']).toString());

@@ -35,6 +35,9 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   s->callout_left=i16(&r);s->callout_top=i16(&r);s->callout_bottom=i16(&r);take(&r,s->hour_text,3);s->numerals=u8(&r);
   s->avoid_count=u8(&r);if(s->avoid_count>24)return false;
   for(int k=0;k<s->avoid_count;k++)for(int j=0;j<4;j++)s->avoid[k][j]=i16(&r);
+  s->c0[0]=i16(&r);s->c0[1]=i16(&r);s->c1[0]=i16(&r);s->c1[1]=i16(&r);
+  s->station_count=u8(&r);if(s->station_count>32)return false;
+  for(int k=0;k<s->station_count;k++){s->stations[k][0]=i16(&r);s->stations[k][1]=i16(&r);}
   for(int m=0;m<60;m++){
     EnrMinute *e=&s->minutes[m];
     for(int k=0;k<3;k++)e->sun[k]=f64(&r);

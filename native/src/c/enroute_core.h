@@ -88,6 +88,12 @@ typedef struct {
   int16_t avoid[24][4];
   EnrFigures figures[3];
   uint8_t *fig_bits;
+  // Symbols inked by one point's night (renderEnroute's col(anchor)): the
+  // rose and hexagon by this hour's station, the reporting point by the
+  // next's, each network station's ring by its centre.
+  int16_t c0[2],c1[2];
+  uint8_t station_count;
+  int16_t stations[32][2];
   EnrMinute minutes[60];
   // Home's acquisition circles, each allocated on its own: circle k has
   // circle_n[k] points, (x, y) bytes at circle_px[k].

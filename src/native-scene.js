@@ -21,6 +21,9 @@
 //   hour's figures as the callout sets them, NUL-padded), u8 the figures'
 //   style (0 colon, 1 plain, 2 even, 3 mono, 4 accent), u8 n and n boxes
 //   (i16 x, y, w, h) of lettering its leader breaks for
+//   the ink's anchors (symbols inked by one point's night, not their own
+//   pixels'): i16 this hour's and the next hour's stations x, y; u8 n and n
+//   network stations (i16 x, y)
 //   60 minutes: f64 sun[3], f64 marker x, y, f64 moon fraction, u8 waxing,
 //   char zulu[5], u8 minute text[2], char top line[24] (a satellite's pass
 //   line, NUL-padded, '°' as 0x7f; empty when the line is fixed), i16 the
@@ -116,6 +119,8 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,re
   for(let k=0;k<3;k++)u8(co&&k<hh.length?hh.charCodeAt(k):0);
   u8(['colon','plain','even','mono','accent'].indexOf(numerals));
   u8(co?co.avoid.length:0);for(const b of co?co.avoid:[])for(const v of [b.x,b.y,b.w,b.h])i16(v);
+  const an=base.anchors;for(const v of [an.c0.x,an.c0.y,an.c1.x,an.c1.y])i16(v);
+  u8(an.stations.length);for(const q of an.stations){i16(q.x);i16(q.y);}
   // Home's acquisition circle on the world band, which changes with the
   // satellite's height; minutes that plot the same pixels share one.
   const circles=[],circleKeys=new Map();

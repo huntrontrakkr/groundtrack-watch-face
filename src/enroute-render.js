@@ -646,7 +646,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const tintIndex=(table,v)=>table.findIndex(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit);
     const baseClass=new Uint8Array(W*H);
     for(let i=0;i<W*H;i++)baseClass[i]=mat[i]===SPACE?2:pal.tints&&land[i]?3+tintIndex(pal.tints,relief[i]):pal.depths&&!land[i]?8+tintIndex(pal.depths,relief[i]):land[i]?1:0;
-    return {buf,trace,overlay,baseClass,beforeRoute,stages,marker:{x:p.x,y:p.y},zuluAt,altAt,topAt,tapeAt,calloutAt,hour,home:homeMark?{x:homeMark.x,y:homeMark.y,box:homeMark.box}:null};
+    return {buf,trace,overlay,baseClass,beforeRoute,stages,marker:{x:p.x,y:p.y},zuluAt,altAt,topAt,tapeAt,calloutAt,anchors:{c0,c1,stations:stations.map(s=>({x:s.x,y:s.y}))},hour,home:homeMark?{x:homeMark.x,y:homeMark.y,box:homeMark.box}:null};
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
     figure:{hour,minute:parts.m,next,time:camera.day||readout===true?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};

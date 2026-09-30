@@ -164,11 +164,27 @@ static bool crosses(const Ctx *c,int x,int y,enr_real level,int32_t q){
   }
   return false;
 }
+// The night a symbol's ink takes where the browser inks it by one point's
+// (Plotboard's ink changes with night): the rose, hexagon and reporting
+// point (ink drawn with the route) by their station's, a network station's
+// ring by its centre's; the rest, their own pixel's.
+static int ink_zone(const Ctx *c,int x,int y,bool route_ink,int z){
+  const EnrScene *s=c->s;
+  if(route_ink){
+    const int d0=(x-s->c0[0])*(x-s->c0[0])+(y-s->c0[1])*(y-s->c0[1]),d1=(x-s->c1[0])*(x-s->c1[0])+(y-s->c1[1])*(y-s->c1[1]);
+    // The reporting point stands a pixel above its station, and is inked by
+    // its own centre.
+    return d0<=d1?zone_at(c,s->c0[0],s->c0[1]):zone_at(c,s->c1[0],s->c1[1]-1);
+  }
+  for(int k=0;k<s->station_count;k++){const int dx=x-s->stations[k][0],dy=y-s->stations[k][1];if(dx*dx+dy*dy<=5)return zone_at(c,s->stations[k][0],s->stations[k][1]);}
+  return z;
+}
 // The base, everywhere or (with a mask) only in the 16-pixel blocks each
 // row's mask marks. Returns the pixels drawn.
 static int draw_base(Ctx *c,const uint16_t *mask){
   const EnrScene *s=c->s;
   const bool zones=s->flags&ENR_NIGHT_ZONES,terminator=s->flags&ENR_TERMINATOR;
+  const bool anchored=zones&&(s->zoned[ENR_INK][0]!=s->zoned[ENR_INK][1]||s->zoned[ENR_INK][0]!=s->zoned[ENR_INK][2]);
   // Each block's night at this minute. Where a block is all day or all night
   // (and, for the drawn terminator, so is every block round it), a pixel's
   // own night is known without its Sun height: zone 0 or 2, no screen or
@@ -240,7 +256,7 @@ static int draw_base(Ctx *c,const uint16_t *mask){
     else if(layer==L_CLEARED||layer==L_EARLY_CLEARED||layer==L_LATE_CLEARED)col=base_color(s,ground,z);
     else if(layer==L_GRID||layer==L_NET_GRID)col=s->zoned[ENR_GRID][z];
     else if(layer==L_ROUTE)col=s->zoned[ENR_ROUTE][z];
-    else if(layer==L_INK||layer==L_EARLY_INK)col=s->zoned[ENR_INK][z];
+    else if(layer==L_INK||layer==L_EARLY_INK)col=s->zoned[ENR_INK][anchored?ink_zone(c,x,y,layer==L_INK,z):z];
     else if(layer==L_MARK)col=s->zoned[ENR_MARK][z];
     else if(layer==L_SPACE_INK)col=s->space_ink;
     else col=late_ink(s,ground,x,y,z);
@@ -640,6 +656,17 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
   if(from<0||from>59)return render(scene,minute,frame,row_stride,NULL);
   static uint16_t mask[H];memset(mask,0,sizeof mask);
   night_blocks(scene,from,minute,mask);
+  // A symbol inked by one point's night is drawn again whole when that
+  // point's night changes.
+  if((scene->flags&ENR_NIGHT_ZONES)&&(scene->zoned[ENR_INK][0]!=scene->zoned[ENR_INK][1]||scene->zoned[ENR_INK][0]!=scene->zoned[ENR_INK][2])){
+    Ctx a={scene,&scene->minutes[from],frame,row_stride,{0,0,0},0,false,{0,0,0,0}},b=a;b.m=&scene->minutes[minute];
+    const int16_t pts[3][3]={{scene->c0[0],scene->c0[1],21},{scene->c1[0],(int16_t)(scene->c1[1]-1),6}};
+    for(int k=0;k<2+scene->station_count;k++){
+      const int x=k<2?pts[k][0]:scene->stations[k-2][0],y=k<2?pts[k][1]:scene->stations[k-2][1],r=k<2?pts[k][2]:3;
+      fast_ready(scene,a.m);const int z0=zone_at(&a,x,y);fast_ready(scene,b.m);
+      if(z0!=zone_at(&b,x,y)){const int box[4]={x-r,y-r,x+r,y+r};box_blocks(box,mask);}
+    }
+  }
   // What moved: where it was and where it is, each part on its own. Home's
   // acquisition circle moves only when the satellite's height moves it.
   const bool circle=scene->minutes[from].circle!=scene->minutes[minute].circle;

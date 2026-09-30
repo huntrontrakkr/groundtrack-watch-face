@@ -90,7 +90,7 @@ Satellites' element sets are fetched from CelesTrak at most once every two hours
 | The watch's scenes against the phone's (`tests/chart-native.test.mjs`) | byte for byte, across the Sun, the Moon, GPS, the world band's satellites and QZSS's day (from CelesTrak's elements of 29 September 2026, kept in `tests/fixtures`), all seven plates, homes, zones (with a half-hour one) and dates; with each build's peak memory |
 | The map pack (`tests/map-pack.test.mjs`) | every cell exact, in JavaScript and C |
 | Segments, sines, arcsines, arctangents, square roots, remainders (`tests/segments.test.mjs`) | the C gives the JavaScript's bits |
-| The minute renderer against the browser (`tests/native.test.mjs`) | pixel-exact on every plate but Plotboard, whose inks change with night by anchor in the browser and by pixel here (≤0.1% of pixels) |
+| The minute renderer against the browser (`tests/native.test.mjs`) | pixel-exact on every plate, Plotboard's symbols inked by their anchor's night as the browser inks them |
 | The phone side (`tests/pkjs.test.mjs`, `tests/config-browser.mjs`) | scenes, requests, retries, settings, segments, rise and set |
 | In the emery emulator (firmware 4.33.2, SDK 4.33.1) | the watch's own chart against the browser: 0 pixels differ for the Sun after partial minute redraws, for GPS, the ISS, Landsat 9 (home's acquisition circle and a polar route over the margin) and QZSS's day from live CelesTrak elements; the hour turns with no phone |
 
@@ -135,7 +135,7 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 
 ## Open questions and next steps
 
-1. **The other views and options:** the world band's moving tapes; events; Rolling Fuller; and Plotboard's per-anchor zones.
+1. **The other views and options:** the world band's moving tapes; events; and Rolling Fuller.
 2. **Code space.** 60 of 64 KB (the plates, stations and relief heights are a resource, `native/resources/tables.bin`, read while a chart is built), and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
 3. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the `.pbw`, are unchecked.
 4. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.

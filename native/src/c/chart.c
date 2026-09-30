@@ -696,6 +696,7 @@ static bool finish_draw(ChartBuild *b){
   // The tracking stations, circled, with their codes; on the world band
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
+  int16_t shown[32][2];int nshown=0;
   if(world)bearings(5,draw->sb,draw->cb);
   for(unsigned s=0;s<(day?0:TABLE_STATIONS);s++){
     double qx,qy;project(&cam,stations[s].lat,stations[s].lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
@@ -703,6 +704,7 @@ static bool finish_draw(ChartBuild *b){
     const int w=text_width(stations[s].code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
     if(overlaps(taken,taken_n,box))continue;
     if(taken_n<64)taken[taken_n++]=box;
+    if(nshown<32){shown[nshown][0]=(int16_t)x;shown[nshown][1]=(int16_t)y;nshown++;}
     if(world){const int n=circle_pixels(&cam,stations[s].lat,stations[s].lon,acquisition,5,draw->sb,draw->cb,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++){const int r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(&cv,x+dx,y+dy,L_INK);}
     plot(&cv,x,y,L_INK);
@@ -911,6 +913,8 @@ static bool finish_draw(ChartBuild *b){
   if(world){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
   out->numerals=(uint8_t)in->numerals;
+  out->c0[0]=(int16_t)c0x;out->c0[1]=(int16_t)c0y;out->c1[0]=(int16_t)c1x;out->c1[1]=(int16_t)c1y;
+  out->station_count=(uint8_t)nshown;memcpy(out->stations,shown,sizeof(int16_t)*2*nshown);
   if(!world){
     // The time callout's place, hour and the lettering it breaks for; its
     // figures, when it is drawn.

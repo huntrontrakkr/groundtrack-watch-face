@@ -90,6 +90,8 @@ int main(int argc,char **argv){
   {const int16_t v[18]={s.top_x,s.top_baseline,s.height_right,s.height_baseline,s.tape_x0,s.tape_x1,s.tape_baseline,s.tape_lo,s.tape_hi,s.home_x,s.home_y,s.home_box[0],s.home_box[1],s.home_box[2],s.home_box[3],s.callout_left,s.callout_top,s.callout_bottom};
   for(int k=0;k<18;k++)u16((uint16_t)v[k]);}
   fwrite(s.hour_text,1,3,out);u8(s.numerals);u8(s.avoid_count);for(int k=0;k<s.avoid_count;k++)for(int j=0;j<4;j++)u16((uint16_t)s.avoid[k][j]);
+  u16((uint16_t)s.c0[0]);u16((uint16_t)s.c0[1]);u16((uint16_t)s.c1[0]);u16((uint16_t)s.c1[1]);
+  u8(s.station_count);for(int k=0;k<s.station_count;k++){u16((uint16_t)s.stations[k][0]);u16((uint16_t)s.stations[k][1]);}
   for(int k=0;k<60;k++){const EnrMinute *e=&s.minutes[k];for(int j=0;j<3;j++)f64(e->sun[j]);f64(e->mx);f64(e->my);f64(e->moon_fraction);u8(e->waxing);
     fwrite(e->zulu,1,5,out);fwrite(e->minute,1,2,out);fwrite(e->top,1,24,out);u16((uint16_t)e->index);fwrite(e->height,1,8,out);u8(e->circle);}
   u16(s.circle_count);
