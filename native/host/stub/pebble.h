@@ -81,4 +81,5 @@ extern uint32_t MESSAGE_KEY_SceneTotal,MESSAGE_KEY_SceneOffset,MESSAGE_KEY_Scene
 typedef enum {APP_LOG_LEVEL_ERROR=1,APP_LOG_LEVEL_WARNING=50,APP_LOG_LEVEL_INFO=100,APP_LOG_LEVEL_DEBUG=200} AppLogLevel;
 void app_log(uint8_t log_level,const char *src_filename,int src_line_number,const char *fmt,...);
 #define APP_LOG(level,fmt,...) app_log(level,__FILE__,__LINE__,fmt,##__VA_ARGS__)
+size_t heap_bytes_free(void);
 void app_event_loop(void);

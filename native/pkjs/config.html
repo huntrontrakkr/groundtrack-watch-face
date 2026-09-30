@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Groundtrack</title>
+<style>
+  :root{--ink:#10204a;--route:#d4148c;--paper:#fff;--water:#e6f7fb;--line:#9fb3c8;color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--water);color:var(--ink);font:16px/1.4 -apple-system,system-ui,Roboto,"Segoe UI",sans-serif}
+  header{padding:20px 18px 8px}
+  h1{margin:0;font:600 13px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;text-transform:uppercase}
+  header p{margin:6px 0 0;font-size:14px;opacity:.75}
+  form{padding:0 12px 96px}
+  fieldset{margin:12px 0;padding:6px 0;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+  legend{margin-left:12px;padding:0 6px;font:600 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--route)}
+  label.row{display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px;border-top:1px solid #edf1f5}
+  label.row:first-of-type{border-top:0}
+  label.row input[type=radio],label.row input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--route);flex:none}
+  .name{flex:1}
+  .note{display:block;font-size:13px;opacity:.65}
+  .coords{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:6px 14px 12px}
+  .coords label{font-size:13px}
+  .coords input{width:100%;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
+  .coords[hidden]{display:none}
+  button{font:inherit;border-radius:10px;cursor:pointer}
+  #locate{grid-column:1/3;padding:10px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
+  #status{grid-column:1/3;margin:0;font-size:13px;opacity:.75;min-height:1em}
+  .actions{position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;padding:12px;background:linear-gradient(transparent,var(--water) 30%)}
+  .actions button{flex:1;padding:14px;border:0;font-weight:600}
+  #save{background:var(--route);color:#fff}
+  #cancel{background:var(--paper);color:var(--ink);border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Groundtrack Enroute</h1>
+  <p>The phone draws each hour's chart and sends it to the watch. Saving draws this hour again.</p>
+</header>
+<form id="form">
+  <fieldset><legend>Track</legend>
+    <label class="row"><input type="radio" name="body" value="sun"><span class="name">Sun<span class="note">Its ground point, where it stands overhead</span></span></label>
+    <label class="row"><input type="radio" name="body" value="moon"><span class="name">Moon<span class="note">In its calculated phase</span></span></label>
+    <label class="row"><input type="radio" name="body" value="sat:36585"><span class="name">GPS BIIF-1<span class="note">A textbook GPS orbit, not the satellite's measured one</span></span></label>
+  </fieldset>
+  <fieldset><legend>Plate</legend><div id="plates"></div></fieldset>
+  <fieldset><legend>Clock</legend>
+    <label class="row"><input type="checkbox" name="flag"><span class="name">Minute flag<span class="note">A pennant on the route with the minutes</span></span></label>
+  </fieldset>
+  <fieldset><legend>Home station</legend>
+    <label class="row"><input type="radio" name="home" value="preset"><span class="name">For the time zone<span class="note" id="preset-note"></span></span></label>
+    <label class="row"><input type="radio" name="home" value="custom"><span class="name">A place of my own</span></label>
+    <div class="coords" id="coords" hidden>
+      <label>Latitude<input name="lat" inputmode="decimal" placeholder="40.71"></label>
+      <label>Longitude<input name="lon" inputmode="decimal" placeholder="-74.01"></label>
+      <button type="button" id="locate">Use this phone's location</button>
+      <p id="status">Rounded to 0.01°, about a kilometre, and kept on the phone.</p>
+    </div>
+    <label class="row"><input type="radio" name="home" value="none"><span class="name">None</span></label>
+  </fieldset>
+</form>
+<div class="actions"><button type="button" id="cancel">Cancel</button><button type="button" id="save">Save</button></div>
+<script>
+(function(){
+  // Filled in by the phone app: {settings, plates:[[key,name,note]], preset}
+  var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
+  var plates=document.getElementById('plates');
+  config.plates.forEach(function(p){
+    var row=document.createElement('label');row.className='row';
+    row.innerHTML='<input type="radio" name="plate"><span class="name"></span>';
+    row.firstChild.value=p[0];
+    row.lastChild.textContent=p[1];
+    var note=document.createElement('span');note.className='note';note.textContent=p[2];row.lastChild.appendChild(note);
+    plates.appendChild(row);
+  });
+  function pick(name,value){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
+  function picked(name){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
+  pick('body',s.body);pick('plate',s.plate);form.elements.flag.checked=s.flag==='1';
+  document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+s.timeZone+')':'None for '+s.timeZone;
+  var home=null;try{home=s.home?JSON.parse(s.home):null;}catch(e){}
+  if(home&&home.none)pick('home','none');
+  else if(home){pick('home','custom');form.elements.lat.value=home.lat;form.elements.lon.value=home.lon;}
+  else pick('home','preset');
+  function coords(){document.getElementById('coords').hidden=picked('home')!=='custom';}
+  form.addEventListener('change',coords);coords();
+  var status=document.getElementById('status');
+  document.getElementById('locate').addEventListener('click',function(){
+    if(!navigator.geolocation){status.textContent='This phone offers no location here.';return;}
+    status.textContent='Finding this phone…';
+    navigator.geolocation.getCurrentPosition(function(p){
+      form.elements.lat.value=p.coords.latitude.toFixed(2);form.elements.lon.value=p.coords.longitude.toFixed(2);
+      status.textContent='Found, rounded to 0.01°.';
+    },function(e){status.textContent='No location: '+(e&&e.message||'refused');},{timeout:15000,maximumAge:3600000});
+  });
+  function close(result){location.href='pebblejs://close#'+encodeURIComponent(result);}
+  document.getElementById('cancel').addEventListener('click',function(){close('CANCELLED');});
+  document.getElementById('save').addEventListener('click',function(){
+    var mode=picked('home'),homeValue='';
+    if(mode==='none')homeValue=JSON.stringify({none:true});
+    if(mode==='custom'){
+      var lat=parseFloat(form.elements.lat.value),lon=parseFloat(form.elements.lon.value);
+      if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
+      homeValue=JSON.stringify({lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
+    }
+    close(JSON.stringify({body:picked('body'),plate:picked('plate'),flag:form.elements.flag.checked?'1':'0',home:homeValue}));
+  });
+})();
+</script>
+</body>
+</html>

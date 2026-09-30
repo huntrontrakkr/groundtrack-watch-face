@@ -8,12 +8,14 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node tests/browser.mjs && node tests/art-browser.mjs && node tests/atlas-browser.mjs && node tests/relief-browser.mjs && node tests/chart-browser.mjs && node tests/enroute-browser.mjs",
+    "test:browser": "node tests/browser.mjs && node tests/art-browser.mjs && node tests/atlas-browser.mjs && node tests/relief-browser.mjs && node tests/chart-browser.mjs && node tests/enroute-browser.mjs && node tests/config-browser.mjs",
     "generate:map": "node tools/generate-land.mjs",
     "measure": "node tools/measure.mjs",
     "proofs": "node tools/render-proofs.mjs",
     "generate:relief": "node tools/generate-relief.mjs",
-    "build:pkjs": "node tools/build-pkjs.mjs"
+    "build:pkjs": "node tools/build-pkjs.mjs",
+    "build:native": "node tools/build-pkjs.mjs && cd native && pebble build",
+    "check:emulator": "node tools/emulator-check.mjs"
   },
   "dependencies": {
     "astronomy-engine": "2.1.19",

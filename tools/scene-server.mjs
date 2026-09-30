@@ -1,10 +1,10 @@
-// A development scene server for the native app: builds the current local
-// hour's scene on request, as the phone does itself. Set the phone's
+// A development scene server for the native app: builds the scene for the local
+// hour holding `at` (default: now) on request, as the phone does itself. Set the phone's
 // sceneServer setting to use it instead, to try renderer changes without
 // rebuilding the app.
 //
 //   node tools/scene-server.mjs [port]
-//   GET /scene?body=sun&plate=enroute&flag=1&zone=America/New_York
+//   GET /scene?body=sun&plate=enroute&flag=1&zone=America/New_York[&at=<ms in the hour>]
 import {createServer} from 'node:http';
 import {buildScene} from './export-scene.mjs';
 import {civilHour} from '../src/chart-render.js';
@@ -14,7 +14,7 @@ createServer((request,response)=>{
   const url=new URL(request.url,'http://localhost');
   if(url.pathname!=='/scene'){response.writeHead(404);response.end();return;}
   try{
-    const zone=url.searchParams.get('zone')||'UTC',start=civilHour(Date.now(),zone);
+    const zone=url.searchParams.get('zone')||'UTC',start=civilHour(Number(url.searchParams.get('at'))||Date.now(),zone);
     const {scene}=buildScene({timeZone:zone,body:url.searchParams.get('body')||'sun',start,plate:url.searchParams.get('plate')||'enroute',flag:url.searchParams.get('flag')==='1'});
     response.writeHead(200,{'content-type':'application/octet-stream','content-length':scene.length});response.end(scene);
     console.log(`${new Date().toISOString()} scene ${url.search} ${scene.length} bytes`);

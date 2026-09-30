@@ -8,10 +8,11 @@
 // The settings must be the phone's (native/pkjs/main.js: sun, enroute and
 // the flag by default, in the phone's own time zone); home is the zone's
 // preset. The emulator must be running the app with its scene received.
-// PEBBLE names the pebble command (default: pebble).
+// PEBBLE names the pebble command (default: tools/emulator.sh).
 import {execFileSync} from 'node:child_process';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {buildScene} from './export-scene.mjs';
 import {civilHour} from '../src/chart-render.js';
 import {HOMES} from '../src/home.js';
@@ -21,7 +22,7 @@ import {decodePNG,encodePNG} from './png.mjs';
 
 const [outArg='test-results/emulator',body='sun',plate='enroute',flagArg='flag',zone=Intl.DateTimeFormat().resolvedOptions().timeZone]=process.argv.slice(2);
 const out=resolve(outArg);mkdirSync(out,{recursive:true});
-const pebble=process.env.PEBBLE||'pebble',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const pebble=process.env.PEBBLE||fileURLToPath(new URL('emulator.sh',import.meta.url)),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const shotFile=join(out,`${body.replace(/\W/g,'-')}-${plate}-watch.png`);
 
 // Capture within one minute, clear of the minute change and its redraw.

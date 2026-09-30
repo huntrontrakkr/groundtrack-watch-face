@@ -1,0 +1,76 @@
+name: Native watch app
+# The watch app built with the Pebble SDK, then run in the emery emulator
+# with its own phone side, and its frame compared with the browser
+# renderer's at the same minute.
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned build tools
+        run: |
+          npm ci
+          pip install pebble-tool==5.0.40
+          pebble sdk install 4.33.1
+      - name: Build the watch app
+        run: npm run build:native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: groundtrack-native
+          path: native/build/native.pbw
+          retention-days: 14
+
+  emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned build tools
+        run: |
+          npm ci
+          pip install pebble-tool==5.0.40
+          pebble sdk install 4.33.1
+          sudo apt-get install -y --no-install-recommends libsdl2-2.0-0 libpixman-1-0 libfdt1
+      - name: Build the watch app
+        run: npm run build:native
+      # tools/emulator.sh starts the phone simulator where it can load ICU.
+      - name: Run it in the emulator against the browser renderer
+        run: |
+          tools/emulator.sh install --emulator emery native/build/native.pbw
+          # The phone side renders and sends the hour; retry once if the
+          # scene had not arrived.
+          sleep 20
+          node tools/emulator-check.mjs test-results/emulator || { sleep 30; node tools/emulator-check.mjs test-results/emulator; }
+      - name: Keep the comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-comparison
+          path: test-results/emulator/
+          retention-days: 14
