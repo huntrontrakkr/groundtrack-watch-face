@@ -97,8 +97,16 @@ static void rise_text(const uint8_t *r,bool moon,char *left,char *right){
   }
 }
 
+// The local day holding t, midnight to midnight (23 or 25 hours across a
+// clock change), as enroute-render.js's localDay(): back by the wall clock,
+// then stepped until the clock reads midnight.
+static int wall(time_t t){const struct tm *lt=localtime(&t);return lt->tm_hour*60+lt->tm_min;}
+static int off(time_t t){const int m=wall(t);return m>12*60?m-24*60:m;}
+static time_t midnight(time_t t){time_t c=t-t%60-wall(t)*60;for(int i=0;i<3&&off(c);i++)c-=off(c)*60;return c;}
+void local_day(time_t t,int64_t *start,int64_t *end){*start=midnight(t);*end=midnight(*start+26*3600);}
+
 // The segments and pass blocks a build needs, read once from storage.
-typedef struct {Segment seg[3];int n;SatSegment sat[4];int nsat;uint8_t pass[2][256];int pass_len[2];} Days;
+typedef struct {Segment seg[3];int n;SatSegment sat[6];int nsat;uint8_t pass[2][256];int pass_len[2];} Days;
 static const Segment *segment_for(void *ctx,int32_t day){Days *d=ctx;for(int i=0;i<d->n;i++)if(d->seg[i].day==day)return &d->seg[i];return NULL;}
 static const SatSegment *sat_for(void *ctx,int64_t t){Days *d=ctx;for(int i=0;i<d->nsat;i++)if(t>=d->sat[i].start&&t<d->sat[i].start+d->sat[i].span)return &d->sat[i];return NULL;}
 static void pass_for(void *ctx,int64_t t,char out[24]){
@@ -116,11 +124,11 @@ static size_t resource_read(void *source,uint32_t at,uint8_t *out,size_t n){
 static Days *s_days;
 void local_chart_done(void){free(s_days);s_days=NULL;}
 ChartBuild *local_chart(time_t now,const WatchSettings *s){
-  if(s->body>BODY_SATELLITE||(s->body==BODY_SATELLITE&&s->view==VIEW_DAY))return NULL;
+  if(s->body>BODY_SATELLITE)return NULL;
   const struct tm *lt=localtime(&now);
   ChartInput in;memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  in.body=sat&&s->station?3:s->body;in.view=sat&&s->view==VIEW_WORLD;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.flag=s->flag;in.clock24=s->clock24;
+  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:0;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.flag=s->flag;in.clock24=s->clock24;
   in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
   in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
@@ -134,12 +142,18 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   Days *const d_=s_days;
   #define days (*d_)
   days.n=days.nsat=0;days.pass_len[0]=days.pass_len[1]=0;
-  for(int64_t d=(in.start-2400)/86400;d<=(in.start+6000)/86400&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
+  if(in.view==VIEW_DAY){
+    local_day(now,&in.day_start,&in.day_end);
+    for(int k=0;k<27;k++){const time_t t=(time_t)(in.day_start+k*3600);in.day_hours[k]=(uint8_t)localtime(&t)->tm_hour;}
+  }
+  const int64_t from=in.view==VIEW_DAY&&in.day_start<in.start-2400?in.day_start:in.start-2400,to=in.view==VIEW_DAY&&in.day_end>in.start+6000?in.day_end:in.start+6000;
+  for(int64_t d=from/86400;d<=to/86400&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
   if(sat){
     // A satellite: its segments over the track, and home's passes for the
     // hour.
     const int lead=in.view?1200:2400;
-    for(int64_t t=in.start-lead;t<=in.start+3600+lead&&days.nsat<4;){
+    const int64_t t0=in.view==VIEW_DAY?in.day_start:in.start-lead,t1=in.view==VIEW_DAY?(in.day_end>in.start+3600?in.day_end:in.start+3600):in.start+3600+lead;
+    for(int64_t t=t0;t<=t1&&days.nsat<6;){
       if(!sat_segment_load(s->norad,t,&days.sat[days.nsat])){local_chart_done();return NULL;}
       t=days.sat[days.nsat].start+(int64_t)days.sat[days.nsat].span;days.nsat++;
     }

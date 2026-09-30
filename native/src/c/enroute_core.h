@@ -55,7 +55,11 @@ typedef struct {
   uint8_t flags;
 } EnrPoint;
 
-enum {ENR_VIEW_HOUR,ENR_VIEW_WORLD};
+enum {ENR_VIEW_HOUR,ENR_VIEW_WORLD,ENR_VIEW_DAY};
+// Figures of one size for the day's time callout (Jost digits: 20, 28 and
+// 40 px): per digit its width, height and first byte in the scene's
+// fig_bits, rows of (width+7)/8 bytes, the leftmost pixel the high bit.
+typedef struct {uint8_t width[10],height[10];uint16_t first[10];} EnrFigures;
 typedef struct {
   uint8_t flags,body,view;
   int8_t forward;
@@ -71,6 +75,15 @@ typedef struct {
   int16_t tape_x0,tape_x1,tape_baseline,tape_lo,tape_hi;
   // Home, whose mark is drawn over the body (x -1000 without), and its box.
   int16_t home_x,home_y,home_box[4];
+  // The day's time callout: the track's least x less 8, the top and bottom
+  // it keeps within, the hour's figures, the lettering its leader breaks
+  // for, and its figures (loaded apart from the scene's blob).
+  int16_t callout_left,callout_top,callout_bottom;
+  char hour_text[3];
+  uint8_t avoid_count;
+  int16_t avoid[12][4];
+  EnrFigures figures[3];
+  uint8_t *fig_bits;
   EnrMinute minutes[60];
   // Home's acquisition circles, each allocated on its own: circle k has
   // circle_n[k] points, (x, y) bytes at circle_px[k].
@@ -93,7 +106,8 @@ typedef struct {
   int32_t row_q[ENR_H][2],night_q[34];
 } EnrScene;
 
-// Parse a scene blob as the phone sends it. Allocates the track and circles
+// Parse a scene blob as src/native-scene.js writes it (host only:
+// native/host/enroute_parse.c). Allocates the track and circles
 // with the given allocator. With borrow, the class plane's runs stay in the blob,
 // which must then outlive the scene; otherwise they are copied. Returns
 // false on a malformed blob.

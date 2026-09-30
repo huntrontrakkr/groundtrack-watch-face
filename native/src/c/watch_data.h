@@ -38,6 +38,8 @@ int64_t sat_segments_missing(int32_t norad,int64_t from,int32_t seconds);
 bool pass_block_known(int64_t t);
 // Whether home's rise and set are kept for a local date.
 bool rise_set_known(int32_t date);
+// The local day holding t: its midnight and the next (Unix seconds).
+void local_day(time_t t,int64_t *start,int64_t *end);
 // The local calendar date as days since 1970-01-01.
 int32_t civil_date(int year,int month,int day);
 

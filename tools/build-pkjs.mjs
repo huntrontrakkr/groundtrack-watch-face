@@ -1,28 +1,23 @@
-// Bundle the phone side of the native app: native/pkjs/main.js with the
-// renderer, and the coastline atlas and relief grid deflated and embedded
-// as base64, into native/src/pkjs/index.js for the Pebble SDK to package.
-// The repository is private, so the phone can't fetch the data from it.
+// Bundle the phone side of the native app, native/pkjs/main.js with the
+// ephemeris and orbit code it fits segments with, into
+// native/src/pkjs/index.js for the Pebble SDK to package.
 //
 //   node tools/build-pkjs.mjs [out-file]
 import {readFileSync,mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-import {deflateSync} from 'fflate';
 
 const root=new URL('..',import.meta.url);
 const out=process.argv[2]||fileURLToPath(new URL('native/src/pkjs/index.js',root));
-const packed=name=>Buffer.from(deflateSync(readFileSync(new URL(`public/${name}`,root)),{level:9})).toString('base64');
 
 const data={
   name:'groundtrack-data',
   setup(b){
-    b.onResolve({filter:/^groundtrack:data$/},()=>({path:'data',namespace:'groundtrack'}));
     // satellite.js's WebAssembly builds load only on request, which the
-    // renderer never makes; they need Node and would triple the bundle.
+    // phone never makes; they need Node and would triple the bundle.
     b.onResolve({filter:/^#wasm-/},()=>({path:'wasm',namespace:'groundtrack'}));
     b.onLoad({filter:/^wasm$/,namespace:'groundtrack'},()=>({contents:'export default null;',loader:'js'}));
-    b.onLoad({filter:/^data$/,namespace:'groundtrack'},()=>({contents:`export const LAND=${JSON.stringify(packed('land.bin'))};\nexport const RELIEF=${JSON.stringify(packed('relief.bin'))};\n`,loader:'js'}));
   }
 };
 

@@ -1,27 +1,20 @@
-// Groundtrack Enroute, phone side. The watch draws the Sun and Moon charts
-// itself; the phone sends it what it needs for that: its settings, the Sun
-// and Moon as daily segments some weeks ahead, and home's rise and set, when
-// the watch asks and when settings change. For a satellite the phone renders
-// the hour's scene and sends it in chunks: whichever hour the watch asks
-// for (this hour's if it has none, the next one's shortly before the hour).
-// Never on a timer of its own.
+// Groundtrack Enroute, phone side. The watch draws every chart itself; the
+// phone sends it what it needs for that: its settings, the Sun and Moon as
+// daily segments some weeks ahead, home's rise and set, and a satellite's
+// segments and passes a few days ahead, when the watch asks and when
+// settings change. Never on a timer of its own.
 //
-// This is the source; tools/build-pkjs.mjs bundles it, with the renderer
-// and the coastline and relief data, into native/src/pkjs/index.js.
+// This is the source; tools/build-pkjs.mjs bundles it into
+// native/src/pkjs/index.js.
 // Settings are kept in localStorage:
 //   body, plate, flag ('1' or '0'), timeZone (default: the phone's),
 //   home (JSON {lat, lon}, or {none: true}; default: the preset home for the
 //   zone, if any)
 // The settings page (config.html) sets body, plate, flag and home.
-//   sceneServer: fetch scenes from tools/scene-server.mjs instead, for development
 //   elementsUrl: where to fetch element sets (default CelesTrak's GP query),
 //   for development against a mirror
 // Satellites' element sets are fetched from CelesTrak at most once every two
 // hours each (as CelesTrak asks) and kept, under tle-<catalog number>.
-import {inflateSync} from 'fflate';
-import {buildScene} from '../../src/native-scene.js';
-import {decodeRelief} from '../../src/relief.js';
-import {civilHour} from '../../src/chart-render.js';
 import {HOMES} from '../../src/home.js';
 import {PLATES} from '../../src/enroute-render.js';
 import {registerElements,viewOf,FRESH,CATALOG,catalogEntry,bodyId} from '../../src/satellites.js';
@@ -29,34 +22,16 @@ import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,
 import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
 import {localDay,localDate} from '../../src/enroute-render.js';
 import {clockParts} from '../../src/render.js';
+import {registerNominal} from '../../src/nominal.js';
 import CONFIG_PAGE from './config.html';
 import {devicePosition} from './device-position.js';
-import {LAND,RELIEF} from 'groundtrack:data';
 
-var CHUNK=2000;
+// GPS and QZSS have nominal orbits to fall back on, as the study does.
+registerNominal();
 
 function setting(key,fallback){
   var value=localStorage.getItem(key);
   return value===null||value===''?fallback:value;
-}
-
-// base64 without atob, which not every phone's JavaScript engine has.
-function unbase64(text){
-  var table=new Uint8Array(128),alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  for(var k=0;k<64;k++)table[alphabet.charCodeAt(k)]=k;
-  var n=text.length,pad=text[n-1]==='='?(text[n-2]==='='?2:1):0,out=new Uint8Array(n/4*3-pad),o=0;
-  for(var i=0;i<n;i+=4){
-    var v=table[text.charCodeAt(i)]<<18|table[text.charCodeAt(i+1)]<<12|table[text.charCodeAt(i+2)]<<6|table[text.charCodeAt(i+3)];
-    out[o++]=v>>16&255;if(o<out.length)out[o++]=v>>8&255;if(o<out.length)out[o++]=v&255;
-  }
-  return out;
-}
-
-// The data is inflated on first use and kept for the app's life.
-var atlas=null,meters=null;
-function data(){
-  if(!atlas){atlas=inflateSync(unbase64(LAND));meters=decodeRelief(inflateSync(unbase64(RELIEF)));}
-  return {atlas:atlas,meters:meters};
 }
 
 function zone(){
@@ -71,32 +46,9 @@ function home(timeZone){
   return HOMES[timeZone]||null;
 }
 
-function renderScene(start,done){
-  var began=Date.now(),timeZone=zone(),d=data();
-  var scene=buildScene({atlas:d.atlas,meters:d.meters,body:setting('body','sun'),start:start,
-    plate:setting('plate','enroute'),flag:setting('flag','1')==='1',timeZone:timeZone,home:home(timeZone)}).scene;
-  console.log('Scene for '+new Date(start).toISOString()+' rendered in '+(Date.now()-began)+' ms: '+scene.length+' bytes');
-  done(scene);
-}
-
-function fetchScene(server,start,done,failed){
-  var url=server+'/scene?body='+encodeURIComponent(setting('body','sun'))+'&plate='+encodeURIComponent(setting('plate','enroute'))+
-    '&flag='+setting('flag','1')+'&zone='+encodeURIComponent(zone())+'&at='+start;
-  var request=new XMLHttpRequest();
-  request.open('GET',url);
-  request.responseType='arraybuffer';
-  request.onload=function(){
-    if(request.status!==200)return failed('NO CHART','Scene server answered '+request.status);
-    done(new Uint8Array(request.response));
-  };
-  request.onerror=function(){failed('NO CHART','Scene server unreachable at '+url);};
-  request.send();
-}
-
 // Every message to the watch goes through one queue, one at a time. A
-// message the watch doesn't take is tried again a few times; after that it
-// is dropped with the rest of its group (a scene's chunks), and the watch
-// asks again.
+// message the watch doesn't take is tried again a few times; after that the
+// queue is dropped, and the watch asks again for what it still lacks.
 var queue=[],pumping=false;
 function enqueue(message,group,done){queue.push({message:message,group:group,done:done,failures:0});pump();}
 function pump(){
@@ -107,23 +59,11 @@ function pump(){
   },function(){
     pumping=false;
     if(++item.failures>5){
-      console.log('The watch is not taking the scene');
-      queue=queue.filter(function(q){return q!==item&&!(item.group&&q.group===item.group);});
-      if(item.done)item.done(false);pump();
+      console.log('The watch is not taking a message');
+      queue=[];
+      if(item.done)item.done(false);
     }else setTimeout(pump,500*item.failures);
   });
-}
-
-// A scene: its total, then each chunk with its offset.
-var sending=false,waiting=null,last=null,scenes=0;
-function sendScene(bytes,finished){
-  var group='scene'+(++scenes),ended=false;
-  function end(ok){if(!ended){ended=true;if(ok)console.log('Scene sent: '+bytes.length+' bytes');finished(ok);}}
-  enqueue({SceneTotal:bytes.length},group,function(ok){if(!ok)end(false);});
-  for(var offset=0;offset<bytes.length;offset+=CHUNK)(function(offset){
-    var n=Math.min(CHUNK,bytes.length-offset),final=offset+n>=bytes.length;
-    enqueue({SceneOffset:offset,SceneChunk:Array.prototype.slice.call(bytes.subarray(offset,offset+n))},group,function(ok){if(!ok||final)end(ok);});
-  })(offset);
 }
 
 // What the watch needs to draw its charts itself. Settings: body (0 Sun, 1
@@ -152,8 +92,10 @@ function sendSatellite(norad){
   var body='sat:'+norad;
   elements(body,function(problem,reason){
     if(problem){console.log('No elements for '+body+': '+(reason||problem));status(problem);return;}
-    var span=satelliteSpan(body),now=Math.floor(Date.now()/1000),bytes=[],sent=0;
-    for(var t=Math.floor((now-3600)/span)*span;t<now+SAT_DAYS*86400;t+=span){
+    // From an hour ago, or for the whole-day chart from a day ago (its day
+    // starts at local midnight).
+    var span=satelliteSpan(body),now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=viewOf(body)==='day'?26*3600:3600;
+    for(var t=Math.floor((now-back)/span)*span;t<now+SAT_DAYS*86400;t+=span){
       var seg;try{seg=encodeSatelliteSegment(satelliteSegmentFor(body,t*1000));}catch(error){break;}
       for(var k=0;k<seg.length;k++)bytes.push(seg[k]);sent++;
       if(bytes.length>=12*seg.length){enqueue({SatSegments:bytes});bytes=[];}
@@ -231,45 +173,15 @@ function elements(body,done){
   request.send();
 }
 
-// When the phone can't draw the hour, the watch says why instead of waiting.
+// When the phone can't give a satellite's orbit, the watch says why instead
+// of waiting.
 function status(text){
   console.log('Status to the watch: '+text);
-  enqueue({SceneStatus:text});
+  enqueue({Status:text});
 }
-
-// The scene for the civil hour holding `when` (milliseconds). The last
-// scene is kept, so a request the watch repeats (a transfer it lost) is sent
-// again without rendering it again. A request that arrives while that same
-// hour is being prepared or sent (the watch asking as the phone side
-// starts) is already answered.
-function refresh(when){
-  var start=civilHour(when,zone());
-  if(sending){waiting=start;return;}
-  sending=true;
-  function finish(ok){
-    sending=false;
-    var w=waiting;waiting=null;
-    if(w!==null&&!(ok&&w===start))refresh(w);
-  }
-  function send(bytes){
-    last={start:start,key:settingsKey(),bytes:bytes};
-    sendScene(bytes,finish);
-  }
-  function fail(text,error){console.log('No scene: '+(error&&error.message||error||text));status(text);finish(false);}
-  if(last&&last.start===start&&last.key===settingsKey())return send(last.bytes);
-  var server=setting('sceneServer',null),body=setting('body','sun');
-  if(server)return fetchScene(server,start,send,fail);
-  if(viewOf(body)!=='hour')return fail('VIEW NOT YET ON WATCH');
-  elements(body,function(problem,reason){
-    if(problem)return fail(problem,reason);
-    try{renderScene(start,send);}
-    catch(error){fail(/three days/.test(error.message)?'ELEMENTS TOO OLD':'NO CHART',error);}
-  });
-}
-function settingsKey(){return [setting('body','sun'),setting('plate','enroute'),setting('flag','1'),zone(),setting('home','')].join('|');}
 
 // The settings page, offline: a data URL holding the page and the settings.
-var BODIES=['sun','moon'].concat(CATALOG.filter(function(c){return viewOf(bodyId(c.norad))!=='day';}).map(function(c){return bodyId(c.norad);}));
+var BODIES=['sun','moon'].concat(CATALOG.map(function(c){return bodyId(c.norad);}));
 // A data-URL page can't reliably ask for the phone's location itself (as
 // Dymaxion found), so the phone takes a coarse fix first, waiting at most
 // five seconds, and passes it in, rounded to 0.01°.
@@ -295,17 +207,14 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
   if(chosen.flag==='1'||chosen.flag==='0')localStorage.setItem('flag',chosen.flag);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
-  // The watch draws again in the new settings (a satellite's hour it asks
-  // for again), with home's rise and set for the new home.
+  // The watch draws again in the new settings, with home's rise and set
+  // for the new home.
   sendSettings();sendRiseSets();
 });
 
 // On launch, the settings: the watch asks for anything else it lacks.
 Pebble.addEventListener('ready',function(){sendSettings();});
 Pebble.addEventListener('appmessage',function(e){
-  // A satellite's scene for the hour holding a Unix time.
-  var at=e.payload.SceneRequest;
-  if(at!==undefined)refresh(at>0?at*1000:Date.now());
   // Segments from a UTC day (days since 1970), and home's rise and set.
   var from=e.payload.DataRequest;
   if(from!==undefined){

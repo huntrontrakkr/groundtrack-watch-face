@@ -1,6 +1,6 @@
-// The phone side of the native app, as bundled for the Pebble app: it must
-// render the current hour's scene itself, byte for byte as the tools do, and
-// send it to the watch in chunks.
+// The phone side of the native app, as bundled for the Pebble app: it gives
+// the watch its settings and the Sun, Moon and satellites' segments ahead,
+// through one queue, and gives up on a watch that stops taking them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
@@ -8,50 +8,7 @@ import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import vm from 'node:vm';
-import {buildScene} from '../tools/export-scene.mjs';
-import {civilHour} from '../src/chart-render.js';
 import {HOMES} from '../src/home.js';
-
-test('the phone renders the hour and sends it to the watch',async()=>{
-  const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
-  try{
-    const out=join(dir,'index.js');
-    execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});
-    const now=Date.parse('2026-09-27T13:24:00Z'),zone='America/New_York';
-    const stored={body:'moon',plate:'crt',flag:'1',timeZone:zone},listeners={},messages=[];
-    let finished;const sent=new Promise(resolve=>{finished=resolve;});
-    const context=vm.createContext({
-      console:{log:()=>{}},setTimeout,
-      localStorage:{getItem:k=>k in stored?stored[k]:null},
-      Pebble:{
-        addEventListener:(name,f)=>{listeners[name]=f;},
-        // The watch takes every message; the last chunk ends the scene.
-        sendAppMessage:(message,ok)=>{
-          if(message.SceneTotal===undefined&&message.SceneChunk===undefined){setTimeout(ok,0);return;}
-          messages.push(message);
-          const total=messages[0].SceneTotal,got=messages.slice(1).reduce((n,m)=>n+m.SceneChunk.length,0);
-          if(got===total)finished();else setTimeout(ok,0);
-        }
-      }
-    });
-    vm.runInContext(`Date.now=()=>${now};`,context);
-    // The SDK repackages the bundle with webpack 1, which indents every line
-    // with a tab; run it as the watch app will carry it.
-    vm.runInContext(readFileSync(out,'utf8').replace(/\n/g,'\n\t'),context);
-    listeners.ready({});listeners.appmessage({payload:{SceneRequest:now/1000}});
-    await sent;
-
-    const total=messages[0].SceneTotal,scene=new Uint8Array(total);
-    for(const m of messages.slice(1)){
-      assert.ok(m.SceneChunk.length<=2000);
-      scene.set(m.SceneChunk,m.SceneOffset);
-    }
-    const expected=buildScene({body:'moon',start:civilHour(now,zone),plate:'crt',flag:true,timeZone:zone}).scene;
-    assert.equal(total,expected.length);
-    assert.ok(Buffer.from(scene).equals(expected),'the phone scene differs from the exported one');
-    assert.equal(new DataView(scene.buffer).getInt32(12,true),Date.parse('2026-09-27T13:00:00Z')/1000);
-  }finally{rmSync(dir,{recursive:true,force:true});}
-});
 
 // A phone side with a stand-in watch: take(message) decides whether the
 // watch takes each message. Returns the phone's listeners and every message
@@ -72,58 +29,28 @@ function phone(bundle,now,stored,take=()=>true){
   const quiet=async()=>{for(let idle=0;idle<3;){await new Promise(r=>setTimeout(r,20));idle=pending?0:idle+1;}};
   return {listeners,messages,logs,quiet};
 }
-const scenes=messages=>{
-  const out=[];let scene=null;
-  for(const m of messages.filter(m=>m.SceneTotal!==undefined||m.SceneChunk!==undefined)){
-    if(m.SceneTotal!==undefined){scene=new Uint8Array(m.SceneTotal);out.push(scene);}
-    else scene.set(m.SceneChunk,m.SceneOffset);
-  }
-  return out.map(s=>({hour:new DataView(s.buffer).getInt32(12,true)*1000,bytes:s}));
-};
+const bundled=dir=>{const out=join(dir,'index.js');execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});return readFileSync(out,'utf8').replace(/\n/g,'\n\t');};
 
-test('the phone sends the hour the watch asks for, once, and gives up on a watch that stops',async()=>{
+test('the phone gives up on a watch that stops taking messages',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
   try{
-    const out=join(dir,'index.js');
-    execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});
-    const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-27T13:56:00Z'),zone='UTC',stored={timeZone:zone};
-
-    // The watch asks for this hour twice in a row (as it starts, say): the
-    // second request, arriving meanwhile, is already answered.
-    let p=phone(bundle,now,stored);
-    p.listeners.appmessage({payload:{SceneRequest:now/1000}});p.listeners.appmessage({payload:{SceneRequest:now/1000}});
-    await p.quiet();
-    assert.deepEqual(scenes(p.messages).map(s=>s.hour),[Date.parse('2026-09-27T13:00:00Z')]);
-
-    // Near the hour's end the watch asks for the next one; asked again
-    // (its transfer lost), the phone sends the same bytes without rendering.
-    p.listeners.appmessage({payload:{SceneRequest:Date.parse('2026-09-27T14:00:00Z')/1000}});await p.quiet();
-    p.listeners.appmessage({payload:{SceneRequest:Date.parse('2026-09-27T14:00:00Z')/1000}});await p.quiet();
-    const sent=scenes(p.messages);
-    assert.deepEqual(sent.map(s=>s.hour),[13,14,14].map(h=>Date.parse(`2026-09-27T${h}:00:00Z`)));
-    assert.ok(Buffer.from(sent[1].bytes).equals(buildScene({body:'sun',start:Date.parse('2026-09-27T14:00:00Z'),plate:'enroute',flag:true,timeZone:zone,home:HOMES[zone]}).scene));
-    assert.ok(Buffer.from(sent[2].bytes).equals(sent[1].bytes));
-    assert.equal(p.logs.filter(l=>/rendered/.test(l)).length,2);
-
-    // A watch that stops taking messages: a few tries, then silence.
-    let taken=0;p=phone(bundle,now,stored,()=>++taken<=3);
-    p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
+    const bundle=bundled(dir),now=Date.parse('2026-09-27T13:56:00Z');
+    let taken=0;const p=phone(bundle,now,{timeZone:'UTC'},()=>++taken<=3);
+    p.listeners.appmessage({payload:{DataRequest:Math.floor(now/86400000)}});await p.quiet();
     assert.ok(p.messages.length<=3+6,`${p.messages.length} messages`);
-    assert.ok(p.logs.includes('The watch is not taking the scene'));
+    assert.ok(p.logs.includes('The watch is not taking a message'));
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
 // GPS BIIF-1 (NAVSTAR 65, USA 213) as CelesTrak gave it on 29 September 2026.
-const GPS_LIVE=`NAVSTAR 65 (USA 213)    
+const GPS_LIVE=`NAVSTAR 65 (USA 213)
 1 36585U 10022A   26271.40622219  .00000028  00000+0  00000+0 0  9994
 2 36585  54.2565 204.4065 0116452  55.9654 123.9173  2.00610603119667
 `;
-test('the phone fetches live elements, keeps them two hours, and falls back to the nominal orbit',async()=>{
+test('the phone fetches live elements, keeps them two hours, falls back to the nominal orbit, and sends the segments',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
   try{
-    const out=join(dir,'index.js');
-    execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});
-    const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-29T22:30:00Z'),zone='UTC';
+    const bundle=bundled(dir),now=Date.parse('2026-09-29T22:30:00Z'),zone='UTC',today=Math.floor(now/86400000);
     // A stand-in for the phone's XMLHttpRequest: answers with `answer(url)`.
     const run=(stored,answer)=>{
       const requests=[],listeners={},messages=[],logs=[];let pending=0;
@@ -136,31 +63,35 @@ test('the phone fetches live elements, keeps them two hours, and falls back to t
       const quiet=async()=>{for(let idle=0;idle<3;){await new Promise(r=>setTimeout(r,20));idle=pending?0:idle+1;}};
       return {requests,listeners,messages,logs,quiet};
     };
-    const start=Date.parse('2026-09-29T22:00:00Z'),options={body:'sat:36585',start,plate:'enroute',flag:true,timeZone:zone,home:HOMES[zone]};
+    const ask=async(p,norad)=>{p.listeners.appmessage({payload:{DataRequest:today,DataBody:norad}});await p.quiet();return p.messages.filter(m=>m.SatSegments).flatMap(m=>m.SatSegments);};
+    const {registerNominal}=await import('../src/nominal.js');registerNominal();
+    const {satelliteSegmentFor,encodeSatelliteSegment,SAT_SEGMENT_BYTES}=await import('../src/segments.js');
+    const first=()=>[...encodeSatelliteSegment(satelliteSegmentFor('sat:36585',Math.floor((now/1000-3600)/21600)*21600*1000))];
     // Offline, with nothing kept: the nominal orbit, and no second try for
     // fifteen minutes.
-    const nominal=buildScene(options).scene;
     const stored={body:'sat:36585',timeZone:zone};
-    let p=run(stored,()=>null);p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
+    let p=run(stored,()=>null);let segs=await ask(p,36585);
     assert.equal(p.requests.length,1);
-    assert.ok(Buffer.from(scenes(p.messages)[0].bytes).equals(nominal),'offline, the phone should draw the nominal orbit');
-    p=run(stored,()=>({status:200,text:GPS_LIVE}));p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
+    assert.deepEqual(segs.slice(0,SAT_SEGMENT_BYTES),first(),'offline, the phone should send the nominal orbit');
+    p=run(stored,()=>({status:200,text:GPS_LIVE}));await ask(p,36585);
     assert.equal(p.requests.length,0,'a failed request was repeated within fifteen minutes');
     // Online: CelesTrak's elements, kept for two hours.
     delete stored['tle-tried-36585'];
-    p=run(stored,()=>({status:200,text:GPS_LIVE}));p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
+    p=run(stored,()=>({status:200,text:GPS_LIVE}));segs=await ask(p,36585);
     assert.deepEqual(p.requests,['https://celestrak.org/NORAD/elements/gp.php?CATNR=36585&FORMAT=TLE']);
     const {registerElements}=await import('../src/satellites.js');registerElements(GPS_LIVE,'celestrak');
-    const live=buildScene(options).scene;
-    assert.ok(!live.equals(nominal));
-    assert.ok(Buffer.from(scenes(p.messages)[0].bytes).equals(live),'the phone scene should use the live elements');
+    assert.deepEqual(segs.slice(0,SAT_SEGMENT_BYTES),first(),'the phone should send the live orbit');
     assert.equal(JSON.parse(stored['tle-36585']).fetched,now);
-    p=run(stored,()=>{throw new Error('no request expected');});p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
-    assert.equal(p.requests.length,0);assert.ok(Buffer.from(scenes(p.messages)[0].bytes).equals(live));
-    // A view the watch can't draw yet (QZSS's day): the watch is told, not
-    // left waiting.
-    p=run({body:'sat:42738',timeZone:zone},()=>null);p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{SceneStatus:'VIEW NOT YET ON WATCH'}]));
+    p=run(stored,()=>{throw new Error('no request expected');});await ask(p,36585);
+    assert.equal(p.requests.length,0);
+    // QZSS's whole-day chart needs its day from midnight: segments from a
+    // day back.
+    p=run({body:'sat:42738',timeZone:zone},()=>null);segs=await ask(p,42738);
+    const starts=[];for(let k=0;k<segs.length;k+=SAT_SEGMENT_BYTES)starts.push(new DataView(Uint8Array.from(segs.slice(k,k+8)).buffer).getInt32(4,true));
+    assert.ok(Math.min(...starts)<=now/1000-26*3600+21600,'no segment from a day back');
+    // A fast satellite with no elements at all: the watch is told.
+    p=run({body:'sat:25544',timeZone:zone},()=>null);await ask(p,25544);
+    assert.ok(p.messages.some(m=>m.Status==='NO ELEMENTS'));
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 

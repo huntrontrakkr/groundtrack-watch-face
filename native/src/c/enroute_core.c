@@ -415,26 +415,103 @@ static void draw_text(Ctx *c,const char *text,int max,int x,int right,int baseli
   if(right)x=right-text_width(text,len);
   letter(c,scratch,text_pixels(text,len,x,baseline,scratch),ENR_INK,1);
 }
+// The day's time callout (renderEnroute's callout() with `aside`, in the
+// 'colon' figures): the hour in Jost, a colon and the minutes smaller on
+// the same baseline, set in open map at the left, level with the body; its
+// shoulder ruled under it and the leader run to the body like a circuit
+// trace, breaking for lettering.
+static const int FIGURE_PX[3]={20,28,40};
+typedef struct {int size;char ch;int x,y;} Glyph;
+static int fig_height(const EnrScene *s,int size,char ch){return ch==':'?s->figures[size].height[0]:s->figures[size].height[ch-'0'];}
+// The colon, drawn to match the figures: two rounded square dots the weight
+// of the strokes, one on the baseline, one at the height of the middle bar.
+static int colon_side(const EnrScene *s,int size){const int d=js_round(s->figures[size].height[0]/(enr_real)7);return d>3?d:3;}
+static int fig_width(const EnrScene *s,int size,char ch){return ch==':'?colon_side(s,size):s->figures[size].width[ch-'0'];}
+static bool glyph_bit(const EnrScene *s,const Glyph *g,int gx,int gy){
+  if(g->ch==':'){
+    const int h=s->figures[g->size].height[0],d=colon_side(s,g->size),top=js_round(h*(enr_real)0.3);
+    const int r=gy>=top&&gy<top+d?gy-top:gy>=h-d?gy-(h-d):-1;
+    if(r<0||gx<0||gx>=d)return false;
+    return !((gx==0||gx==d-1)&&(r==0||r==d-1)&&d>3);
+  }
+  const int k=g->ch-'0',w=s->figures[g->size].width[k],h=s->figures[g->size].height[k];
+  if(gx<0||gy<0||gx>=w||gy>=h)return false;
+  return s->fig_bits[s->figures[g->size].first[k]+gy*((w+7)/8)+(gx>>3)]&(128>>(gx&7));
+}
+static int gap_for(int size){return js_round(FIGURE_PX[size]/(enr_real)16);}
+// figurePixels(): a run of figures on a shared top, each glyph bottom-aligned.
+static int figure_run(const EnrScene *s,const char *t,int n,int size,int x,int y,Glyph *out){
+  int h=0;for(int i=0;i<n;i++){const int gh=fig_height(s,size,t[i]);if(gh>h)h=gh;}
+  for(int i=0;i<n;i++){out[i]=(Glyph){size,t[i],x,y+h-fig_height(s,size,t[i])};x+=fig_width(s,size,t[i])+gap_for(size);}
+  return n;
+}
+static int run_width(const EnrScene *s,const char *t,int n,int size){int w=0;for(int i=0;i<n;i++)w+=fig_width(s,size,t[i]);return w+gap_for(size)*(n-1);}
+// timeFigure(): the glyphs relative to the hour's top left; returns the width.
+static int time_figure(const EnrScene *s,const EnrMinute *m,int big,int small,Glyph *g,int *count,int *height){
+  int hn=0;while(hn<3&&s->hour_text[hn])hn++;
+  const int fh=fig_height(s,big,'0'),gap=gap_for(big),sh=fig_height(s,small,'0');
+  int n=figure_run(s,s->hour_text,hn,big,0,0,g),x=run_width(s,s->hour_text,hn,big);
+  x+=gap+1;n+=figure_run(s,":",1,small,x,fh-sh,g+n);x+=colon_side(s,small)+gap+1;
+  n+=figure_run(s,m->minute,2,small,x,fh-sh,g+n);x+=run_width(s,m->minute,2,small);
+  *count=n;*height=fh;return x;
+}
+static void draw_callout(Ctx *c){
+  const EnrScene *s=c->s;const EnrMinute *m=c->m;
+  if(s->view!=ENR_VIEW_DAY||!s->fig_bits)return;
+  const int bx=js_round(m->mx),by=js_round(m->my);
+  Glyph g[8];int n,fh;
+  const bool big=time_figure(s,m,2,1,g,&n,&fh)<=s->callout_left-6;
+  const int fw=time_figure(s,m,big?2:1,big?1:0,g,&n,&fh);
+  int fy=by-fh;if(fy>s->callout_bottom-fh-3)fy=s->callout_bottom-fh-3;
+  if(fy<s->callout_top)fy=s->callout_top;
+  const int fx=6,y=fy+fh+3,ex=fx+fw+1;
+  // The leader, where it is clear of lettering.
+  Px *line=scratch;int k=circuit(bx,by,ex,y,9,line);
+  for(int x=fx-1;x<=ex&&k<SCRATCH;x++)line[k++]=(Px){(int16_t)x,(int16_t)y};
+  int kept=0;
+  for(int i=0;i<k;i++){
+    bool open=true;
+    for(int a=0;a<s->avoid_count&&open;a++){const int16_t *b=s->avoid[a];if(line[i].x>=b[0]-2&&line[i].x<b[0]+b[2]+2&&line[i].y>=b[1]-2&&line[i].y<b[1]+b[3]+2)open=false;}
+    if(open)line[kept++]=line[i];
+  }
+  letter(c,line,kept,ENR_INK,1);
+  // The figures, as one lettering: every knockout, then the ink.
+  for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){
+    const int w=fig_width(s,g[i].size,g[i].ch),h=g[i].ch==':'?s->figures[g[i].size].height[0]:fig_height(s,g[i].size,g[i].ch);
+    for(int gy=0;gy<h;gy++)for(int gx=0;gx<w;gx++){
+      if(!glyph_bit(s,&g[i],gx,gy))continue;
+      const int x=fx+g[i].x+gx,yy=fy+g[i].y+gy;
+      if(!pass){for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)clear(c,x+dx,yy+dy);continue;}
+      const int cx=x<0?0:x>W-1?W-1:x,cy=yy<0?0:yy>H-1?H-1:yy;
+      plot(c,x,yy,(class_at(c,cx,cy)&15)==G_SPACE?s->space_ink:s->zoned[ENR_INK][zone_at(c,x,yy)]);
+    }
+  }
+}
+
 // What moves each minute, in the order the browser draws it: the body and
 // its flag (or the tape's index and minutes), what was drawn over them, then
 // the margins' Zulu time, pass line and height. PART_ALL draws them all; a
 // single part is drawn alone, to measure where it goes.
-enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_ZULU,PART_TOP,PART_HEIGHT,PART_CIRCLE,PARTS};
+enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_ZULU,PART_TOP,PART_HEIGHT,PART_CIRCLE,PARTS};
 static void draw_moving(Ctx *c,int part){
-  const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=s->view==ENR_VIEW_WORLD,flag=s->flags&ENR_MINUTE_FLAG;
+  const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=s->view==ENR_VIEW_WORLD,flag=(s->flags&ENR_MINUTE_FLAG)&&s->view==ENR_VIEW_HOUR;
   if(part==PART_CIRCLE){draw_circle(c);return;}
   if(!part||part==PART_BODY){
     // The body, then what lies over it; the flag, then what lies over that.
     Ctx box=*c;box.measure=true;
     draw_body(c);
     if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_body(&box);draw_late(c,box.box,false);}
-    if(flag&&!world){
+    if(flag){
       draw_flag(c);
       if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_flag(&box);draw_late(c,box.box,true);}
     }
   }
+  if(s->view==ENR_VIEW_DAY&&(!part||part==PART_CALLOUT)){
+    draw_callout(c);
+    if(!part){Ctx box=*c;box.measure=true;box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_callout(&box);draw_late(c,box.box,true);}
+  }
   if(world&&(!part||part==PART_INDEX))draw_index(c);
-  if(world&&flag&&(!part||part==PART_READOUT))draw_readout(c);
+  if(world&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
   if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
   if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
   if(world&&(!part||part==PART_HEIGHT))draw_text(c,m->height,sizeof m->height,0,s->height_right,s->height_baseline);
@@ -502,66 +579,12 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
   return render(scene,minute,frame,row_stride,mask);
 }
 
-// Scene blobs, as tools/export-scene.mjs writes them.
-typedef struct {const uint8_t *p,*end;bool ok;} Reader;
-static void take(Reader *r,void *dst,size_t n){if(r->p+n>r->end){r->ok=false;memset(dst,0,n);return;}memcpy(dst,r->p,n);r->p+=n;}
-static uint8_t u8(Reader *r){uint8_t v;take(r,&v,1);return v;}
-static uint16_t u16(Reader *r){uint8_t b[2];take(r,b,2);return b[0]|b[1]<<8;}
-static int16_t i16(Reader *r){return (int16_t)u16(r);}
-static int32_t i32(Reader *r){uint8_t b[4];take(r,b,4);return (int32_t)((uint32_t)b[0]|(uint32_t)b[1]<<8|(uint32_t)b[2]<<16|(uint32_t)b[3]<<24);}
-static enr_real f64(Reader *r){double v;take(r,&v,8);return (enr_real)v;}
-bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size_t),bool borrow){
-  Reader r={blob,blob+length,true};
-  memset(s,0,sizeof *s);
-  char magic[4];take(&r,magic,4);
-  if(memcmp(magic,"GTS3",4)||u16(&r)!=W||u16(&r)!=H)return false;
-  s->flags=u8(&r);s->body=u8(&r);s->forward=(int8_t)u8(&r);s->view=u8(&r);s->hour_start=i32(&r);
-  for(int k=0;k<ENR_ZONED;k++)for(int z=0;z<3;z++)s->zoned[k][z]=u8(&r);
-  s->space=u8(&r);s->space_ink=u8(&r);s->screen=u8(&r);s->waterline=u8(&r);s->terminator=u8(&r);s->night_dots=u8(&r);
-  for(int k=0;k<5;k++)s->tints[k]=u8(&r);
-  for(int k=0;k<2;k++)s->depths[k]=u8(&r);
-  for(int y=0;y<H;y++)s->row_cos[y]=f64(&r);
-  for(int y=0;y<H;y++)s->row_sin[y]=f64(&r);
-  for(int x=0;x<W;x++)s->col_cos[x]=f64(&r);
-  for(int x=0;x<W;x++)s->col_sin[x]=f64(&r);
-  s->c1x=f64(&r);s->normal_x=f64(&r);s->normal_y=f64(&r);s->zulu_x=i16(&r);s->zulu_baseline=i16(&r);
-  s->top_x=i16(&r);s->top_baseline=i16(&r);s->height_right=i16(&r);s->height_baseline=i16(&r);
-  s->tape_x0=i16(&r);s->tape_x1=i16(&r);s->tape_baseline=i16(&r);s->tape_lo=i16(&r);s->tape_hi=i16(&r);
-  s->home_x=i16(&r);s->home_y=i16(&r);for(int k=0;k<4;k++)s->home_box[k]=i16(&r);
-  for(int m=0;m<60;m++){
-    EnrMinute *e=&s->minutes[m];
-    for(int k=0;k<3;k++)e->sun[k]=f64(&r);
-    e->mx=f64(&r);e->my=f64(&r);e->moon_fraction=f64(&r);e->waxing=u8(&r);take(&r,e->zulu,5);take(&r,e->minute,2);take(&r,e->top,24);
-    e->index=i16(&r);take(&r,e->height,8);e->circle=u8(&r);
-  }
-  const unsigned circles=u16(&r);if(circles>60)return false;
-  for(unsigned k=0;k<circles;k++){
-    const unsigned n=u16(&r);if(n>255||!r.ok)return false;
-    s->circle_px[k]=alloc(n?2*n:1);if(!s->circle_px[k])return false;
-    s->circle_count=(uint8_t)(k+1);s->circle_n[k]=(uint8_t)n;take(&r,s->circle_px[k],2*n);
-  }
-  s->track_count=u16(&r);s->track_t0=i32(&r);s->track_step=i16(&r);
-  s->track=alloc(sizeof(EnrPoint)*(s->track_count?s->track_count:1));
-  if(!s->track)return false;
-  for(int k=0;k<s->track_count;k++){EnrPoint *p=&s->track[k];p->x=i16(&r);p->y=i16(&r);p->flags=u8(&r);}
-  for(int y=0;y<=H;y++)s->row_offset[y]=u16(&r);
-  const size_t runs=s->row_offset[H];
-  if(!r.ok||(size_t)(r.end-r.p)!=runs||runs%2)return false;
-  for(int y=0;y<H;y++){
-    // Every row's runs must cover exactly its width.
-    if(s->row_offset[y]>s->row_offset[y+1])return false;
-    int width=0;for(size_t k=s->row_offset[y];k<s->row_offset[y+1];k+=2)width+=r.p[k];
-    if(width!=W)return false;
-  }
-  if(borrow)s->runs=r.p;
-  else{uint8_t *copy=alloc(runs?runs:1);if(!copy)return false;memcpy(copy,r.p,runs);s->runs=copy;s->owns_runs=true;}
-  enr_ready(s);
-  return true;
-}
 void enr_free(EnrScene *s,void (*release)(void *)){
   if(s->track)release(s->track);
   for(int k=0;k<s->circle_count;k++)release(s->circle_px[k]);
   s->circle_count=0;
+  if(s->fig_bits)release(s->fig_bits);
+  s->fig_bits=0;
   if(s->owns_runs)release((void *)s->runs);
   s->track=0;s->runs=0;s->owns_runs=false;
 }

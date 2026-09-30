@@ -1,7 +1,7 @@
 // The watch's own chart builder's input for an hour (native/host/chart_test
 // reads it), as the phone would give the watch: the settings, the local hour
 // and date, home and its rise and set, and the Sun and Moon segments.
-import {PLATES,riseText,localDate} from '../src/enroute-render.js';
+import {PLATES,riseText,localDate,localDay} from '../src/enroute-render.js';
 import {clockParts} from '../src/render.js';
 import {segmentFor,encodeSegment,satelliteSegmentFor,encodeSatelliteSegment} from '../src/segments.js';
 import {encodePassBlock,PASS_BLOCK} from '../src/home.js';
@@ -12,13 +12,16 @@ export function chartInput({body,start,plate,flag,zone,home}){
   for(let t=start-2400e3;t<=start+6000e3;t+=60e3)days.add(Math.floor(t/86400000));
   // A satellite: its segments over the track, and the pass blocks the hour
   // touches.
-  const sat=body.startsWith('sat:'),satsegs=new Map(),blocks=new Set();
+  const sat=body.startsWith('sat:'),satsegs=new Map(),blocks=new Set(),dayView=viewOf(body)==='day',day=dayView?localDay(start,zone):null;
+  if(day)for(let t=day.start;t<=day.end;t+=300e3)days.add(Math.floor(t/86400000));
   if(sat){
     for(let t=start-2400e3;t<=start+6000e3;t+=60e3){const g=satelliteSegmentFor(body,t);satsegs.set(g.start,g);}
+    if(day)for(let t=day.start;t<=day.end;t+=300e3){const g=satelliteSegmentFor(body,t);satsegs.set(g.start,g);}
     for(let t=start;t<start+3600e3;t+=60e3)blocks.add(Math.floor(t/PASS_BLOCK)*PASS_BLOCK);
   }
   const entry=catalogEntry(body),world=viewOf(body)==='world';
-  return [`body ${body==='moon'?1:sat?(entry?.symbol==='station'?3:2):0}`,`view ${world?1:0}`,...(entry?[`code ${entry.code}`]:[]),`plate ${Object.keys(PLATES).indexOf(plate)}`,`flag ${flag?1:0}`,'clock24 1',`start ${start/1000}`,
+  const dayLines=day?[`daystart ${day.start/1000}`,`dayend ${day.end/1000}`,`dayhours ${Array.from({length:27},(_,k)=>Number(clockParts(day.start+k*3600e3,zone).h)).join(' ')}`]:[];
+  return [`body ${body==='moon'?1:sat?(entry?.symbol==='station'?3:2):0}`,`view ${world?1:dayView?2:0}`,...(entry?[`code ${entry.code}`]:[]),...dayLines,`plate ${Object.keys(PLATES).indexOf(plate)}`,`flag ${flag?1:0}`,'clock24 1',`start ${start/1000}`,
     `hour ${Number(clockParts(start,zone).h)}`,`day ${d.day}`,`month ${d.month}`,`year ${d.year}`,`yday ${d.dayOfYear}`,`home ${home?1:0}`,
     ...(home?[`lat ${home.lat}`,`lon ${home.lon}`,`rise ${rise}`,`set ${set}`]:[]),
     ...[...days].map(day=>`segment ${Buffer.from(encodeSegment(segmentFor(day*86400000))).toString('hex')}`),

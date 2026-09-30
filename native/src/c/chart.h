@@ -25,7 +25,9 @@ typedef struct {uint8_t width,height;uint16_t first;} FigureGlyph;
 #define CHART_TRACK_MAX 401
 typedef struct {
   int body;                  // 0 the Sun, 1 the Moon, 2 a satellite, 3 a space station
-  int view;                  // 0 the hour chart, 1 the world band (fast satellites)
+  int view;                  // 0 the hour chart, 1 the world band (fast satellites), 2 the whole day (QZSS)
+  int64_t day_start,day_end; // the local day (whole-day chart): its midnights
+  uint8_t day_hours[27];     // the local clock's hour at day_start + k hours
   char code[4];              // a satellite's code ("ISS"), for the world band's margin
   int plate;                 // index into PLATES (src/enroute-render.js order)
   bool flag;                 // the minute flag
@@ -75,6 +77,9 @@ EnrScene *chart_finish(ChartBuild *build);
 void chart_abort(ChartBuild *build);
 // Why the last build failed, for the log.
 const char *chart_failure(void);
+// The figures the day's time callout sets each minute (20, 28 and 40 px),
+// read from the figures resource into the scene.
+bool chart_callout_figures(EnrScene *scene,MapReadFn read,void *source,void *(*alloc)(size_t));
 // The class plane (200x228 bytes) as row runs of (count, class), as the
 // phone packs them; allocated with alloc and owned by the scene.
 bool chart_runs(const uint8_t *classes,EnrScene *scene,void *(*alloc)(size_t));

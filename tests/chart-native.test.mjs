@@ -41,7 +41,14 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       ['sat:20580','2026-09-30T20:00:00Z','sunlight',true,'Europe/London'],
       ['sat:49260','2026-10-01T09:00:00Z','plotboard',true,'America/New_York'],
       ['sat:43013','2026-09-30T17:00:00Z','red',false,null],
-      ['sat:43013','2026-10-01T22:00:00Z','sectional',true,'UTC']
+      ['sat:43013','2026-10-01T22:00:00Z','sectional',true,'UTC'],
+      // Runs too long for the arena's room (a dense plate on a polar band).
+      ['sat:49260','2026-09-30T16:00:00Z','crt',true,'America/New_York'],
+      // QZSS's whole local day on its nominal orbit: hour ticks and labels,
+      // and in a half-hour zone.
+      ['sat:42738','2026-09-27T05:00:00Z','crt',true,'America/New_York'],
+      ['sat:42738','2026-09-27T14:00:00Z','sunlight',false,'UTC'],
+      ['sat:42738','2026-09-26T20:30:00Z','hypsometric',true,'Asia/Kolkata']
     ];
     registerLiveFixture();
     for(const [body,iso,plate,flag,zone] of cases){

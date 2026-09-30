@@ -1,9 +1,9 @@
 # Host harness and a watch-side size check for the native core.
-CORE=../src/c/enroute_core.c ../src/c/departure_font.c
+CORE=enroute_parse.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/chart.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/passes.c
 CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 
 harness: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
-	$(CC) $(CFLAGS) -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
+	$(CC) $(CFLAGS) -std=gnu11 -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The watch's own chart builder, writing the phone's scene format.
 CHART_SRC=../src/c/chart.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/fmath.c ../src/c/passes.c
@@ -24,11 +24,11 @@ map_test: map_test.c ../src/c/map_pack.c ../src/c/map_pack.h
 
 # The same deciding night by the double sums alone (no fixed-point filter).
 harness-exact: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
-	$(CC) $(CFLAGS) -DENR_EXACT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
+	$(CC) $(CFLAGS) -std=gnu11 -DENR_EXACT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The same with single-precision night arithmetic, as the watch would run it.
 harness-float: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
-	$(CC) $(CFLAGS) -DENR_FLOAT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
+	$(CC) $(CFLAGS) -std=gnu11 -DENR_FLOAT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The core compiled for the watch's Cortex-M4 (single-precision FPU), with
 # single-precision arithmetic, to measure its code and static data.

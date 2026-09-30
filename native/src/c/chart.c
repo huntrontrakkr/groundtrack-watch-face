@@ -33,7 +33,7 @@ const char *chart_failure(void){static char text[24];char *p=text;memcpy(p,"char
 // satellite the world band, between WORLD_NORTH and WORLD_SOUTH.
 #define WORLD_NORTH 72
 #define WORLD_SOUTH (-60)
-typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world;double nx,ny;int top,bottom;} Cam;
+typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world,day;double nx,ny;int top,bottom;} Cam;
 static double sx(const Cam *c,double lon){return c->x0+(lon-c->lonMid)*c->k*c->scale;}
 static double sy(const Cam *c,double lat){return c->y0-(lat-c->lat0)*c->scale;}
 static double glat(const Cam *c,double y){return c->lat0+(c->y0-y)/c->scale;}
@@ -235,7 +235,9 @@ static int material(const Ground *g,int x,int y){
   const int d=sea_distance(g,x,y);
   return d<=1?M_COAST:d==4?M_WAVE:M_SEA;
 }
-static int level_of(double v){int k=0;for(int c=0;c<6;c++)if(v>=CHART_CONTOURS[c])k++;return k;}
+// The contours: every level; on the whole-day chart 2,000 and 4,000 m only.
+static const int WIDE_CONTOURS[2]={2000,4000};
+static int level_of_in(double v,const int *levels,int n){int k=0;for(int c=0;c<n;c++)if(v>=levels[c])k++;return k;}
 // Neighbour j of pixel i = y*W+x, with the JavaScript's flat indexing: i-1 at
 // x = 0 is the previous row's last pixel.
 static bool neighbour(int x,int y,int which,int *nx,int *ny){
@@ -247,7 +249,9 @@ static void finalise_row(Ground *g,int y){
   const Plate *pal=g->pal;
   // At world scale coasts crowd together: a one-ink plate keeps its
   // waterlines and shelf edge for the zoomed charts.
-  const bool sparse=(pal->flags&PLATE_MONO)&&g->cam->world;
+  const bool sparse=(pal->flags&PLATE_MONO)&&(g->cam->world||g->cam->day);
+  const int *const levels=g->cam->day?WIDE_CONTOURS:CHART_CONTOURS,nlevels=g->cam->day?2:6;
+  #define level_of(v) level_of_in(v,levels,nlevels)
   if(y<g->cam->top||y>g->cam->bottom){memset(g->crow,G_SPACE,W);sink_row(g->sink,y,g->crow);return;}
   for(int x=0;x<W;x++){
     const int i=y*W+x,m=material(g,x,y);const bool land=m==M_LAND;
@@ -257,7 +261,7 @@ static void finalise_row(Ground *g,int y){
     int level=0;
     if(land){
       const int k=level_of(relief);
-      if(k)for(int w=0;w<4;w++){int nx,ny;if(!neighbour(x,y,w,&nx,&ny))continue;if(material(g,nx,ny)==M_LAND&&level_of((double)g->e3[ny%E3_RING][nx])<k){level=CHART_CONTOURS[k-1];break;}}
+      if(k)for(int w=0;w<4;w++){int nx,ny;if(!neighbour(x,y,w,&nx,&ny))continue;if(material(g,nx,ny)==M_LAND&&level_of((double)g->e3[ny%E3_RING][nx])<k){level=levels[k-1];break;}}
     }
     if(level&&((level!=CHART_CONTOURS[0]&&!(pal->flags&PLATE_DOTS))||((x+y)&1)==0))overlay=L_CONTOUR;
     else if(m==M_COAST)overlay=L_COAST;
@@ -270,6 +274,7 @@ static void finalise_row(Ground *g,int y){
     g->crow[x]=(uint8_t)(overlay<<4|ground);(void)i;
   }
   sink_row(g->sink,y,g->crow);
+  #undef level_of
 }
 static void ground_begin(Ground *g,const Cam *cam,const Plate *pal,RunSink *sink){
   memset(g,0,sizeof *g);
@@ -407,6 +412,12 @@ static void letter_figure(Canvas *cv,const FigureRun *r,int ring,int layer){
 static void plot_figure(Canvas *cv,const FigureRun *r,int ring,int layer){
   for(int y=r->y0;y<r->y1;y++)for(int x=r->x0;x<r->x1;x++)if(figure_pixel(r,x,y,ring))plot(cv,x,y,layer);
 }
+static Box bounds_of(const Px *p,int n){
+  if(!n)return (Box){0,0,0,0};
+  int x0=p[0].x,y0=p[0].y,x1=x0,y1=y0;
+  for(int i=1;i<n;i++){if(p[i].x<x0)x0=p[i].x;if(p[i].x>x1)x1=p[i].x;if(p[i].y<y0)y0=p[i].y;if(p[i].y>y1)y1=p[i].y;}
+  return (Box){x0,y0,x1-x0+1,y1-y0+1};
+}
 static bool overlaps(const Box *taken,int n,Box b){for(int i=0;i<n;i++)if(taken[i].x<b.x+b.w&&b.x<taken[i].x+taken[i].w&&taken[i].y<b.y+b.h&&b.y<taken[i].y+taken[i].h)return true;return false;}
 
 static const char *const HEXAGON[5]={"..###..",".#...#.","#.....#",".#...#.","..###.."};
@@ -463,11 +474,16 @@ static void sink_free(ChartBuild *b){
 // apart, or for the world band twenty minutes either side every fifteen
 // seconds; latitude and unwrapped longitude. Returns the count, or -1.
 #define T_OF(b,i) ((b)->t0+(i)*(b)->step)
-#define HOUR_OF(b,i) (T_OF(b,i)>=0&&T_OF(b,i)<=3600)
+#define HOUR_OF(b,i) ((b)->in.view==2||(T_OF(b,i)>=0&&T_OF(b,i)<=3600))
+// The track's first time (seconds from the hour) and its step: on the
+// whole-day chart the local day, five minutes apart.
+static int track_step(const ChartInput *in){return in->view==2?300:in->view?15:60;}
+static int64_t track_from(const ChartInput *in){return in->view==2?in->day_start:in->start-(in->view?1200:2400);}
+static int64_t track_to(const ChartInput *in){return in->view==2?in->day_end:in->start+3600+(in->view?1200:2400);}
 static int make_track(const ChartInput *in,const ChartSources *src,TrackPoint *track){
-  const int step=in->view?15:60,lead=in->view?1200:2400;
+  const int step=track_step(in);
   int count=0;double turn=0,prev=0;
-  for(int64_t t=in->start-lead;t<=in->start+3600+lead;t+=step){
+  for(int64_t t=track_from(in);t<=track_to(in);t+=step){
     double lat,lon;if(!body_position(src,in->body,t,&lat,&lon))return -1;
     if(count){const double d=lon-prev;if(d>180)turn-=360;else if(d<-180)turn+=360;}
     prev=lon;
@@ -496,9 +512,9 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   // chartCamera(). The track is kept only while the camera is set, and made
   // again for the drawing: the ground needs the memory.
-  TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*(in->view?401:141));if(!track)FAIL;
-  const int count=make_track(in,src,track);if(count<0)FAIL;
-  b->step=in->view?15:60;b->t0=-(in->view?1200:2400);
+  TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*((track_to(in)-track_from(in))/track_step(in)+1));if(!track)FAIL;
+  const int count=make_track(in,src,track);if(count<0||count>401)FAIL;
+  b->step=track_step(in);b->t0=(int)(track_from(in)-in->start);
   double maxlat=-INFINITY,minlat=INFINITY,maxlon=-INFINITY,minlon=INFINITY;int h0=-1,h1=-1;
   for(int i=0;i<count;i++)if(HOUR_OF(b,i)){
     if(h0<0)h0=i;
@@ -509,7 +525,16 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     if(track[i].b<minlon)minlon=track[i].b;
   }
   Cam cam;memset(&cam,0,sizeof cam);cam.top=0;cam.bottom=H;
-  if(in->view){
+  if(in->view==2){
+    // The whole local day, north up, its shape fitted and set to the right.
+    double alo=INFINITY,ahi=-INFINITY,blo=INFINITY,bhi=-INFINITY;
+    for(int i=0;i<count;i++){if(track[i].a<alo)alo=track[i].a;if(track[i].a>ahi)ahi=track[i].a;if(track[i].b<blo)blo=track[i].b;if(track[i].b>bhi)bhi=track[i].b;}
+    cam.day=true;cam.lat0=(ahi+alo)/2;cam.k=f_cos(cam.lat0*RAD);cam.lonMid=(bhi+blo)/2;
+    {const double w=(bhi-blo)*cam.k,sa=(W*.5)/(w>1?w:1),h=ahi-alo,sb=(H-70)/(h>1?h:1);cam.scale=sa<sb?sa:sb;}
+    cam.y0=(14+H-16)/2;cam.x0=W-16-(bhi-blo)*cam.k*cam.scale/2;
+    h0=0;h1=count-1;
+  }
+  else if(in->view){
     // The whole world in a band, fitted to the hour's longitudes, in true
     // proportion.
     cam.world=true;cam.scale=(W-16)/(maxlon-minlon>180?maxlon-minlon:180);cam.k=1;cam.lat0=WORLD_SOUTH;cam.y0=H-10;
@@ -616,7 +641,8 @@ static bool finish_draw(ChartBuild *b){
 
   // Graticule: crosses every 5 degrees (30 on the world band), ticks every
   // degree (10) along the edges of the map.
-  const int step=world?30:5,minor=world?10:1;
+  const bool day=cam.day;
+  const int step=world?30:day?10:5,minor=world?10:day?5:1;
   {const double g0lat=glat(&cam,bottom),g0lon=glon(&cam,0),g1lat=glat(&cam,top),g1lon=glon(&cam,W);
   for(double lat=ceil(g0lat/step)*step;lat<=g1lat;lat+=step)for(double lon=ceil(g0lon/step)*step;lon<=g1lon;lon+=step){
     const double x=js_round(sx(&cam,lon)),y=js_round(sy(&cam,lat));if(!(y>=top&&y<=bottom))continue;
@@ -634,6 +660,8 @@ static bool finish_draw(ChartBuild *b){
   // Home, placed first so the network gives way; drawn last. (Its
   // acquisition circle on the world band is the minute's.)
   Box *const taken=draw->taken;int taken_n=0;
+  // The lettering the day's callout breaks its leader for.
+  Box avoid[12];int avoid_n=0;
   if(!world){taken[taken_n++]=(Box){0,H-16,W,16};if(in->home)taken[taken_n++]=(Box){0,0,W,14};}
   bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};Px *const home_code=draw->home_code;int home_code_n=0;
   if(in->home){
@@ -641,6 +669,7 @@ static bool finish_draw(ChartBuild *b){
     const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
     if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!overlaps(taken,taken_n,box)){
       home_code_n=text_pixels("HOM",right?x+7:x-7-w,y+4,home_code);taken[taken_n++]=box;home_mark=true;hx=x;hy=y;home_box=box;
+      avoid[avoid_n++]=bounds_of(home_code,home_code_n);
     }
   }
   cv.stage=1;
@@ -648,7 +677,7 @@ static bool finish_draw(ChartBuild *b){
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
   if(world)bearings(5,draw->sb,draw->cb);
-  for(unsigned s=0;s<sizeof STATIONS/sizeof STATIONS[0];s++){
+  for(unsigned s=0;s<(day?0:sizeof STATIONS/sizeof STATIONS[0]);s++){
     double qx,qy;project(&cam,STATIONS[s].lat,STATIONS[s].lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
     const int w=text_width(STATIONS[s].code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
@@ -671,9 +700,29 @@ static bool finish_draw(ChartBuild *b){
     bool hour=HOUR_OF(b,i-1)&&HOUR_OF(b,i);
     segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,route_pixel,&hour);
   }
+  // A whole day is graduated in hours instead: a tick every hour, longer
+  // and numbered every three, longest at the two midnights. Where the day's
+  // track crosses itself two hours meet, and the later label gives way.
+  if(day){
+    Box labels[10];int nlabels=0;
+    for(int i=0;i<count;i+=12){
+      const TrackPoint *a=&track[i>0?i-1:0],*q=&track[i<count-1?i+1:count-1],*p=&track[i];
+      const double l0=f_sqrt((q->a-a->a)*(q->a-a->a)+(q->b-a->b)*(q->b-a->b)),len=l0?l0:1;
+      double nx=-(q->b-a->b)/len,ny=(q->a-a->a)/len;if(ny<0){nx=-nx;ny=-ny;}
+      const int hr=i/12,size=hr%24==0?7:hr%3==0?5:3;
+      for(int k=1;k<=size;k++)plot(&cv,p->a+nx*k,p->b+ny*k,L_ROUTE);
+      if(hr%3==0){
+        const int hh=in->day_hours[hr<27?hr:26],v=in->clock24?(hr==24?24:hh):(hh%12?hh%12:12);
+        char label[4];put_int(label,v,1);const int lw=text_width(label);
+        const int n=text_pixels(label,(int)js_round(p->a+nx*9-lw/2.0)+1,(int)js_round(p->b+ny*9+9),scratch);const Box bx=bounds_of(scratch,n);
+        bool clear_=true;for(int k=0;k<nlabels;k++){const Box *o=&labels[k];if(!(o->x+o->w+6<=bx.x||bx.x+bx.w+6<=o->x||o->y+o->h+4<=bx.y||bx.y+bx.h+4<=o->y))clear_=false;}
+        if(clear_&&nlabels<10){labels[nlabels++]=bx;if(avoid_n<12)avoid[avoid_n++]=bx;letter(&cv,scratch,n,L_ROUTE,(pal->flags&PLATE_MONO)?1:0);}
+      }
+    }
+  }
   // The route as a scale: minute graduations, the quarters numbered; on the
   // world band five-minute ties only.
-  for(int i=1;i<count-1;i++){
+  for(int i=1;i<count-1&&!day;i++){
     if(!HOUR_OF(b,i))continue;
     const int64_t since=(int64_t)T_OF(b,i)-T_OF(b,h0);const int m=(int)js_round(since/60.0);
     if(since%60||m<=0||m>=60||(world&&m%5))continue;
@@ -693,11 +742,11 @@ static bool finish_draw(ChartBuild *b){
   // reporting point.
   const int c0x=(int)js_round(track[h0].a),c0y=(int)js_round(track[h0].b),c1x=(int)js_round(track[h1].a),c1y=(int)js_round(track[h1].b);
   const bool forward=c1x>c0x;
-  if(!world){const int R=16;
+  if(!world&&!day){const int R=16;
   for(int a=0;a<720;a++){const double t=a*PI/360;plot(&cv,c0x+js_round(f_sin(t)*R),c0y-js_round(f_cos(t)*R),L_INK);}
   for(int a=0;a<360;a+=30){const int len=a%90==0?5:3;for(int r=R-len;r<R;r++){const double t=a*RAD;plot(&cv,c0x+js_round(f_sin(t)*r),c0y-js_round(f_cos(t)*r),L_INK);}}
   for(int k=0;k<3;k++)for(int d=-k;d<=k;d++){const int r=R+4-k;plot(&cv,c0x+js_round(f_sin(0)*r+f_cos(0)*d),c0y-js_round(f_cos(0)*r-f_sin(0)*d),L_INK);}}
-  symbol(&cv,HEXAGON,5,c0x,c0y);plot(&cv,c0x,c0y,L_INK);symbol(&cv,TRIANGLE,7,c1x,c1y-1);
+  if(!day){symbol(&cv,HEXAGON,5,c0x,c0y);plot(&cv,c0x,c0y,L_INK);symbol(&cv,TRIANGLE,7,c1x,c1y-1);}
   // The body is the minute's; all after it lies over it.
   cv.stage=3;
   char hour[4],next[4];
@@ -729,7 +778,7 @@ static bool finish_draw(ChartBuild *b){
     figure_run(next,size,nx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,1,L_SPACE_INK);
     release(bits);
     tape_lo=(int16_t)((gx+hw<nx+nw?gx+hw:nx+nw)+3);tape_hi=(int16_t)((gx>nx?gx:nx)-3-text_width("00"));
-  }else{
+  }else if(!day){
     // The hour figures: this hour solid over its rose, the next outlined.
     const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
     int base;uint8_t *bits=load_figures(src,size,&base);if(!bits)FAIL;
@@ -790,6 +839,7 @@ static bool finish_draw(ChartBuild *b){
     q->flags=(uint8_t)((i&&fabs(track[i].b-track[i-1].b)>fabs(track[i].a-track[i-1].a)?ENR_STEEP:0)|(i&&fabs(track[i].a-track[i-1].a)>W/2?ENR_JUMP:0)|(HOUR_OF(b,i)?ENR_HOUR:0));
   }
   const double c1x_=track[h1].a;
+  double least=INFINITY;for(int i=0;i<count;i++)if(track[i].a<least)least=track[i].a;
   // The class plane as row runs, into the arena before the points; the
   // plane freed leaves one free stretch for the scene, and the points and
   // runs move there at their own sizes. Runs too long for the arena are made
@@ -807,11 +857,21 @@ static bool finish_draw(ChartBuild *b){
     uint8_t *moved=src->resize?src->resize(arena,n?n:1):NULL;
     runs=moved?moved:arena;
   }else{
-    runs=chart_plane_runs(b->classes,b->sink.row_offset,src);b->classes=NULL;
-    if(!runs)FAIL;
-    points=alloc(sizeof(EnrPoint)*(count?count:1));if(!points){release((void *)runs);FAIL;}
-    memcpy(points,kept,sizeof(EnrPoint)*count);
-    release(arena);b->sink.arena=NULL;
+    // Longer than the room before the points: the rest to a spill block,
+    // and all of it together once the plane is freed.
+    uint8_t *spill=alloc(n-tail);if(!spill)FAIL;
+    unsigned at=0;b->sink.row_offset[0]=0;uint8_t row[2*W];
+    for(int y=0;y<H;y++){
+      const int k=row_runs(b->classes+y*W,row);
+      for(int q=0;q<k;q++,at++){if(at<tail)arena[at]=row[q];else spill[at-tail]=row[q];}
+      b->sink.row_offset[y+1]=(uint16_t)at;
+    }
+    release(b->classes);b->classes=NULL;
+    points=alloc(sizeof(EnrPoint)*(count?count:1));
+    uint8_t *all=alloc(n);
+    if(!points||!all){release(all);release(spill);FAIL;}
+    memcpy(points,kept,sizeof(EnrPoint)*count);memcpy(all,arena,tail);memcpy(all+tail,spill,n-tail);
+    release(spill);release(arena);b->sink.arena=NULL;runs=all;
   }}
   if(!runs)FAIL;
   // The scene: the plate, the night's tables, the minutes and the track.
@@ -820,7 +880,7 @@ static bool finish_draw(ChartBuild *b){
   out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->sink.row_offset,sizeof out->row_offset);
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->flag?16:0));
-  out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
+  out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
   for(int k=0;k<5;k++)out->tints[k]=k<pal->tint_count?pal->tints[k]:0;
@@ -831,6 +891,12 @@ static bool finish_draw(ChartBuild *b){
   out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;out->top_x=top_x;out->top_baseline=top_baseline;out->height_right=height_right;out->height_baseline=height_baseline;
   if(world){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
+  if(day){
+    out->callout_left=(int16_t)(floor(least)-8);out->callout_top=(int16_t)(4+(in->home?14:0));out->callout_bottom=H-18;
+    memset(out->hour_text,0,3);memcpy(out->hour_text,hour,strlen(hour));out->avoid_count=(uint8_t)avoid_n;
+    for(int k=0;k<avoid_n;k++){out->avoid[k][0]=(int16_t)avoid[k].x;out->avoid[k][1]=(int16_t)avoid[k].y;out->avoid[k][2]=(int16_t)avoid[k].w;out->avoid[k][3]=(int16_t)avoid[k].h;}
+    if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
+  }
   if(home_mark){out->home_box[0]=(int16_t)home_box.x;out->home_box[1]=(int16_t)home_box.y;out->home_box[2]=(int16_t)home_box.w;out->home_box[3]=(int16_t)home_box.h;}
   b->out=out;b->forward=forward;b->minute=0;
   if(world&&in->home){b->sb=alloc(2*120*sizeof(double));if(!b->sb)FAIL;b->cb=b->sb+120;bearings(3,b->sb,b->cb);}
@@ -884,6 +950,13 @@ EnrScene *chart_finish(ChartBuild *b){
   EnrScene *out=b->out;b->out=NULL;
   enr_ready(out);b->src.release(b->sb);b->src.release(b);
   return out;
+}
+bool chart_callout_figures(EnrScene *s,MapReadFn read,void *source,void *(*alloc)(size_t)){
+  const unsigned from=FIGURE_GLYPHS[0].first,to=FIGURE_GLYPHS[30].first;
+  s->fig_bits=alloc(to-from);
+  if(!s->fig_bits||read(source,from,s->fig_bits,to-from)!=to-from)return false;
+  for(int k=0;k<3;k++)for(int d=0;d<10;d++){const FigureGlyph *g=&FIGURE_GLYPHS[k*10+d];s->figures[k].width[d]=g->width;s->figures[k].height[d]=g->height;s->figures[k].first[d]=(uint16_t)(g->first-from);}
+  return true;
 }
 EnrScene *chart_build(const ChartInput *in,const ChartSources *src){
   ChartBuild *b=chart_begin(in,src);if(!b)return NULL;

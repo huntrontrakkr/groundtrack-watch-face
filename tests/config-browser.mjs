@@ -44,8 +44,8 @@ try{
   assert.equal(await page.locator('input[name=plate]').count(),7);
   assert.equal(await page.locator('input[name=plate]:checked').getAttribute('value'),'crt');
   assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
-  // The Sun, the Moon and the six satellites the watch draws (not QZSS's day).
-  assert.deepEqual(await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value)),['sun','moon','sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585']);
+  // The Sun, the Moon and the seven satellites.
+  assert.deepEqual(await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value)),['sun','moon','sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585','sat:42738']);
   assert.ok(await page.locator('input[name=flag]').isChecked());
   assert.match(await page.locator('#preset-note').textContent(),/Greenwich/);
   assert.ok(await page.locator('#coords').isHidden());

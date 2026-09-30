@@ -5,6 +5,7 @@
 //
 //   harness <scene> <reference prefix> <minute>...   (optional: -o out.ppm)
 #include "../src/c/enroute_core.h"
+#include "../src/c/chart.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,11 +15,15 @@ static uint8_t *slurp(const char *path,size_t *len){
   FILE *f=fopen(path,"rb");if(!f)return 0;fseek(f,0,SEEK_END);long n=ftell(f);rewind(f);
   uint8_t *b=malloc(n);if(fread(b,1,n,f)!=(size_t)n){fclose(f);free(b);return 0;}fclose(f);*len=n;return b;
 }
+typedef struct {const uint8_t *data;size_t length;} Mem;
+static size_t mem_read(void *src,uint32_t at,uint8_t *out,size_t n){Mem *m=src;if(at>=m->length)return 0;if(at+n>m->length)n=m->length-at;memcpy(out,m->data+at,n);return n;}
 int main(int argc,char **argv){
   if(argc<4){fprintf(stderr,"usage: harness scene refprefix minute... [-o out.ppm]\n");return 2;}
   size_t len;uint8_t *blob=slurp(argv[1],&len);if(!blob){fprintf(stderr,"cannot read %s\n",argv[1]);return 2;}
   EnrScene *scene=malloc(sizeof *scene);
   if(!enr_parse(blob,len,scene,malloc,false)){fprintf(stderr,"malformed scene %s\n",argv[1]);return 2;}
+  // The day's callout sets figures from the resource, as the watch does.
+  if(scene->view==ENR_VIEW_DAY){size_t n;Mem f={slurp("native/resources/figures.bin",&n),0};f.length=n;if(!f.data||!chart_callout_figures(scene,mem_read,&f,malloc)){fprintf(stderr,"no figures\n");return 2;}}
   uint8_t *frame=malloc(ENR_W*ENR_H);int failed=0;const char *ppm=0;
   // -b: time a whole hour of minutes, as a CPU proxy (not a watch measurement).
   if(!strcmp(argv[3],"-b")){

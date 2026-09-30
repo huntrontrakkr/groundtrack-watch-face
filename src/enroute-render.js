@@ -414,7 +414,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const minutes=Math.max(0,Math.min(60,(epoch-s0.epoch)/MINUTE)),ix=Math.round(at(Math.floor(minutes)));
   const outline=(solid,ring)=>{const inside=new Set(solid.map(([a,b])=>a+','+b)),near=[];for(let r=1;r<=ring;r++)near.push([r,0],[-r,0],[0,r],[0,-r]);return solid.filter(([a,b])=>near.some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));};
   const place=(end,w)=>Math.max(4,Math.min(W-4-w,Math.round(end-w/2)));
-  let hourPixels,nextSolid,index,minuteBox=null,tapeAt=null;
+  let hourPixels,nextSolid,index,minuteBox=null,tapeAt=null,calloutAt=null;
   // A time callout, labelled the way a chart labels a feature: the time in
   // full, the minutes smaller on the same baseline as on a cockpit clock,
   // hung from a shoulder, the cartographer's elbow leader, that runs back
@@ -532,8 +532,12 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // A north-up day chart sets its track to the right, and the callout
     // stands aside in the open map to its left.
     let c;
-    if(!camera.tiles){
-      const left=Math.min(...track.map(q=>q.x))-8,big=calloutWidth(FIGURE.scale,FIGURE.minute)<=left-6;
+    const left=Math.min(...track.map(q=>q.x))-8;
+    // The callout is the minute's: a base layer leaves it to the native
+    // renderer, with where it may go and the lettering it steers round.
+    if(baseOnly){calloutAt={left,top:4+head,bottom:H-18,avoid:type.slice()};c={figure:[]};}
+    else if(!camera.tiles){
+      const big=calloutWidth(FIGURE.scale,FIGURE.minute)<=left-6;
       c=callout({big:big?FIGURE.scale:FIGURE.callout,small:big?FIGURE.minute:FIGURE.calloutMinute,x:mx,y:my,aside:{x:6,top:4+head,bottom:H-18}});
     }else c=callout({big:FIGURE.scale,small:FIGURE.minute,x:mx,y:my,up,reach});
     hourPixels=c.figure;nextSolid=[];index={x:mx,y:my};
@@ -639,7 +643,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const tintIndex=(table,v)=>table.findIndex(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit);
     const baseClass=new Uint8Array(W*H);
     for(let i=0;i<W*H;i++)baseClass[i]=mat[i]===SPACE?2:pal.tints&&land[i]?3+tintIndex(pal.tints,relief[i]):pal.depths&&!land[i]?8+tintIndex(pal.depths,relief[i]):land[i]?1:0;
-    return {buf,trace,overlay,baseClass,beforeRoute,stages,marker:{x:p.x,y:p.y},zuluAt,altAt,topAt,tapeAt,home:homeMark?{x:homeMark.x,y:homeMark.y,box:homeMark.box}:null};
+    return {buf,trace,overlay,baseClass,beforeRoute,stages,marker:{x:p.x,y:p.y},zuluAt,altAt,topAt,tapeAt,calloutAt,hour,home:homeMark?{x:homeMark.x,y:homeMark.y,box:homeMark.box}:null};
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
     figure:{hour,minute:parts.m,next,time:camera.day||readout===true?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};

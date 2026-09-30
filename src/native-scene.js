@@ -5,7 +5,8 @@
 // Scene file (little-endian), version 3:
 //   'GTS3', u16 W, u16 H, u8 flags (1 zones night, 2 scan, 4 terminator,
 //   8 night dots, 16 minute flag), u8 body (0 Sun, 1 Moon, 2 satellite,
-//   3 station), i8 forward, u8 view (0 the hour chart, 1 the world band),
+//   3 station), i8 forward, u8 view (0 the hour chart, 1 the world band, 2
+//   the whole day),
 //   i32 hour start (Unix seconds)
 //   palette: water land coast contour shelf grid route ink mark (x3 zones),
 //   then space spaceInk screen waterline terminator nightDots, tints[5],
@@ -15,6 +16,9 @@
 //   pass line baseline, height's right edge, height's baseline
 //   the world band's tape: i16 x0, x1, baseline, the minutes' least and
 //   greatest x; home: i16 x, y (-1000 without), box x, y, w, h
+//   the day's time callout: i16 the track's least x less 8, the top and
+//   bottom it keeps within, char hour[3] (the hour's figures, NUL-padded),
+//   u8 n and n boxes (i16 x, y, w, h) of lettering its leader breaks for
 //   60 minutes: f64 sun[3], f64 marker x, y, f64 moon fraction, u8 waxing,
 //   char zulu[5], u8 minute text[2], char top line[24] (a satellite's pass
 //   line, NUL-padded, '°' as 0x7f; empty when the line is fixed), i16 the
@@ -48,7 +52,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   const state={body,epoch:start,timeZone,clock24,plate:plateKey,home,events:[],readout:flag?'flag':false};
   const r=new EnrouteRenderer(atlas,meters);r.render(state);
   const cam=r.camera,pal=PLATES[plateKey];
-  if(cam.fuller||cam.day)throw new Error('Only the hour chart and the world band are exported');
+  if(cam.fuller)throw new Error('Rolling Fuller is not exported');
 
   // A probe plate: the target plate's structure, every color unique, so each
   // drawn pixel's class can be read back from its color.
@@ -87,7 +91,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   u16(W);u16(H);
   u8((pal.night==='zones'?1:0)|(pal.scan?2:0)|(pal.terminator?4:0)|(pal.nightDots?8:0)|(flag?16:0));
   const kind=body==='sun'?0:body==='moon'?1:catalogEntry(body)?.symbol==='satellite'?2:3;u8(kind);
-  const [s0,s1]=cam.stations,forward=Math.round(s1.x)>Math.round(s0.x);i8(forward?1:-1);u8(cam.world?1:0);i32(Math.floor(start/1000));
+  const [s0,s1]=cam.stations,forward=Math.round(s1.x)>Math.round(s0.x);i8(forward?1:-1);u8(cam.world?1:cam.day?2:0);i32(Math.floor(start/1000));
   for(const k of ['water','land','coast','contour','shelf','grid','route','ink','mark'])for(let z=0;z<3;z++)u8(g8(pal[k][z]));
   for(const k of ['space','spaceInk','screen','waterline','terminator','nightDots'])u8(g8(pal[k]));
   for(let k=0;k<5;k++)u8(g8(pal.tints?.[k]?.[1]));for(let k=0;k<2;k++)u8(g8(pal.depths?.[k]?.[1]));
@@ -100,6 +104,9 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   i16(base.topAt.x);i16(base.topAt.baseline);i16(base.altAt?.right??0);i16(base.altAt?.baseline??0);
   const tape=base.tapeAt;for(const v of tape?[tape.x0,tape.x1,tape.baseline,tape.inner[0],tape.inner[1]]:[0,0,0,0,0])i16(v);
   const hm=base.home;for(const v of hm?[hm.x,hm.y,hm.box.x,hm.box.y,hm.box.w,hm.box.h]:[-1000,-1000,0,0,0,0])i16(v);
+  const co=base.calloutAt;for(const v of co?[Math.floor(co.left),co.top,co.bottom]:[0,0,0])i16(v);
+  for(let k=0;k<3;k++)u8(co&&k<base.hour.length?base.hour.charCodeAt(k):0);
+  u8(co?co.avoid.length:0);for(const b of co?co.avoid:[])for(const v of [b.x,b.y,b.w,b.h])i16(v);
   // Home's acquisition circle on the world band, which changes with the
   // satellite's height; minutes that plot the same pixels share one.
   const circles=[],circleKeys=new Map();
