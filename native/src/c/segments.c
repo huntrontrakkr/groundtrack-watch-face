@@ -47,8 +47,8 @@ void seg_moon_light(const Segment *seg,int64_t seconds,double *fraction,bool *wa
 
 bool sat_segment_decode(const uint8_t *b,SatSegment *seg){
   #define I32(o) ((int32_t)((uint32_t)b[o]|(uint32_t)b[o+1]<<8|(uint32_t)b[o+2]<<16|(uint32_t)b[o+3]<<24))
-  seg->norad=I32(0);seg->start=I32(4);seg->span=I32(8);
-  float *out[3]={seg->lat,seg->lon,seg->altitude};const int n[3]={SAT_TERMS,SAT_TERMS,SAT_ALT_TERMS};int o=12;
+  seg->norad=I32(0);seg->start=I32(4);seg->span=I32(8);seg->epoch=I32(12);
+  float *out[3]={seg->lat,seg->lon,seg->altitude};const int n[3]={SAT_TERMS,SAT_TERMS,SAT_ALT_TERMS};int o=16;
   for(int k=0;k<3;k++)for(int j=0;j<n[k];j++,o+=4){const uint32_t v=(uint32_t)I32(o);memcpy(&out[k][j],&v,4);}
   #undef I32
   return seg->span>0;

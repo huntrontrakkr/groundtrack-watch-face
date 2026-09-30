@@ -7,11 +7,17 @@
 #include "enroute_core.h"
 
 enum {BODY_SUN,BODY_MOON,BODY_SATELLITE};
-// The satellite the watch draws on the hour chart: GPS BIIF-1.
-#define GPS_NORAD 36585
+// A satellite's view: the hour chart (GPS), the world band (the fast ones)
+// or the whole day (QZSS, not yet drawn here).
+enum {VIEW_HOUR,VIEW_WORLD,VIEW_DAY};
 typedef struct {
   uint8_t version,body,plate,flag,clock24,home;
   int32_t lat100,lon100;         // home in hundredths of a degree
+  // A satellite: its catalog number, whether it is a crewed station (its
+  // symbol), its view and its code ("ISS").
+  int32_t norad;
+  uint8_t station,view;
+  char code[4];
 } WatchSettings;
 
 void settings_load(WatchSettings *s);
@@ -22,7 +28,7 @@ void segments_store(const uint8_t *bytes,size_t length);
 void rise_sets_store(const uint8_t *bytes,size_t length);
 // The first UTC day from `from` within `days` with no segment, or -1.
 int32_t segments_missing(int32_t from,int days);
-// A satellite's segments (156 bytes each) and home's pass blocks, as the
+// A satellite's segments (160 bytes each) and home's pass blocks, as the
 // phone sends them.
 void sat_segments_store(const uint8_t *bytes,size_t length);
 void pass_blocks_store(const uint8_t *bytes,size_t length);

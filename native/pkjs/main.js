@@ -24,7 +24,7 @@ import {decodeRelief} from '../../src/relief.js';
 import {civilHour} from '../../src/chart-render.js';
 import {HOMES} from '../../src/home.js';
 import {PLATES} from '../../src/enroute-render.js';
-import {registerElements,viewOf,FRESH} from '../../src/satellites.js';
+import {registerElements,viewOf,FRESH,CATALOG,catalogEntry,bodyId} from '../../src/satellites.js';
 import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
 import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
 import {localDay,localDate} from '../../src/enroute-render.js';
@@ -126,18 +126,25 @@ function sendScene(bytes,finished){
   })(offset);
 }
 
-// What the watch needs to draw the Sun and Moon itself. Settings: body (0
-// Sun, 1 Moon, 2 a satellite), plate, flag, 24-hour, home, then home's
-// latitude and longitude in hundredths of a degree (i32 each).
+// What the watch needs to draw its charts itself. Settings: body (0 Sun, 1
+// Moon, 2 a satellite), plate, flag, 24-hour, home, then home's latitude and
+// longitude in hundredths of a degree (i32 each), then a satellite's catalog
+// number (i32), its kind (1 a station, plus its view, 0 the hour chart, 1
+// the world band, 2 the whole day, times 2) and its code (3 characters).
+var VIEWS=['hour','world','day'];
 function watchSettings(){
   var body=setting('body','sun'),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
+  var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null;
   var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,setting('flag','1')==='1'?1:0,1,h?1:0];
   function i32(v){bytes.push(v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255);}
   i32(h?Math.round(h.lat*100):0);i32(h?Math.round(h.lon*100):0);
+  i32(sat?Number(body.slice(4)):0);
+  bytes.push((entry&&entry.symbol==='station'?1:0)|(sat?VIEWS.indexOf(viewOf(body)):0)<<1);
+  var code=entry?entry.code:'';for(var k=0;k<3;k++)bytes.push(k<code.length?code.charCodeAt(k):0);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
-// A satellite the watch draws itself (GPS): its segments from an hour ago to
+// A satellite the watch draws itself: its segments from an hour ago to
 // three days ahead (as far as its elements reach), twelve to a message, and
 // home's passes by twelve-hour block.
 var SAT_DAYS=3;
@@ -262,7 +269,7 @@ function refresh(when){
 function settingsKey(){return [setting('body','sun'),setting('plate','enroute'),setting('flag','1'),zone(),setting('home','')].join('|');}
 
 // The settings page, offline: a data URL holding the page and the settings.
-var BODIES=['sun','moon','sat:36585'];
+var BODIES=['sun','moon'].concat(CATALOG.filter(function(c){return viewOf(bodyId(c.norad))!=='day';}).map(function(c){return bodyId(c.norad);}));
 // A data-URL page can't reliably ask for the phone's location itself (as
 // Dymaxion found), so the phone takes a coarse fix first, waiting at most
 // five seconds, and passes it in, rounded to 0.01°.
@@ -271,6 +278,7 @@ Pebble.addEventListener('showConfiguration',function(){
   function open(position){
     if(opened)return;opened=true;
     var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),flag:setting('flag','1'),home:setting('home',''),timeZone:timeZone},
+      bodies:BODIES.slice(2).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
     var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');});

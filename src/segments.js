@@ -98,7 +98,9 @@ export function segmentMoonLight(t){
 // about 5e-5°; the segments are within about 0.03° of it for the ISS and
 // 0.005° for GPS, a small fraction of a pixel on their charts.
 export const SAT_SERIES=[['lat',14],['lon',14],['altitude',8]];
-export const SAT_SEGMENT_BYTES=12+4*SAT_SERIES.reduce((n,[,k])=>n+k,0);
+// Bytes: i32 catalog number, first second, span and the elements' epoch (in
+// Unix seconds), then the coefficients as f32 in SAT_SERIES order.
+export const SAT_SEGMENT_BYTES=16+4*SAT_SERIES.reduce((n,[,k])=>n+k,0);
 export function satelliteSpan(body){return 2*Math.PI/elementsFor(body).satrec.no<225?3600:21600;}
 export function fitSatelliteSegment(body,start,span){
   const m=22,nodes=[];
@@ -111,7 +113,7 @@ export function fitSatelliteSegment(body,start,span){
 }
 export function encodeSatelliteSegment(seg){
   const bytes=new Uint8Array(SAT_SEGMENT_BYTES),view=new DataView(bytes.buffer);let o=0;
-  view.setInt32(o,Number(seg.body.slice(4)),true);view.setInt32(o+4,seg.start,true);view.setInt32(o+8,seg.span,true);o=12;
+  view.setInt32(o,Number(seg.body.slice(4)),true);view.setInt32(o+4,seg.start,true);view.setInt32(o+8,seg.span,true);view.setInt32(o+12,Math.floor(seg.epoch/1000),true);o=16;
   for(const [key] of SAT_SERIES)for(const v of seg[key]){view.setFloat32(o,v,true);o+=4;}
   return bytes;
 }

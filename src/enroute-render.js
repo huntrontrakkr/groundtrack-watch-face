@@ -3,7 +3,7 @@
 // between two reporting points, a compass rose on this hour's station, the
 // time set like a chart's maximum elevation figure, and the tracking
 // stations of NASA's early networks. Whole RGB222 pixels in a plain buffer.
-import {sin,cos,hypot} from './fmath.js';
+import {sin,cos,asin,acos,atan2,hypot} from './fmath.js';
 import {position,moonLight,MINUTE} from './ephemeris.js';
 import {dot,RAD,direction} from './geometry.js';
 import {clockParts} from './render.js';
@@ -74,7 +74,7 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // Acquisition circle: ground range at which a 410 km orbit rises 5 degrees
 // above a station's horizon (about 15.6 degrees of arc).
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
-export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
+export const ACQUISITION=(acos(EARTH*cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
 export const NUMERALS=['colon','plain','even','mono','accent'];
 export const FIGURE={scale:40,hour:80,hourTwo:72,minute:28,callout:28,calloutMinute:20};
 // The time scale registers with the route: its hour marks stand over the
@@ -86,9 +86,12 @@ export const SPAN=120,SCALE={x0:10,x1:190,baseline:46,panel:67};
 const LABEL=departure.regular;
 
 // While a base layer is exported, every plotted pixel is marked, so the
-// native renderer can tell drawn symbols from untouched ground.
-let TRACE=null,EARLY=null,early=false;
-function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];if(TRACE){TRACE[i/3]=1;EARLY[i/3]=early?1:0;}}
+// native renderer can tell drawn symbols from untouched ground, and with the
+// stage of the drawing it was last drawn in: 0 the graticule, 1 the network
+// (after home's acquisition circle), 2 the route and what follows, 3 all
+// drawn after the body, which the body passes under.
+let TRACE=null,EARLY=null,STAGE=null,early=false,stage=0;
+function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];if(TRACE){TRACE[i/3]=1;EARLY[i/3]=early?1:0;STAGE[i/3]=stage;}}
 function segment(a,b,fn){
   let x=Math.round(a.x),y=Math.round(a.y);const xx=Math.round(b.x),yy=Math.round(b.y);
   const dx=Math.abs(xx-x),sx=x<xx?1:-1,dy=-Math.abs(yy-y),sy=y<yy?1:-1;let err=dx+dy;
@@ -139,9 +142,20 @@ const bounds=pixels=>{
   return {x,y,w:Math.max(...xs)-x+1,h:Math.max(...ys)-y+1};
 };
 // The point at an angular distance and bearing from a station.
-function destination(lat,lon,distance,bearing){
-  const p=lat*RAD,d=distance*RAD,b=bearing*RAD,q=Math.asin(Math.sin(p)*Math.cos(d)+Math.cos(p)*Math.sin(d)*Math.cos(b));
-  return {lat:q/RAD,lon:lon+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(p),Math.cos(d)-Math.sin(p)*Math.sin(q))/RAD};
+export function destination(lat,lon,distance,bearing){
+  const p=lat*RAD,d=distance*RAD,b=bearing*RAD,q=asin(sin(p)*cos(d)+cos(p)*sin(d)*cos(b));
+  return {lat:q/RAD,lon:lon+atan2(sin(b)*sin(d)*cos(p),cos(d)-sin(p)*sin(q))/RAD};
+}
+// Home's acquisition circle for a satellite at altitude on the world views:
+// the pixels plotted, every 3° of bearing, on the copy of each point
+// nearest home's own.
+export function homeCircle(camera,home,altitude){
+  const q=camera.project(home.lat,home.lon),x=Math.round(q.x),r=reach(altitude),{top,bottom}=camera.band,out=[];
+  for(let bearing=0;bearing<360;bearing+=3){
+    const g=destination(home.lat,home.lon,r,bearing),c=camera.project(g.lat,g.lon);
+    if(Math.abs(c.x-x)<W/2&&c.y>=top&&c.y<=bottom&&!camera.outside?.(c.x,c.y)){const px=Math.round(c.x),py=Math.round(c.y);if(px>=0&&py>=0&&px<W&&py<H)out.push([px,py]);}
+  }
+  return out;
 }
 
 // Height for each pixel, smoothed three times so contours read as drawn,
@@ -178,8 +192,8 @@ const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['...
 export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed',numerals='colon',zone='utc',layers='all'}){
   const baseOnly=layers==='base';if(baseOnly){readout=false;}
   // Pixels drawn before the route (early) may be covered by its bold line.
-  const trace=baseOnly?new Uint8Array(W*H):null,overlay=baseOnly?new Uint8Array(W*H):null,beforeRoute=baseOnly?new Uint8Array(W*H):null;TRACE=trace;EARLY=beforeRoute;early=true;
-  try{return drawEnroute();}finally{TRACE=null;EARLY=null;}
+  const trace=baseOnly?new Uint8Array(W*H):null,overlay=baseOnly?new Uint8Array(W*H):null,beforeRoute=baseOnly?new Uint8Array(W*H):null,stages=baseOnly?new Uint8Array(W*H):null;TRACE=trace;EARLY=beforeRoute;STAGE=stages;early=true;stage=0;
+  try{return drawEnroute();}finally{TRACE=null;EARLY=null;STAGE=null;}
   function drawEnroute(){
   const pal=typeof plate==='string'?PLATES[plate]:plate,buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
@@ -275,10 +289,9 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   let homeMark=null;
   if(home){
     const q=camera.project(home.lat,home.lon),x=Math.round(q.x),y=Math.round(q.y),col=ink('mark');
-    if(camera.world||camera.wide&&!camera.day){
-      const r=reach(position(camera.body,epoch).altitude);
-      for(let bearing=0;bearing<360;bearing+=3){const g=destination(home.lat,home.lon,r,bearing),c=camera.project(g.lat,g.lon);if(Math.abs(c.x-x)<W/2&&inBand(c.y)&&!camera.outside?.(c.x,c.y))plot(buf,c.x,c.y,col(c.x,c.y));}
-    }
+    // It changes with the satellite's height: a base layer leaves it to
+    // the native renderer, which draws it each minute.
+    if(camera.world&&!baseOnly||camera.wide&&!camera.day)for(const [cx,cy] of homeCircle(camera,home,position(camera.body,epoch).altitude))plot(buf,cx,cy,col(cx,cy));
     const w=textWidth(LABEL,home.code),right=x+7+w<W-3,box={x:right?x-5:x-8-w,y:y-6,w:w+13,h:13};
     if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!camera.outside?.(x,y)&&!overlaps(box)){
       // Placed now so the network gives way; drawn last, over everything.
@@ -288,6 +301,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   }
   // On a whole-orbit Fuller sheet only the stations that can hear the
   // satellite during this hour are shown, each with its acquisition circle.
+  stage=1;
   const heard=s=>camera.track.some(p=>p.hour&&dot(p.dir,direction(s.lat,s.lon))>=Math.cos(ACQUISITION*RAD));
   for(const s of network.stations){
     if(camera.day||(camera.wide&&!heard(s)))continue;
@@ -316,7 +330,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const a=track[i-1],b=track[i];if(jump(a,b)||!(a.hour&&b.hour))continue;
     segment(a,b,(x,y)=>{for(let dy=-casing-1;dy<=casing+1;dy++)for(let dx=-casing;dx<=casing;dx++)clear(x+dx,y+dy);});
   }
-  early=false;
+  early=false;stage=2;
   for(let i=1;i<track.length;i++){
     const a=track[i-1],b=track[i];if(jump(a,b))continue;
     const hour=a.hour&&b.hour,bold=hour&&b.epoch<=now,steep=Math.abs(b.y-a.y)>Math.abs(b.x-a.x);
@@ -388,6 +402,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     for(let k=-2;k<=2;k++)for(let d=-1;d<=1;d++)plot(buf,mx+d,my+k,mk);
   }
   }
+  stage=3;
   // The hour. On the zoomed charts the figures stand in the chart over their
   // stations, one size and one baseline: this hour solid, the next outlined,
   // and the body on the graduated route is the index. On the ISS world band
@@ -399,7 +414,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const minutes=Math.max(0,Math.min(60,(epoch-s0.epoch)/MINUTE)),ix=Math.round(at(Math.floor(minutes)));
   const outline=(solid,ring)=>{const inside=new Set(solid.map(([a,b])=>a+','+b)),near=[];for(let r=1;r<=ring;r++)near.push([r,0],[-r,0],[0,r],[0,-r]);return solid.filter(([a,b])=>near.some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));};
   const place=(end,w)=>Math.max(4,Math.min(W-4-w,Math.round(end-w/2)));
-  let hourPixels,nextSolid,index,minuteBox=null;
+  let hourPixels,nextSolid,index,minuteBox=null,tapeAt=null;
   // A time callout, labelled the way a chart labels a feature: the time in
   // full, the minutes smaller on the same baseline as on a cockpit clock,
   // hung from a shoulder, the cartographer's elbow leader, that runs back
@@ -486,7 +501,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const {baseline:B,panel:P}=SCALE,sc=()=>pal.spaceInk,fill=pal.route[0];
     for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);
     for(let x=0;x<W;x++)plot(buf,x,P-1,sc());
-    for(let x=X0;x<=X1;x++){plot(buf,x,B,sc());if(forward?x<=ix:x>=ix)plot(buf,x,B+1,fill);}
+    for(let x=X0;x<=X1;x++){plot(buf,x,B,sc());if(!baseOnly&&(forward?x<=ix:x>=ix))plot(buf,x,B+1,fill);}
     for(let m=0;m<=60;m++){
       const x=Math.round(at(m)),len=m%60===0?12:m%15===0?6:m%5===0?4:2;
       for(let d=1;d<=len;d++)plot(buf,x,B+d,sc());
@@ -496,9 +511,12 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const size=FIGURE.scale,hw=runWidth(hour,size),nw=runWidth(next,size),gx=place(forward?X0:X1,hw),nx=place(forward?X1:X0,nw);
     hourPixels=figurePixels(hour,size,gx,4);nextSolid=figurePixels(next,size,nx,4);
     for(const [a,b] of hourPixels)plot(buf,a,b,sc());for(const [a,b] of outline(nextSolid,1))plot(buf,a,b,sc());
-    for(let k=0;k<6;k++)for(let d=-k;d<=k;d++)plot(buf,ix+d,B-7+k,pal.space);
-    for(let k=0;k<5;k++)for(let d=-k;d<=k;d++)plot(buf,ix+d,B-6+k,sc());
-    index={x:ix,y:B};
+    // The index, and the minutes over it, are the minute's own.
+    if(!baseOnly){
+      for(let k=0;k<6;k++)for(let d=-k;d<=k;d++)plot(buf,ix+d,B-7+k,pal.space);
+      for(let k=0;k<5;k++)for(let d=-k;d<=k;d++)plot(buf,ix+d,B-6+k,sc());
+    }
+    index={x:ix,y:B};tapeAt={x0:X0,x1:X1,baseline:B,inner:[Math.min(gx+hw,nx+nw)+3,Math.max(gx,nx)-3-textWidth(LABEL,'00')]};
     if(readout){
       const lw=textWidth(LABEL,parts.m),inner=[Math.min(gx+hw,nx+nw)+3,Math.max(gx,nx)-3-lw],lx=Math.max(inner[0],Math.min(inner[1],Math.round(ix-lw/2)));
       for(const [a,b] of textPixels(LABEL,parts.m,lx,B-10))plot(buf,a,b,sc());minuteBox={x:lx,y:B-18,w:lw,h:8};
@@ -589,19 +607,24 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // With zone 'body', the margin shows instead the time in the nautical
   // time zone under the body, with the zone's letter: Z at Greenwich, R for
   // US Eastern, I for Japan. The Sun's is always near noon.
-  const zoned=zone==='body'?nauticalZone(body.lon):{hours:0,letter:'Z'},utc=new Date(epoch+zoned.hours*3600000),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}${zoned.letter}`;let zulu=null,zuluAt=null;
+  const zoned=zone==='body'?nauticalZone(body.lon):{hours:0,letter:'Z'},utc=new Date(epoch+zoned.hours*3600000),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}${zoned.letter}`;let zulu=null,zuluAt=null,altAt=null,topAt={x:6,baseline:11};
   const MONTHS='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
   if(camera.world){
     // Satellites say where their numbers come from: the 2019 archive, or
     // the epoch of the live element set in use.
     const elements=elementsFor(camera.body),date=new Date(elements?elements.epoch:epoch),day=String(date.getUTCDate()).padStart(2,'0');
     const source=elements?`${elements.catalog?.code||'SAT'} EL ${day} ${MONTHS[date.getUTCMonth()]} ${String(date.getUTCHours()).padStart(2,'0')}${String(date.getUTCMinutes()).padStart(2,'0')}Z`:`ARCHIVE ${day} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-    margin(source,`${Math.round(body.altitude)} KM`,top-6,()=>pal.spaceInk);
+    // The height, the pass line and Zulu time change by the minute: a base
+    // layer leaves them to the native renderer.
+    margin(source,baseOnly?'':`${Math.round(body.altitude)} KM`,top-6,()=>pal.spaceInk);altAt={right:W-6,baseline:top-6};
     // Under the band, the next pass over home: acquisition of signal, its
     // length and its greatest elevation; or, while in view, loss of signal.
     // Under the band, Zulu time at the right.
-    margin(home?passText(camera.body,home,epoch,timeZone):'','',H-1,()=>pal.spaceInk);
-    const z=textPixels(LABEL,Z,W-6-textWidth(LABEL,Z),H-1);letter(z,()=>pal.spaceInk,1);zulu={text:Z,box:bounds(z)};
+    topAt={x:6,baseline:H-1};zuluAt={x:W-6-textWidth(LABEL,Z),baseline:H-1};
+    if(!baseOnly){
+      margin(home?passText(camera.body,home,epoch,timeZone):'','',H-1,()=>pal.spaceInk);
+      const z=textPixels(LABEL,Z,zuluAt.x,H-1);letter(z,()=>pal.spaceInk,1);zulu={text:Z,box:bounds(z)};
+    }
   }else{
     const d=localDate(epoch,timeZone);
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'),Z);
@@ -616,7 +639,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const tintIndex=(table,v)=>table.findIndex(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit);
     const baseClass=new Uint8Array(W*H);
     for(let i=0;i<W*H;i++)baseClass[i]=mat[i]===SPACE?2:pal.tints&&land[i]?3+tintIndex(pal.tints,relief[i]):pal.depths&&!land[i]?8+tintIndex(pal.depths,relief[i]):land[i]?1:0;
-    return {buf,trace,overlay,baseClass,beforeRoute,marker:{x:p.x,y:p.y},zuluAt};
+    return {buf,trace,overlay,baseClass,beforeRoute,stages,marker:{x:p.x,y:p.y},zuluAt,altAt,topAt,tapeAt,home:homeMark?{x:homeMark.x,y:homeMark.y,box:homeMark.box}:null};
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
     figure:{hour,minute:parts.m,next,time:camera.day||readout===true?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};

@@ -6,6 +6,7 @@ import {position,MINUTE} from './ephemeris.js';
 import {direction,dot,RAD} from './geometry.js';
 import {elementsFor} from './satellites.js';
 import {clockParts} from './render.js';
+import {cos,acos} from './fmath.js';
 
 const EARTH=6371;
 // A pass counts from 10° above the horizon, where a satellite clears
@@ -42,7 +43,7 @@ export function elevation(home,p){
 // Ground range, in degrees of arc, within which a satellite at altitude
 // stands above the pass mask: its acquisition circle for home.
 export function reach(altitude,mask=PASS_MASK){
-  const m=mask*RAD;return (Math.acos(EARTH*Math.cos(m)/(EARTH+altitude))-m)/RAD;
+  const m=mask*RAD;return (acos(EARTH*cos(m)/(EARTH+altitude))-m)/RAD;
 }
 
 // Passes over home, sampled every 20 seconds on the clock's own 20-second

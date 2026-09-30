@@ -35,13 +35,13 @@
 <body>
 <header>
   <h1>Groundtrack Enroute</h1>
-  <p>The phone draws each hour's chart and sends it to the watch. Saving draws this hour again.</p>
+  <p>The watch draws each hour's chart from its own map, with the Sun, Moon and satellites the phone sends ahead. Saving draws this hour again.</p>
 </header>
 <form id="form">
   <fieldset><legend>Track</legend>
     <label class="row"><input type="radio" name="body" value="sun"><span class="name">Sun<span class="note">Its ground point, where it stands overhead</span></span></label>
     <label class="row"><input type="radio" name="body" value="moon"><span class="name">Moon<span class="note">In its calculated phase</span></span></label>
-    <label class="row"><input type="radio" name="body" value="sat:36585"><span class="name">GPS BIIF-1<span class="note">A textbook GPS orbit, not the satellite's measured one</span></span></label>
+    <div id="satellites"></div>
   </fieldset>
   <fieldset><legend>Plate</legend><div id="plates"></div></fieldset>
   <fieldset><legend>Clock</legend>
@@ -62,18 +62,22 @@
 <div class="actions"><button type="button" id="cancel">Cancel</button><button type="button" id="save">Save</button></div>
 <script>
 (function(){
-  // Filled in by the phone app: {settings, plates:[[key,name,note]], preset,
-  // position: the phone's fix {lat, lon} or null}
+  // Filled in by the phone app: {settings, bodies:[[key,name,note]] (the
+  // satellites), plates:[[key,name,note]], preset, position: the phone's fix
+  // {lat, lon} or null}
   var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
-  var plates=document.getElementById('plates');
-  config.plates.forEach(function(p){
-    var row=document.createElement('label');row.className='row';
-    row.innerHTML='<input type="radio" name="plate"><span class="name"></span>';
-    row.firstChild.value=p[0];
-    row.lastChild.textContent=p[1];
-    var note=document.createElement('span');note.className='note';note.textContent=p[2];row.lastChild.appendChild(note);
-    plates.appendChild(row);
-  });
+  function rows(list,name,into){
+    list.forEach(function(p){
+      var row=document.createElement('label');row.className='row';
+      row.innerHTML='<input type="radio" name="'+name+'"><span class="name"></span>';
+      row.firstChild.value=p[0];
+      row.lastChild.textContent=p[1];
+      var note=document.createElement('span');note.className='note';note.textContent=p[2];row.lastChild.appendChild(note);
+      into.appendChild(row);
+    });
+  }
+  rows(config.bodies||[],'body',document.getElementById('satellites'));
+  rows(config.plates,'plate',document.getElementById('plates'));
   function pick(name,value){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
   function picked(name){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
   pick('body',s.body);pick('plate',s.plate);form.elements.flag.checked=s.flag==='1';

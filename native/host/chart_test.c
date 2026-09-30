@@ -27,6 +27,12 @@ static void pass_for(void *ctx,int64_t t,char out[24]){
     if(t>=start&&t<start+PASS_BLOCK_SECONDS){pass_line_from(b,block_len[i],t,out);return;}}
   memset(out,0,24);
 }
+// Counting allocator: the build's peak, as the watch's heap would see it
+// (each block with 8 bytes of the allocator's own).
+static size_t live,peak;
+static void *counted(size_t n){size_t *p=malloc(n+sizeof(size_t));if(!p)return 0;*p=n;live+=n+8;if(live>peak)peak=live;return p+1;}
+static void uncounted(void *q){if(!q)return;size_t *p=(size_t *)q-1;live-=*p+8;free(p);}
+static void *recounted(void *q,size_t n){if(!q)return counted(n);size_t *p=(size_t *)q-1;const size_t old=*p;p=realloc(p,n+sizeof(size_t));if(!p)return 0;live=live-old+n;if(live>peak)peak=live;*p=n;return p+1;}
 static size_t unhex(const char *hex,uint8_t *out,size_t max){size_t n=0;while(hex[0]&&hex[1]&&n<max){unsigned v;sscanf(hex,"%2x",&v);out[n++]=(uint8_t)v;hex+=2;}return n;}
 
 static FILE *out;
@@ -47,7 +53,8 @@ int main(int argc,char **argv){
     if(!strcmp(key,"satseg")){uint8_t b[SAT_SEGMENT_BYTES];unhex(value,b,sizeof b);sat_segment_decode(b,&sats[nsats++]);}
     else if(!strcmp(key,"passes")){block_len[nblocks]=unhex(value,blocks[nblocks],sizeof blocks[0]);nblocks++;}
     else if(!strcmp(key,"segment")){uint8_t b[SEG_BYTES];for(int i=0;i<SEG_BYTES;i++){unsigned v;sscanf(value+2*i,"%2x",&v);b[i]=(uint8_t)v;}seg_decode(b,&segs[nsegs++]);}
-    else if(!strcmp(key,"body"))in.body=atoi(value);else if(!strcmp(key,"plate"))in.plate=atoi(value);
+    else if(!strcmp(key,"body"))in.body=atoi(value);else if(!strcmp(key,"view"))in.view=atoi(value);
+    else if(!strcmp(key,"code"))snprintf(in.code,sizeof in.code,"%s",value);else if(!strcmp(key,"plate"))in.plate=atoi(value);
     else if(!strcmp(key,"flag"))in.flag=atoi(value);else if(!strcmp(key,"clock24"))in.clock24=atoi(value);
     else if(!strcmp(key,"start"))in.start=atoll(value);else if(!strcmp(key,"hour"))in.local_hour=atoi(value);
     else if(!strcmp(key,"day"))in.day=atoi(value);else if(!strcmp(key,"month"))in.month=atoi(value);
@@ -58,12 +65,12 @@ int main(int argc,char **argv){
     else if(!strcmp(key,"set"))snprintf(in.rise_right,sizeof in.rise_right,"%s",value);
   }
   const ChartSources src={.map=mem_read,.map_source=&m,.figures=mem_read,.figure_source=&f,.segment=seg_for,
-    .satellite=sat_for,.pass_line=pass_for,.alloc=malloc,.release=free};
+    .satellite=sat_for,.pass_line=pass_for,.alloc=counted,.release=uncounted,.resize=recounted};
   EnrScene *scene=chart_build(&in,&src);
   if(!scene){fprintf(stderr,"build failed\n");return 1;}
   const EnrScene s=*scene;
   out=fopen(argv[3],"wb");
-  fputs("GTS2",out);u16(200);u16(228);u8(s.flags);u8(s.body);u8((uint8_t)s.forward);u8(0);i32(s.hour_start);
+  fputs("GTS3",out);u16(200);u16(228);u8(s.flags);u8(s.body);u8((uint8_t)s.forward);u8(s.view);i32(s.hour_start);
   for(int k=0;k<9;k++)for(int z=0;z<3;z++)u8(s.zoned[k][z]);
   u8(s.space);u8(s.space_ink);u8(s.screen);u8(s.waterline);u8(s.terminator);u8(s.night_dots);
   for(int k=0;k<5;k++)u8(s.tints[k]);
@@ -73,13 +80,18 @@ int main(int argc,char **argv){
   for(int x=0;x<200;x++)f64(s.col_cos[x]);
   for(int x=0;x<200;x++)f64(s.col_sin[x]);
   f64(s.c1x);f64(s.normal_x);f64(s.normal_y);u16((uint16_t)s.zulu_x);u16((uint16_t)s.zulu_baseline);
+  {const int16_t v[15]={s.top_x,s.top_baseline,s.height_right,s.height_baseline,s.tape_x0,s.tape_x1,s.tape_baseline,s.tape_lo,s.tape_hi,s.home_x,s.home_y,s.home_box[0],s.home_box[1],s.home_box[2],s.home_box[3]};
+  for(int k=0;k<15;k++)u16((uint16_t)v[k]);}
   for(int k=0;k<60;k++){const EnrMinute *e=&s.minutes[k];for(int j=0;j<3;j++)f64(e->sun[j]);f64(e->mx);f64(e->my);f64(e->moon_fraction);u8(e->waxing);
-    fwrite(e->zulu,1,5,out);fwrite(e->minute,1,2,out);fwrite(e->top,1,24,out);}
+    fwrite(e->zulu,1,5,out);fwrite(e->minute,1,2,out);fwrite(e->top,1,24,out);u16((uint16_t)e->index);fwrite(e->height,1,8,out);u8(e->circle);}
+  u16(s.circle_count);
+  for(int k=0;k<s.circle_count;k++){u16(s.circle_n[k]);fwrite(s.circle_px[k],1,2*s.circle_n[k],out);}
   u16(s.track_count);
-  for(int k=0;k<s.track_count;k++){f64(s.track[k].x);f64(s.track[k].y);i32(s.track[k].seconds);u8(s.track[k].hour);}
+  for(int k=0;k<s.track_count;k++){u16((uint16_t)s.track[k].x);u16((uint16_t)s.track[k].y);i32(s.track[k].seconds);u8(s.track[k].hour);u8(s.track[k].step);}
   for(int y=0;y<=228;y++)u16(s.row_offset[y]);
   fwrite(s.runs,1,s.row_offset[228],out);
   fclose(out);
-  fprintf(stderr,"scene %u bytes, runs %u bytes\n",(unsigned)sizeof s,(unsigned)s.row_offset[228]);
+  {int held=0;for(int y=0;y<228;y++){const int ahead=(int)s.row_offset[y+1]-(y+1<228?(y+1)*200:200*228);if(ahead>held)held=ahead;}fprintf(stderr,"queue %d; ",held);}
+  fprintf(stderr,"scene %u bytes, runs %u bytes, peak %u bytes, kept %u bytes\n",(unsigned)sizeof s,(unsigned)s.row_offset[228],(unsigned)peak,(unsigned)live);
   return 0;
 }

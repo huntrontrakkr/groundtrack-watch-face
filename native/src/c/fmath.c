@@ -139,3 +139,72 @@ double f_cos(double x){
   double a,b;const int n=reduce(x,&a,&b);
   switch(n&3){case 0:return kernel_cos(a,b);case 1:return -kernel_sin(a,b,1);case 2:return -kernel_cos(a,b);default:return kernel_sin(a,b,1);}
 }
+
+// Arcsine, arccosine and arctangents: fdlibm's e_asin.c, e_acos.c, s_atan.c
+// and e_atan2.c, as src/fmath.js has them.
+static const double PIO2_HI=1.57079632679489655800e+00,PIO2_LO=6.12323399573676603587e-17,PIO4_HI=7.85398163397448278999e-01,PI_=3.14159265358979311600e+00,
+  PS0=1.66666666666666657415e-01,PS1=-3.25565818622400915405e-01,PS2=2.01212532134862925881e-01,PS3=-4.00555345006794114027e-02,
+  PS4=7.91534994289814532176e-04,PS5=3.47933107596021167570e-05,QS1=-2.40339491173441421878e+00,QS2=2.02094576023350569471e+00,
+  QS3=-6.88283971605453293030e-01,QS4=7.70381505559019352791e-02;
+static double high_only(double x){return from_words(high(x),0);}
+static double rat_p(double t){return t*(PS0+t*(PS1+t*(PS2+t*(PS3+t*(PS4+t*PS5)))));}
+static double rat_q(double t){return 1.0+t*(QS1+t*(QS2+t*(QS3+t*QS4)));}
+double f_asin(double x){
+  const int32_t hx=(int32_t)high(x),ix=hx&0x7fffffff;
+  if(ix>=0x3ff00000){if(((ix-0x3ff00000)|(int32_t)low(x))==0)return x*PIO2_HI+x*PIO2_LO;return NAN;}
+  if(ix<0x3fe00000){
+    if(ix<0x3e400000)return x;
+    const double t=x*x,w=rat_p(t)/rat_q(t);return x+x*w;
+  }
+  double w=1.0-fabs(x),t=w*0.5;const double p=rat_p(t),q=rat_q(t),s=f_sqrt(t);
+  if(ix>=0x3FEF3333){w=p/q;t=PIO2_HI-(2.0*(s+s*w)-PIO2_LO);}
+  else{w=high_only(s);const double c=(t-w*w)/(s+w),r=p/q,pp=2.0*s*r-(PIO2_LO-2.0*c),qq=PIO4_HI-2.0*w;t=PIO4_HI-(pp-qq);}
+  return hx>0?t:-t;
+}
+double f_acos(double x){
+  const int32_t hx=(int32_t)high(x),ix=hx&0x7fffffff;
+  if(ix>=0x3ff00000){if(((ix-0x3ff00000)|(int32_t)low(x))==0)return hx>0?0.0:PI_+2.0*PIO2_LO;return NAN;}
+  if(ix<0x3fe00000){
+    if(ix<=0x3c600000)return PIO2_HI+PIO2_LO;
+    const double z=x*x,r=rat_p(z)/rat_q(z);return PIO2_HI-(x-(PIO2_LO-x*r));
+  }
+  if(hx<0){const double z=(1.0+x)*0.5,s=f_sqrt(z),r=rat_p(z)/rat_q(z),w=r*s-PIO2_LO;return PI_-2.0*(s+w);}
+  const double z=(1.0-x)*0.5,s=f_sqrt(z),df=high_only(s),c=(z-df*df)/(s+df),r=rat_p(z)/rat_q(z),w=r*s+c;
+  return 2.0*(df+w);
+}
+static const double ATANHI[4]={4.63647609000806093515e-01,7.85398163397448278999e-01,9.82793723247329054082e-01,1.57079632679489655800e+00},
+  ATANLO[4]={2.26987774529616870924e-17,3.06161699786838301793e-17,1.39033110312309984516e-17,6.12323399573676603587e-17},
+  AT[11]={3.33333333333329318027e-01,-1.99999999998764832476e-01,1.42857142725034663711e-01,-1.11111104054623557880e-01,
+    9.09088713343650656196e-02,-7.69187620504482999495e-02,6.66107313738753120669e-02,-5.83357013379057348645e-02,
+    4.97687799461593236017e-02,-3.65315727442169155270e-02,1.62858201153657823623e-02};
+double f_atan(double x){
+  const int32_t hx=(int32_t)high(x),ix=hx&0x7fffffff;int id;
+  if(ix>=0x44100000){if(x!=x)return x+x;return hx>0?ATANHI[3]+ATANLO[3]:-ATANHI[3]-ATANLO[3];}
+  if(ix<0x3fdc0000){if(ix<0x3e200000)return x;id=-1;}
+  else{
+    x=fabs(x);
+    if(ix<0x3ff30000){if(ix<0x3fe60000){id=0;x=(2.0*x-1.0)/(2.0+x);}else{id=1;x=(x-1.0)/(x+1.0);}}
+    else if(ix<0x40038000){id=2;x=(x-1.5)/(1.0+1.5*x);}
+    else{id=3;x=-1.0/x;}
+  }
+  const double z=x*x,w=z*z,s1=z*(AT[0]+w*(AT[2]+w*(AT[4]+w*(AT[6]+w*(AT[8]+w*AT[10]))))),s2=w*(AT[1]+w*(AT[3]+w*(AT[5]+w*(AT[7]+w*AT[9]))));
+  if(id<0)return x-x*(s1+s2);
+  const double r=ATANHI[id]-((x*(s1+s2)-ATANLO[id])-x);return hx<0?-r:r;
+}
+static const double PI_O_4=7.8539816339744827900E-01,PI_O_2=1.5707963267948965580E+00,PI_LO=1.2246467991473531772E-16,TINY=1.0e-300;
+double f_atan2(double y,double x){
+  if(x!=x||y!=y)return x+y;
+  const int32_t hx=(int32_t)high(x),ix=hx&0x7fffffff,hy=(int32_t)high(y),iy=hy&0x7fffffff;const uint32_t lx=low(x),ly=low(y);
+  if((((uint32_t)hx-0x3ff00000u)|lx)==0)return f_atan(y);
+  const int m=(int)((((uint32_t)hy>>31)&1)|(((uint32_t)hx>>30)&2));
+  if(((uint32_t)iy|ly)==0){if(m<=1)return y;return m==2?PI_+TINY:-PI_-TINY;}
+  if(((uint32_t)ix|lx)==0)return hy<0?-PI_O_2-TINY:PI_O_2+TINY;
+  if(ix==0x7ff00000){
+    if(iy==0x7ff00000){const double v[4]={PI_O_4+TINY,-PI_O_4-TINY,3.0*PI_O_4+TINY,-3.0*PI_O_4-TINY};return v[m];}
+    {const double v[4]={0.0,-0.0,PI_+TINY,-PI_-TINY};return v[m];}
+  }
+  if(iy==0x7ff00000)return hy<0?-PI_O_2-TINY:PI_O_2+TINY;
+  const int k=(iy-ix)>>20;double z;
+  if(k>60)z=PI_O_2+0.5*PI_LO;else if(hx<0&&k<-60)z=0.0;else z=f_atan(fabs(y/x));
+  switch(m){case 0:return z;case 1:return -z;case 2:return PI_-(z-PI_LO);default:return (z-PI_LO)-PI_;}
+}

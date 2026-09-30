@@ -49,12 +49,12 @@ static ChartBuild *s_build;        // a Sun or Moon chart being built
 static const EnrScene *s_drawn_scene;
 static int s_drawn_minute=-1;
 static bool s_tick_redraw;
-static uint32_t s_build_ms;        // time spent building it
+static uint32_t s_build_ms,s_step_ms;  // time spent building it, and the longest step
 static time_t s_quiet_until;       // no requests before this, after a status
 
-// The Sun, the Moon and GPS are drawn here; other satellites (not yet
-// native) come from the phone.
-static bool local(void){return s_settings.body<=BODY_SATELLITE;}
+// The Sun, the Moon, GPS and the fast satellites are drawn here; QZSS's
+// whole day (not yet native) would come from the phone.
+static bool local(void){return s_settings.body<BODY_SATELLITE||(s_settings.body==BODY_SATELLITE&&s_settings.view!=VIEW_DAY);}
 static void chart_free(Chart *c){
   if(c->scene){enr_free(c->scene,free);free(c->scene);}
   free(c->blob);
@@ -86,14 +86,14 @@ static void request(time_t now,time_t when){
   if(now<s_quiet_until)return;
   if(send_int(MESSAGE_KEY_SceneRequest,(int32_t)when)){s_asked_at=now;s_asked_for=(int32_t)when;}
 }
-// Segments from the first missing day (and, for GPS, its own segments and
-// passes), at most once a RETRY_SECONDS.
+// Segments from the first missing day (and, for a satellite, its own
+// segments and passes), at most once a RETRY_SECONDS.
 static void request_data(time_t now,int32_t day){
   if(s_data_asked_at&&now-s_data_asked_at<RETRY_SECONDS)return;
   DictionaryIterator *out;
   if(app_message_outbox_begin(&out)!=APP_MSG_OK)return;
   dict_write_int32(out,MESSAGE_KEY_DataRequest,day);
-  if(s_settings.body==BODY_SATELLITE)dict_write_int32(out,MESSAGE_KEY_DataBody,GPS_NORAD);
+  if(s_settings.body==BODY_SATELLITE)dict_write_int32(out,MESSAGE_KEY_DataBody,s_settings.norad);
   if(app_message_outbox_send()==APP_MSG_OK)s_data_asked_at=now;
 }
 
@@ -107,19 +107,20 @@ static void need_data(time_t now){
   const struct tm *lt=localtime(&now);
   if(missing>=0)request_data(now,missing);
   else if(s_settings.body!=BODY_SATELLITE&&s_settings.home&&!rise_set_known(civil_date(lt->tm_year+1900,lt->tm_mon+1,lt->tm_mday)))request_data(now,today);
-  // GPS: its segments six hours ahead, and home's passes for now.
-  else if(s_settings.body==BODY_SATELLITE&&(sat_segments_missing(GPS_NORAD,now-now%3600-2400,6*3600)>=0||(s_settings.home&&!pass_block_known(now))))request_data(now,today);
+  // A satellite: its segments six hours ahead, and home's passes for now.
+  else if(s_settings.body==BODY_SATELLITE&&(sat_segments_missing(s_settings.norad,now-now%3600-2400,6*3600)>=0||(s_settings.home&&!pass_block_known(now))))request_data(now,today);
   else s_data_ok_until=now-now%3600+3600;
 }
 static uint32_t now_ms(void){time_t t;uint16_t ms;time_ms(&t,&ms);return (uint32_t)t*1000+ms;}
 static void build_step(void *data);
 static void build_abort(void){if(s_build){chart_abort(s_build);s_build=NULL;}local_chart_done();}
-// The Sun or Moon chart for this hour, built here a slice at a time, so the
-// watch keeps answering its events: about 80 ms of work, then a pause.
+// This hour's chart, built here a slice at a time (the ground, the drawing,
+// the minutes), so the watch keeps answering its events: about 80 ms of
+// work, then a pause.
 static void build(time_t now){
   if(s_build)return;
   chart_free(&s_now);chart_free(&s_next);
-  s_build=local_chart(now,&s_settings);s_build_ms=0;
+  s_build=local_chart(now,&s_settings);s_build_ms=s_step_ms=0;
   if(s_build)app_timer_register(1,build_step,NULL);
   else{set_status("AWAITING EPHEMERIS");layer_mark_dirty(s_layer);}
   need_data(now);
@@ -127,15 +128,15 @@ static void build(time_t now){
 static void build_step(void *data){
   if(!s_build)return;
   const uint32_t t0=now_ms();int r;
-  do r=chart_step(s_build);while(r>0&&now_ms()-t0<80);
+  do{const uint32_t a=now_ms();r=chart_step(s_build);const uint32_t d=now_ms()-a;if(d<60000&&d>s_step_ms)s_step_ms=d;}while(r>0&&now_ms()-t0<80);
   s_build_ms+=now_ms()-t0;
   if(r>0){app_timer_register(10,build_step,NULL);return;}
-  if(r<0){build_abort();set_status("NO MAP");layer_mark_dirty(s_layer);return;}
+  if(r<0){APP_LOG(APP_LOG_LEVEL_ERROR,"Chart failed: %s; heap free %u",chart_failure(),(unsigned)heap_bytes_free());build_abort();set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
-  if(scene){s_now.scene=scene;s_status[0]=0;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: %lu ms of work, the last step %lu ms; heap free %u",(unsigned long)s_build_ms,(unsigned long)(now_ms()-t1),(unsigned)heap_bytes_free());}
-  else set_status("NO ROOM FOR THE CHART");
+  if(scene){s_now.scene=scene;s_status[0]=0;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: %lu ms of work, the longest step %lu ms; heap free %u",(unsigned long)s_build_ms,(unsigned long)s_step_ms,(unsigned)heap_bytes_free());}
+  else{set_status("NO ROOM FOR THE CHART");APP_LOG(APP_LOG_LEVEL_ERROR,"Chart not finished: %s; heap free %u",chart_failure(),(unsigned)heap_bytes_free());}
   layer_mark_dirty(s_layer);
 }
 
@@ -219,10 +220,14 @@ static void data_arrived(bool changed){
 }
 static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24);}
 // Settings as the phone packs them: body, plate, flag, clock24, home, then
-// home's latitude and longitude in hundredths of a degree (i32 each).
+// home's latitude and longitude in hundredths of a degree (i32 each), then
+// a satellite's catalog number (i32), its kind (1 a station, plus its view
+// times 2) and its code (3 characters).
 static void take_settings(const uint8_t *b,size_t n){
-  if(n<13)return;
-  const WatchSettings s={1,b[0],b[1],b[2],b[3],b[4],le32(b+5),le32(b+9)};
+  if(n<21)return;
+  WatchSettings s;memset(&s,0,sizeof s);
+  s.version=2;s.body=b[0];s.plate=b[1];s.flag=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
+  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);
   if(!memcmp(&s,&s_settings,sizeof s))return;
   s_settings=s;settings_save(&s);s_data_ok_until=0;
   // Drawn again in the new settings.

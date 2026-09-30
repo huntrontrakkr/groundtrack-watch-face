@@ -47,18 +47,28 @@ test('the watch evaluates segments to the same bits',{skip:!cc&&'no C compiler'}
 
 // Sine and cosine: the watch's C computes the JavaScript's bits.
 let fm=true;try{execFileSync('make',['-s','-C','native/host','fmath_test'],{stdio:'pipe'});}catch{fm=false;}
-test('the watch computes sine, cosine, square roots and remainders to the same bits',{skip:!fm&&'no C compiler'},async()=>{
-  const {sin,cos}=await import('../src/fmath.js');
+test('the watch computes sines, arcsines, arctangents, square roots and remainders to the same bits',{skip:!fm&&'no C compiler'},async()=>{
+  const {sin,cos,asin,acos,atan,atan2}=await import('../src/fmath.js');
   const bits=v=>{const d=new DataView(new ArrayBuffer(8));d.setFloat64(0,v);return d.getBigUint64(0).toString(16).padStart(16,'0');};
   const xs=[0,-0,1e-300,Math.PI/4,Math.PI/2,Math.PI,2*Math.PI,-Math.PI];let s=20260930;const r=()=>{s=(s*1103515245+12345)%2147483648;return s/2147483648;};
   for(let i=0;i<60000;i++)xs.push(i%3?(r()*2-1)*Math.PI:(r()*2-1)*720);
   for(let v=-400;v<=400;v++)xs.push(v,v+.5);
-  const text=xs.map(x=>x.toPrecision(17)).join('\n'),parsed=text.split('\n').map(Number);
+  // Each with a second argument for atan2, across signs, zeros and scales.
+  const cs=[1,-1,0,-0,1e-9,-3e7];xs.push(800,-800,799.9999999,-400,400);
+  const pairs=xs.map((x,i)=>[x,i<cs.length*4?cs[i%cs.length]:(r()*2-1)*10**Math.floor(r()*8-3)]);
+  const text=pairs.map(([x,c])=>`${x.toPrecision(17)} ${c.toPrecision(17)}`).join('\n'),parsed=text.split('\n').map(l=>l.split(' ').map(Number));
   const got=execFileSync('native/host/fmath_test',{input:text,maxBuffer:1<<26}).toString().split('\n');
-  let differ=0;parsed.forEach((x,i)=>{if(got[i]!==`${bits(sin(x))} ${bits(cos(x))} ${bits(Math.sqrt(Math.abs(x)))} ${bits(x%7.25)} ${bits((x*97)%5)} `)differ++;});
-  assert.equal(differ,0);
+  let differ=0,first=null;parsed.forEach(([x,c],i)=>{
+    const s=Math.max(-1,Math.min(1,x/800)),want=`${bits(sin(x))} ${bits(cos(x))} ${bits(Math.sqrt(Math.abs(x)))} ${bits(x%7.25)} ${bits((x*97)%5)} ${bits(asin(s))} ${bits(acos(s))} ${bits(atan2(x,c))} ${bits(atan(x))} `;
+    if(got[i]!==want){differ++;first??=`${x} ${c}: C ${got[i]} JS ${want}`;}
+  });
+  assert.equal(differ,0,first);
   // And within an ulp of the engine's own.
-  for(const x of parsed.slice(0,2000))for(const [f,g] of [[sin,Math.sin],[cos,Math.cos]])assert.ok(Math.abs(f(x)-g(x))<=Math.abs(g(x))*2.3e-16+1e-300,String(x));
+  const near=(f,g)=>Math.abs(f-g)<=Math.abs(g)*2.3e-16+1e-300;
+  for(const [x,c] of parsed.slice(0,4000)){
+    const s=Math.max(-1,Math.min(1,x/800));
+    for(const [f,g] of [[sin(x),Math.sin(x)],[cos(x),Math.cos(x)],[asin(s),Math.asin(s)],[acos(s),Math.acos(s)],[atan2(x,c),Math.atan2(x,c)],[atan(x),Math.atan(x)]])assert.ok(near(f,g),`${x} ${c}: ${f} ${g}`);
+  }
 });
 
 test('the watch evaluates satellite segments to the same bits',{skip:!cc&&'no C compiler'},async()=>{

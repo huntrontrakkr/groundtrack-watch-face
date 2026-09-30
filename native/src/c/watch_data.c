@@ -10,14 +10,17 @@
 #define RISE_SET_KEY 200       // + local date % 64
 #define RING 64
 #define RISE_SET_BYTES 12
-#define SAT_KEY 300            // + (start / span) % 64
+// A fast satellite's segments are an hour each: three days of them and the
+// hour before need more than 64.
+#define SAT_KEY 300            // + (start / span) % 96
+#define SAT_RING 96
 #define PASS_KEY 400           // + (block / 12 h) % 8
 
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
   // the phone sends one.
-  const WatchSettings defaults={1,BODY_SUN,0,1,1,0,0,0};
-  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=1)*s=defaults;
+  const WatchSettings defaults={2,BODY_SUN,0,1,1,0,0,0,0,0,0,""};
+  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=2)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
@@ -32,7 +35,7 @@ void rise_sets_store(const uint8_t *b,size_t n){
 void sat_segments_store(const uint8_t *b,size_t n){
   for(size_t at=0;at+SAT_SEGMENT_BYTES<=n;at+=SAT_SEGMENT_BYTES){
     const int32_t start=le32(b+at+4),span=le32(b+at+8);
-    if(span>0)persist_write_data(SAT_KEY+ring(start/span),b+at,SAT_SEGMENT_BYTES);
+    if(span>0)persist_write_data(SAT_KEY+(uint32_t)(((start/span)%SAT_RING+SAT_RING)%SAT_RING),b+at,SAT_SEGMENT_BYTES);
   }
 }
 void pass_blocks_store(const uint8_t *b,size_t n){
@@ -44,7 +47,7 @@ static bool sat_segment_load(int32_t norad,int64_t t,SatSegment *seg){
   static const int32_t spans[2]={3600,21600};
   for(int k=0;k<2;k++){
     uint8_t b[SAT_SEGMENT_BYTES];const int32_t start=(int32_t)(t/spans[k]*spans[k]);
-    if(persist_read_data(SAT_KEY+ring(start/spans[k]),b,sizeof b)!=(int)sizeof b)continue;
+    if(persist_read_data(SAT_KEY+(uint32_t)(((start/spans[k])%SAT_RING+SAT_RING)%SAT_RING),b,sizeof b)!=(int)sizeof b)continue;
     if(le32(b)==norad&&le32(b+4)==start&&le32(b+8)==spans[k])return sat_segment_decode(b,seg);
   }
   return false;
@@ -113,10 +116,11 @@ static size_t resource_read(void *source,uint32_t at,uint8_t *out,size_t n){
 static Days *s_days;
 void local_chart_done(void){free(s_days);s_days=NULL;}
 ChartBuild *local_chart(time_t now,const WatchSettings *s){
-  if(s->body>BODY_SATELLITE)return NULL;
+  if(s->body>BODY_SATELLITE||(s->body==BODY_SATELLITE&&s->view==VIEW_DAY))return NULL;
   const struct tm *lt=localtime(&now);
   ChartInput in;memset(&in,0,sizeof in);
-  in.body=s->body;in.plate=s->plate;in.flag=s->flag;in.clock24=s->clock24;
+  const bool sat=s->body==BODY_SATELLITE;
+  in.body=sat&&s->station?3:s->body;in.view=sat&&s->view==VIEW_WORLD;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.flag=s->flag;in.clock24=s->clock24;
   in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
   in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
@@ -131,10 +135,12 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   #define days (*d_)
   days.n=days.nsat=0;days.pass_len[0]=days.pass_len[1]=0;
   for(int64_t d=(in.start-2400)/86400;d<=(in.start+6000)/86400&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
-  if(s->body==BODY_SATELLITE){
-    // GPS: its segments over the track, and home's passes for the hour.
-    for(int64_t t=in.start-2400;t<=in.start+6000&&days.nsat<4;){
-      if(!sat_segment_load(GPS_NORAD,t,&days.sat[days.nsat])){local_chart_done();return NULL;}
+  if(sat){
+    // A satellite: its segments over the track, and home's passes for the
+    // hour.
+    const int lead=in.view?1200:2400;
+    for(int64_t t=in.start-lead;t<=in.start+3600+lead&&days.nsat<4;){
+      if(!sat_segment_load(s->norad,t,&days.sat[days.nsat])){local_chart_done();return NULL;}
       t=days.sat[days.nsat].start+(int64_t)days.sat[days.nsat].span;days.nsat++;
     }
     for(int k=0;k<2;k++){
@@ -148,7 +154,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   static ResHandle map,figures;map=resource_get_handle(RESOURCE_ID_MAP_PACK);figures=resource_get_handle(RESOURCE_ID_FIGURES);
   const ChartSources src={.map=resource_read,.map_source=&map,.figures=resource_read,.figure_source=&figures,
     .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,
-    .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free};
+    .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc};
   #undef days
   ChartBuild *build=chart_begin(&in,&src);
   if(!build){APP_LOG(APP_LOG_LEVEL_ERROR,"No chart started (%u bytes free)",(unsigned)heap_bytes_free());local_chart_done();}

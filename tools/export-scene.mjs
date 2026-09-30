@@ -3,12 +3,15 @@
 // is described in src/native-scene.js.
 //
 //   node tools/export-scene.mjs <out-dir> <name> <body> <hour ISO> <plate> flag|noflag [minutes...]
+//
+// TLE_FILE names element sets (three lines each) for live satellites.
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {buildScene as build} from '../src/native-scene.js';
 import {decodeRelief} from '../src/relief.js';
 import {MINUTE} from '../src/ephemeris.js';
 import {HOMES} from '../src/home.js';
+import {registerElements} from '../src/satellites.js';
 
 let atlas,meters;
 // The tools' scenes: UTC, with New York as home.
@@ -20,6 +23,7 @@ export function buildScene(options){
 }
 
 if(process.argv[1]===fileURLToPath(import.meta.url)){
+  if(process.env.TLE_FILE){const lines=readFileSync(process.env.TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','file');}
   const [out,name,body,hourIso,plateKey,flagArg,...minuteArgs]=process.argv.slice(2);
   const minutes=minuteArgs.length?minuteArgs.map(Number):[0,7,24,38,59],start=Date.parse(hourIso);
   const {scene,renderer,state}=buildScene({body,start,plate:plateKey,flag:flagArg==='flag'});

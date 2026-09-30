@@ -21,9 +21,12 @@ typedef struct {
 typedef struct {char code[4];double lat,lon;} Station;
 typedef struct {uint8_t width,height;uint16_t first;} FigureGlyph;
 
-#define CHART_TRACK_MAX 141
+// Track points: 141 on the hour chart, 401 on the world band.
+#define CHART_TRACK_MAX 401
 typedef struct {
-  int body;                  // 0 the Sun, 1 the Moon, 2 a satellite on the hour chart (GPS)
+  int body;                  // 0 the Sun, 1 the Moon, 2 a satellite, 3 a space station
+  int view;                  // 0 the hour chart, 1 the world band (fast satellites)
+  char code[4];              // a satellite's code ("ISS"), for the world band's margin
   int plate;                 // index into PLATES (src/enroute-render.js order)
   bool flag;                 // the minute flag
   bool clock24;
@@ -49,6 +52,8 @@ typedef struct {
   const SatSegment *(*satellite)(void *context,int64_t t);void *satellite_context;
   void (*pass_line)(void *context,int64_t t,char out[24]);void *pass_context;
   void *(*alloc)(size_t);void (*release)(void *);
+  // Shrinks an allocation in place or moves it (realloc); may be NULL.
+  void *(*resize)(void *,size_t);
 } ChartSources;
 
 // Builds the hour's scene: the minute renderer's own (enr_real values:
@@ -68,6 +73,13 @@ ChartBuild *chart_begin(const ChartInput *in,const ChartSources *src);
 int chart_step(ChartBuild *build);
 EnrScene *chart_finish(ChartBuild *build);
 void chart_abort(ChartBuild *build);
+// Why the last build failed, for the log.
+const char *chart_failure(void);
 // The class plane (200x228 bytes) as row runs of (count, class), as the
 // phone packs them; allocated with alloc and owned by the scene.
 bool chart_runs(const uint8_t *classes,EnrScene *scene,void *(*alloc)(size_t));
+// The same over the plane itself where it can, shrunk with src->resize;
+// takes the plane either way.
+bool chart_runs_in_place(uint8_t *classes,EnrScene *scene,const ChartSources *src);
+// The same, returning the runs and filling row_offset[H+1].
+const uint8_t *chart_plane_runs(uint8_t *classes,uint16_t *row_offset,const ChartSources *src);

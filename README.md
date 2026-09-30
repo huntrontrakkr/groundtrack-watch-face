@@ -23,7 +23,7 @@ Read [the Enroute notes](docs/STUDY-06.md), [the Chart notes](docs/STUDY-05.md),
 
 ## Native watchface
 
-`native/` is a Pebble SDK project for the Enroute face on Pebble Time 2 (`emery`). For the Sun and Moon the watch draws each hour's chart itself, from a lossless 236 KB pack of the coastline and relief data in its resources and daily Chebyshev segments of the Sun and Moon the phone sends weeks ahead; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel. GPS is built on the watch too, from orbit segments the phone fits to CelesTrak's elements a few days ahead. A settings page in the Pebble app picks the body, plate, minute flag and home. It hasn't run on a watch or a phone yet. [docs/NATIVE.md](docs/NATIVE.md) has the design, the measurements, how to build and what's still open.
+`native/` is a Pebble SDK project for the Enroute face on Pebble Time 2 (`emery`). For the Sun and Moon the watch draws each hour's chart itself, from a lossless 236 KB pack of the coastline and relief data in its resources and daily Chebyshev segments of the Sun and Moon the phone sends weeks ahead; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel. GPS's hour chart and the world band of the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20 are built on the watch too, from orbit segments the phone fits to CelesTrak's elements a few days ahead. A settings page in the Pebble app picks the body, plate, minute flag and home. It hasn't run on a watch or a phone yet. [docs/NATIVE.md](docs/NATIVE.md) has the design, the measurements, how to build and what's still open.
 
 ## Data and light
 

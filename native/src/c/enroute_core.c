@@ -12,8 +12,10 @@
 // sin(-0.833°) and sin(-6°), the browser's own values.
 static const enr_real SUNRISE_SINE=-0.014538080502496949,CIVIL_TWILIGHT_SINE=-0.10452846326765346;
 static const uint8_t BAYER[16]={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
-// Layers over the ground, from the class plane's high nibble.
-enum {L_PLAIN,L_CONTOUR,L_COAST,L_SHELF,L_WATERLINE,L_CLEARED,L_GRID,L_ROUTE,L_INK,L_MARK,L_SPACE_INK,L_SPACE,L_EARLY_CLEARED,L_EARLY_INK};
+// Layers over the ground, from the class plane's high nibble: the network's
+// grid is drawn over home's acquisition circle; early knockouts and ink lie
+// under the route's bold line, late ones over the body.
+enum {L_PLAIN,L_CONTOUR,L_COAST,L_SHELF,L_WATERLINE,L_CLEARED,L_GRID,L_ROUTE,L_INK,L_MARK,L_SPACE_INK,L_NET_GRID,L_EARLY_CLEARED,L_EARLY_INK,L_LATE_CLEARED,L_LATE_INK};
 // Ground classes, from the low nibble.
 enum {G_WATER,G_LAND,G_SPACE,G_TINT0,G_DEPTH0=8};
 
@@ -75,6 +77,14 @@ static uint8_t base_color(const EnrScene *s,int ground,int z){
   if(ground==G_SPACE)return s->space;
   if(ground<G_DEPTH0)return s->tints[ground-G_TINT0];
   return s->depths[ground-G_DEPTH0];
+}
+// Ink drawn after the body: the space ink over space, home's mark round
+// home, the ink elsewhere.
+static uint8_t late_ink(const EnrScene *s,int ground,int x,int y,int z){
+  if(ground==G_SPACE)return s->space_ink;
+  const int16_t *b=s->home_box;
+  const bool home=(abs(x-s->home_x)<=6&&abs(y-s->home_y)<=6)||(x>=b[0]&&x<b[0]+b[2]&&y>=b[1]&&y<b[1]+b[3]);
+  return s->zoned[home?ENR_MARK:ENR_INK][z];
 }
 static void plot(Ctx *c,int x,int y,uint8_t color){
   if(x<0||y<0||x>=W||y>=H)return;
@@ -189,13 +199,13 @@ static int draw_base(Ctx *c,const uint16_t *mask){
         if(t>0&&BAYER[(y&3)*4+(x&3)]<t*4)col=s->screen;
       }
     }
-    else if(layer==L_CLEARED||layer==L_EARLY_CLEARED)col=base_color(s,ground,z);
-    else if(layer==L_GRID)col=s->zoned[ENR_GRID][z];
+    else if(layer==L_CLEARED||layer==L_EARLY_CLEARED||layer==L_LATE_CLEARED)col=base_color(s,ground,z);
+    else if(layer==L_GRID||layer==L_NET_GRID)col=s->zoned[ENR_GRID][z];
     else if(layer==L_ROUTE)col=s->zoned[ENR_ROUTE][z];
     else if(layer==L_INK||layer==L_EARLY_INK)col=s->zoned[ENR_INK][z];
     else if(layer==L_MARK)col=s->zoned[ENR_MARK][z];
     else if(layer==L_SPACE_INK)col=s->space_ink;
-    else col=s->space;
+    else col=late_ink(s,ground,x,y,z);
     c->frame[y*c->stride+x]=col;
     }
   }
@@ -216,15 +226,26 @@ static void bold_pixel(Ctx *c,int x,int y,void *arg){
   const int layer=class_at(c,bx,by)>>4;
   // Only what was drawn before the route (ground, grid, the network's ink
   // and knockouts, a one-ink plate's casing) lies under the bold line.
-  if(layer<=L_WATERLINE||layer==L_GRID||layer==L_EARLY_CLEARED||layer==L_EARLY_INK)plot(c,bx,by,c->s->zoned[ENR_ROUTE][zone_at(c,x,y)]);
+  if(layer<=L_WATERLINE||layer==L_GRID||layer==L_NET_GRID||layer==L_EARLY_CLEARED||layer==L_EARLY_INK)plot(c,bx,by,c->s->zoned[ENR_ROUTE][zone_at(c,x,y)]);
 }
 static void draw_bold_route(Ctx *c,int minute){
   const EnrScene *s=c->s;const int32_t now=minute*60;
   for(int k=1;k<s->track_count;k++){
     const EnrPoint *a=&s->track[k-1],*b=&s->track[k];
-    if(fabs(b->x-a->x)>W/2||!(a->hour&&b->hour)||b->seconds>now)continue;
-    bool steep=fabs(b->y-a->y)>fabs(b->x-a->x);
-    segment(c,js_round(a->x),js_round(a->y),js_round(b->x),js_round(b->y),bold_pixel,&steep);
+    if((b->step&ENR_JUMP)||!(a->hour&&b->hour)||b->seconds>now)continue;
+    bool steep=b->step&ENR_STEEP;
+    segment(c,a->x,a->y,b->x,b->y,bold_pixel,&steep);
+  }
+}
+
+// Home's acquisition circle on the world band, under everything but the
+// ground and the graticule.
+static void draw_circle(Ctx *c){
+  const EnrScene *s=c->s;const int k=c->m->circle;
+  if(k>=s->circle_count)return;
+  for(int i=0;i<s->circle_n[k];i++){
+    const int x=s->circle_px[k][2*i],y=s->circle_px[k][2*i+1],layer=class_at(c,x,y)>>4;
+    if(layer<=L_WATERLINE||layer==L_GRID)plot(c,x,y,s->zoned[ENR_MARK][zone(c,x,y)]);
   }
 }
 
@@ -316,32 +337,90 @@ static void draw_flag(Ctx *c){
   for(int i=0;i<k;i++)clear(c,digits[i].x,digits[i].y);
 }
 
-// What moves each minute: the body, the flag, Zulu time and the pass line
-// (the bold route only grows, and is drawn over everything each time).
-static void draw_moving(Ctx *c){
-  const EnrScene *scene=c->s;
-  draw_body(c);
-  if(scene->flags&ENR_MINUTE_FLAG)draw_flag(c);
-  Px *text=scratch;
-  const int n=text_pixels(c->m->zulu,5,scene->zulu_x,scene->zulu_baseline,text);
-  letter(c,text,n,ENR_INK,1);
-  int len=0;while(len<(int)sizeof c->m->top&&c->m->top[len])len++;
-  if(len)letter(c,text,text_pixels(c->m->top,len,6,11,text),ENR_INK,1);
+// The world band's tape: the route's ink filled along the baseline up to
+// the index, and the index itself, over the tape's graduations.
+static void draw_index(Ctx *c){
+  const EnrScene *s=c->s;const int B=s->tape_baseline,ix=c->m->index;
+  const uint8_t fill=s->zoned[ENR_ROUTE][0];
+  for(int x=s->tape_x0;x<=s->tape_x1;x++)if((s->forward>0?x<=ix:x>=ix)&&(class_at(c,x,B+1)>>4)==L_PLAIN)plot(c,x,B+1,fill);
+  for(int k=0;k<6;k++)for(int d=-k;d<=k;d++)plot(c,ix+d,B-7+k,s->space);
+  for(int k=0;k<5;k++)for(int d=-k;d<=k;d++)plot(c,ix+d,B-6+k,s->space_ink);
+}
+// With the minute flag, the minutes stand over the index instead.
+static void draw_readout(Ctx *c){
+  const EnrScene *s=c->s;const int lw=text_width(c->m->minute,2),want=js_round(c->m->index-lw/(enr_real)2);
+  const int lx=want>s->tape_hi?s->tape_hi:want,x=lx<s->tape_lo?s->tape_lo:lx;
+  const int n=text_pixels(c->m->minute,2,x,s->tape_baseline-10,scratch);
+  for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,s->space_ink);
+}
+// Of what was drawn after the body, what the browser draws after the minute
+// flag too: home's mark and the margins.
+static bool after_flag(const EnrScene *s,int x,int y){
+  const int16_t *b=s->home_box;
+  return y<14||y>=H-16||(abs(x-s->home_x)<=6&&abs(y-s->home_y)<=6)||(x>=b[0]&&x<b[0]+b[2]&&y>=b[1]&&y<b[1]+b[3]);
+}
+// What was drawn after the body in the hour's layer (with `flag`, only what
+// was drawn after the flag), drawn again over it.
+static void draw_late(Ctx *c,const int *box,bool flag){
+  if(box[0]>box[2]||c->measure)return;
+  const EnrScene *s=c->s;
+  for(int y=box[1]<0?0:box[1];y<=box[3]&&y<H;y++)for(int x=box[0]<0?0:box[0];x<=box[2]&&x<W;x++){
+    if(flag&&!after_flag(s,x,y))continue;
+    const uint8_t cls=class_at(c,x,y);const int layer=cls>>4;
+    if(layer==L_LATE_CLEARED)plot(c,x,y,base_color(s,cls&15,zone(c,x,y)));
+    else if(layer==L_LATE_INK)plot(c,x,y,late_ink(s,cls&15,x,y,zone(c,x,y)));
+  }
+}
+static void draw_text(Ctx *c,const char *text,int max,int x,int right,int baseline){
+  int len=0;while(len<max&&text[len])len++;
+  if(!len)return;
+  if(right)x=right-text_width(text,len);
+  letter(c,scratch,text_pixels(text,len,x,baseline,scratch),ENR_INK,1);
+}
+// What moves each minute, in the order the browser draws it: the body and
+// its flag (or the tape's index and minutes), what was drawn over them, then
+// the margins' Zulu time, pass line and height. PART_ALL draws them all; a
+// single part is drawn alone, to measure where it goes.
+enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_ZULU,PART_TOP,PART_HEIGHT,PART_CIRCLE,PARTS};
+static void draw_moving(Ctx *c,int part){
+  const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=s->view==ENR_VIEW_WORLD,flag=s->flags&ENR_MINUTE_FLAG;
+  if(part==PART_CIRCLE){draw_circle(c);return;}
+  if(!part||part==PART_BODY){
+    // The body, then what lies over it; the flag, then what lies over that.
+    Ctx box=*c;box.measure=true;
+    draw_body(c);
+    if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_body(&box);draw_late(c,box.box,false);}
+    if(flag&&!world){
+      draw_flag(c);
+      if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_flag(&box);draw_late(c,box.box,true);}
+    }
+  }
+  if(world&&(!part||part==PART_INDEX))draw_index(c);
+  if(world&&flag&&(!part||part==PART_READOUT))draw_readout(c);
+  if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
+  if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
+  if(world&&(!part||part==PART_HEIGHT))draw_text(c,m->height,sizeof m->height,0,s->height_right,s->height_baseline);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint16_t *mask){
   minute=minute<0?0:minute>59?59:minute;
   Ctx c={scene,&scene->minutes[minute],frame,row_stride,{0,0,0},0,false,{0,0,0,0}};
   const int drawn=draw_base(&c,mask);
+  draw_circle(&c);
   draw_bold_route(&c,minute);
-  draw_moving(&c);
+  draw_moving(&c,PART_ALL);
   return drawn;
 }
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){render(scene,minute,frame,row_stride,NULL);}
 
+void enr_ready(EnrScene *s){
+  memset(s->ground_rows,0,sizeof s->ground_rows);
+  for(int y=0;y<H;y++)for(unsigned k=s->row_offset[y];k<s->row_offset[y+1];k+=2)if((s->runs[k+1]&15)!=G_SPACE){s->ground_rows[y>>3]|=(uint8_t)(1<<(y&7));break;}
+}
 static void night_blocks(const EnrScene *s,int m0,int m1,uint16_t *mask){
   enr_real lo[2][BLOCKS],hi[2][BLOCKS];
   block_bounds(s,m0,lo[0],hi[0]);block_bounds(s,m1,lo[1],hi[1]);
-  for(int y=0;y<H;y++)for(int b=0;b<BLOCKS;b++){
+  // Night never shows over space.
+  for(int y=0;y<H;y++)if(s->ground_rows[y>>3]>>(y&7)&1)for(int b=0;b<BLOCKS;b++){
     const int s0=block_state(s,m0,lo[0],hi[0],y,b),s1=block_state(s,m1,lo[1],hi[1],y,b);
     if(s0==2||s1==2||s0!=s1)mask[y]|=(uint16_t)(1<<b);
   }
@@ -366,10 +445,13 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
   if(from<0||from>59)return render(scene,minute,frame,row_stride,NULL);
   static uint16_t mask[H];memset(mask,0,sizeof mask);
   night_blocks(scene,from,minute,mask);
-  // What moved: where it was and where it is.
-  for(int k=0;k<2;k++){
+  // What moved: where it was and where it is, each part on its own. Home's
+  // acquisition circle moves only when the satellite's height moves it.
+  const bool circle=scene->minutes[from].circle!=scene->minutes[minute].circle;
+  for(int k=0;k<2;k++)for(int part=PART_BODY;part<PARTS;part++){
+    if(part==PART_CIRCLE&&!circle)continue;
     Ctx c={scene,&scene->minutes[k?minute:from],frame,row_stride,{0,0,0},0,true,{W,H,-1,-1}};
-    draw_moving(&c);box_blocks(c.box,mask);
+    draw_moving(&c,part);box_blocks(c.box,mask);
   }
   return render(scene,minute,frame,row_stride,mask);
 }
@@ -386,8 +468,8 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   Reader r={blob,blob+length,true};
   memset(s,0,sizeof *s);
   char magic[4];take(&r,magic,4);
-  if(memcmp(magic,"GTS2",4)||u16(&r)!=W||u16(&r)!=H)return false;
-  s->flags=u8(&r);s->body=u8(&r);s->forward=(int8_t)u8(&r);u8(&r);s->hour_start=i32(&r);
+  if(memcmp(magic,"GTS3",4)||u16(&r)!=W||u16(&r)!=H)return false;
+  s->flags=u8(&r);s->body=u8(&r);s->forward=(int8_t)u8(&r);s->view=u8(&r);s->hour_start=i32(&r);
   for(int k=0;k<ENR_ZONED;k++)for(int z=0;z<3;z++)s->zoned[k][z]=u8(&r);
   s->space=u8(&r);s->space_ink=u8(&r);s->screen=u8(&r);s->waterline=u8(&r);s->terminator=u8(&r);s->night_dots=u8(&r);
   for(int k=0;k<5;k++)s->tints[k]=u8(&r);
@@ -397,15 +479,25 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   for(int x=0;x<W;x++)s->col_cos[x]=f64(&r);
   for(int x=0;x<W;x++)s->col_sin[x]=f64(&r);
   s->c1x=f64(&r);s->normal_x=f64(&r);s->normal_y=f64(&r);s->zulu_x=i16(&r);s->zulu_baseline=i16(&r);
+  s->top_x=i16(&r);s->top_baseline=i16(&r);s->height_right=i16(&r);s->height_baseline=i16(&r);
+  s->tape_x0=i16(&r);s->tape_x1=i16(&r);s->tape_baseline=i16(&r);s->tape_lo=i16(&r);s->tape_hi=i16(&r);
+  s->home_x=i16(&r);s->home_y=i16(&r);for(int k=0;k<4;k++)s->home_box[k]=i16(&r);
   for(int m=0;m<60;m++){
     EnrMinute *e=&s->minutes[m];
     for(int k=0;k<3;k++)e->sun[k]=f64(&r);
     e->mx=f64(&r);e->my=f64(&r);e->moon_fraction=f64(&r);e->waxing=u8(&r);take(&r,e->zulu,5);take(&r,e->minute,2);take(&r,e->top,24);
+    e->index=i16(&r);take(&r,e->height,8);e->circle=u8(&r);
+  }
+  const unsigned circles=u16(&r);if(circles>60)return false;
+  for(unsigned k=0;k<circles;k++){
+    const unsigned n=u16(&r);if(n>255||!r.ok)return false;
+    s->circle_px[k]=alloc(n?2*n:1);if(!s->circle_px[k])return false;
+    s->circle_count=(uint8_t)(k+1);s->circle_n[k]=(uint8_t)n;take(&r,s->circle_px[k],2*n);
   }
   s->track_count=u16(&r);
   s->track=alloc(sizeof(EnrPoint)*(s->track_count?s->track_count:1));
   if(!s->track)return false;
-  for(int k=0;k<s->track_count;k++){EnrPoint *p=&s->track[k];p->x=f64(&r);p->y=f64(&r);p->seconds=i32(&r);p->hour=u8(&r);}
+  for(int k=0;k<s->track_count;k++){EnrPoint *p=&s->track[k];p->x=i16(&r);p->y=i16(&r);p->seconds=i32(&r);p->hour=u8(&r);p->step=u8(&r);}
   for(int y=0;y<=H;y++)s->row_offset[y]=u16(&r);
   const size_t runs=s->row_offset[H];
   if(!r.ok||(size_t)(r.end-r.p)!=runs||runs%2)return false;
@@ -417,10 +509,13 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   }
   if(borrow)s->runs=r.p;
   else{uint8_t *copy=alloc(runs?runs:1);if(!copy)return false;memcpy(copy,r.p,runs);s->runs=copy;s->owns_runs=true;}
+  enr_ready(s);
   return true;
 }
 void enr_free(EnrScene *s,void (*release)(void *)){
   if(s->track)release(s->track);
+  for(int k=0;k<s->circle_count;k++)release(s->circle_px[k]);
+  s->circle_count=0;
   if(s->owns_runs)release((void *)s->runs);
   s->track=0;s->runs=0;s->owns_runs=false;
 }

@@ -157,8 +157,9 @@ test('the phone fetches live elements, keeps them two hours, and falls back to t
     assert.equal(JSON.parse(stored['tle-36585']).fetched,now);
     p=run(stored,()=>{throw new Error('no request expected');});p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.equal(p.requests.length,0);assert.ok(Buffer.from(scenes(p.messages)[0].bytes).equals(live));
-    // A satellite the watch can't draw yet: the watch is told, not left waiting.
-    p=run({body:'sat:25544',timeZone:zone},()=>null);p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
+    // A view the watch can't draw yet (QZSS's day): the watch is told, not
+    // left waiting.
+    p=run({body:'sat:42738',timeZone:zone},()=>null);p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.equal(JSON.stringify(p.messages),JSON.stringify([{SceneStatus:'VIEW NOT YET ON WATCH'}]));
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
@@ -172,7 +173,11 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     const p=phone(bundle,now,{body:'moon',plate:'crt',flag:'0',timeZone:zone});
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0]}]));
+    // A satellite: its catalog number, kind (a station, on the world band)
+    // and code.
+    const q=phone(bundle,now,{body:'sat:25544',plate:'crt',flag:'0',timeZone:zone});q.listeners.ready({});await q.quiet();
+    assert.equal(JSON.stringify(q.messages[0].Settings.slice(13)),JSON.stringify([25544&255,25544>>8,0,0,1|1<<1,...'ISS'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
     // Asked from a day, the Sun and Moon to 45 days ahead, and home's rise
     // and set for 45 local dates.
     const today=Math.floor(now/86400000);p.messages.length=0;

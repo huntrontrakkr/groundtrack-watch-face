@@ -2,27 +2,38 @@
 // it (native/src/c/enroute_core.c). Runs anywhere the renderer does: in
 // Node for the tests and tools, and bundled into the phone app.
 //
-// Scene file (little-endian), version 2:
-//   'GTS2', u16 W, u16 H, u8 flags (1 zones night, 2 scan, 4 terminator,
+// Scene file (little-endian), version 3:
+//   'GTS3', u16 W, u16 H, u8 flags (1 zones night, 2 scan, 4 terminator,
 //   8 night dots, 16 minute flag), u8 body (0 Sun, 1 Moon, 2 satellite,
-//   3 station), i8 forward, u8 pad, i32 hour start (Unix seconds)
+//   3 station), i8 forward, u8 view (0 the hour chart, 1 the world band),
+//   i32 hour start (Unix seconds)
 //   palette: water land coast contour shelf grid route ink mark (x3 zones),
 //   then space spaceInk screen waterline terminator nightDots, tints[5],
 //   depths[2], all as Pebble GColor8 (0b11rrggbb)
 //   f64 rowCos[H], rowSin[H], colCos[W], colSin[W]
-//   f64 c1x, normal x, normal y; i16 zulu x, zulu baseline
+//   f64 c1x, normal x, normal y; i16 zulu x, zulu baseline, pass line x,
+//   pass line baseline, height's right edge, height's baseline
+//   the world band's tape: i16 x0, x1, baseline, the minutes' least and
+//   greatest x; home: i16 x, y (-1000 without), box x, y, w, h
 //   60 minutes: f64 sun[3], f64 marker x, y, f64 moon fraction, u8 waxing,
 //   char zulu[5], u8 minute text[2], char top line[24] (a satellite's pass
-//   line, NUL-padded, '°' as 0x7f; empty when the line is fixed)
-//   u16 track count, then per point f64 x, y, i32 seconds from the hour, u8 hour
+//   line, NUL-padded, '°' as 0x7f; empty when the line is fixed), i16 the
+//   tape's index x, char height[8] ("412 KM", NUL-padded), u8 home's
+//   acquisition circle (255 for none)
+//   u16 circle count, then per circle u16 n and n (u8 x, u8 y)
+//   u16 track count, then per point i16 x, y (rounded), i32 seconds from the
+//   hour, u8 hour, u8 step from the point before (1 steep, 2 a jump across
+//   the band's seam)
 //   u16 row offsets[H+1] into the runs, then the class plane as runs of
 //   (u8 count, u8 class) that never cross a row. Each class byte: low
 //   nibble ground class, high nibble layer (0 plain,
 //   1 contour, 2 coast, 3 shelf, 4 waterline, 5 knockout, 6 grid, 7 route,
-//   8 ink, 9 mark, 10 ink over space, 11 space, 12 knockout and 13 ink
-//   drawn before the route)
+//   8 ink, 9 mark, 10 ink over space, 11 grid drawn after home's
+//   acquisition circle, 12 knockout and 13 ink drawn before the route, 14
+//   knockout and 15 ink (or mark, round home) drawn after the body)
 import {sin,cos} from './fmath.js';
-import {EnrouteRenderer,renderEnroute,PLATES,passText,W,H} from './enroute-render.js';
+import {EnrouteRenderer,renderEnroute,PLATES,passText,homeCircle,W,H} from './enroute-render.js';
+import {clockParts} from './render.js';
 import {position,moonLight,MINUTE} from './ephemeris.js';
 import {catalogEntry} from './satellites.js';
 import {registerNominal} from './nominal.js';
@@ -36,7 +47,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   const state={body,epoch:start,timeZone,clock24,plate:plateKey,home,events:[],readout:flag?'flag':false};
   const r=new EnrouteRenderer(atlas,meters);r.render(state);
   const cam=r.camera,pal=PLATES[plateKey];
-  if(cam.world||cam.fuller||cam.day)throw new Error('Only the hour chart is exported');
+  if(cam.fuller||cam.day)throw new Error('Only the hour chart and the world band are exported');
 
   // A probe plate: the target plate's structure, every color unique, so each
   // drawn pixel's class can be read back from its color.
@@ -55,8 +66,15 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   const classes=new Uint8Array(W*H);
   for(let i=0;i<W*H;i++){
     let layer=base.trace[i]===2?5:base.trace[i]===1?LAYER[key(i)]:base.overlay[i];
+    const stage=base.trace[i]?base.stages[i]:0;
+    // Space painted over space (the tape's panel) is plain space.
+    if(layer===11){if(base.baseClass[i]!==2)throw new Error(`Space over ground at ${i%W},${Math.floor(i/W)}`);layer=0;}
+    // Grid over home's acquisition circle: the network's circles.
+    if(layer===6&&stage>=1)layer=11;
     // Knockouts and ink from before the route, which its bold line may cover.
     if(base.beforeRoute[i]&&layer===5)layer=12;else if(base.beforeRoute[i]&&layer===8)layer=13;
+    // And after the body, which passes under them.
+    if(stage===3){if(layer===5)layer=14;else if(layer===8||layer===9||layer===10)layer=15;else if(layer)throw new Error(`Layer ${layer} after the body at ${i%W},${Math.floor(i/W)}`);}
     if(layer===undefined)throw new Error(`Unclassified pixel ${i%W},${Math.floor(i/W)} ${key(i)}`);
     classes[i]=layer<<4|base.baseClass[i];
   }
@@ -64,11 +82,11 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   const bytes=[],scratch=new DataView(new ArrayBuffer(8)),u8=v=>bytes.push(v&255),i8=v=>u8(v<0?v+256:v),u16=v=>{u8(v);u8(v>>8);},i16=v=>u16(v<0?v+65536:v);
   const i32=v=>{scratch.setInt32(0,v,true);for(let k=0;k<4;k++)bytes.push(scratch.getUint8(k));},f64=v=>{scratch.setFloat64(0,v,true);for(let k=0;k<8;k++)bytes.push(scratch.getUint8(k));};
   const g8=c=>c?0xC0|(c[0]/85)<<4|(c[1]/85)<<2|c[2]/85:0;
-  for(const c of 'GTS2')u8(c.charCodeAt(0));
+  for(const c of 'GTS3')u8(c.charCodeAt(0));
   u16(W);u16(H);
   u8((pal.night==='zones'?1:0)|(pal.scan?2:0)|(pal.terminator?4:0)|(pal.nightDots?8:0)|(flag?16:0));
   const kind=body==='sun'?0:body==='moon'?1:catalogEntry(body)?.symbol==='satellite'?2:3;u8(kind);
-  const [s0,s1]=cam.stations;i8(s1.x>s0.x?1:-1);u8(0);i32(Math.floor(start/1000));
+  const [s0,s1]=cam.stations,forward=Math.round(s1.x)>Math.round(s0.x);i8(forward?1:-1);u8(cam.world?1:0);i32(Math.floor(start/1000));
   for(const k of ['water','land','coast','contour','shelf','grid','route','ink','mark'])for(let z=0;z<3;z++)u8(g8(pal[k][z]));
   for(const k of ['space','spaceInk','screen','waterline','terminator','nightDots'])u8(g8(pal[k]));
   for(let k=0;k<5;k++)u8(g8(pal.tints?.[k]?.[1]));for(let k=0;k<2;k++)u8(g8(pal.depths?.[k]?.[1]));
@@ -78,15 +96,34 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   for(let x=0;x<W;x++){const lon=cam.toGround(x+.5,0.5).lon*RAD;cols.push([cos(lon),sin(lon)]);}
   for(const [c] of rows)f64(c);for(const [,s] of rows)f64(s);for(const [c] of cols)f64(c);for(const [,s] of cols)f64(s);
   f64(s1.x);f64(cam.normal?.x??0);f64(cam.normal?.y??-1);i16(base.zuluAt.x);i16(base.zuluAt.baseline);
+  i16(base.topAt.x);i16(base.topAt.baseline);i16(base.altAt?.right??0);i16(base.altAt?.baseline??0);
+  const tape=base.tapeAt;for(const v of tape?[tape.x0,tape.x1,tape.baseline,tape.inner[0],tape.inner[1]]:[0,0,0,0,0])i16(v);
+  const hm=base.home;for(const v of hm?[hm.x,hm.y,hm.box.x,hm.box.y,hm.box.w,hm.box.h]:[-1000,-1000,0,0,0,0])i16(v);
+  // Home's acquisition circle on the world band, which changes with the
+  // satellite's height; minutes that plot the same pixels share one.
+  const circles=[],circleKeys=new Map();
   for(let m=0;m<60;m++){
     const t=start+m*MINUTE,sun=position('sun',t).dir,b=position(body,t),p=cam.project(b.lat,b.lon),moon=moonLight(t),d=new Date(t);
     for(const v of sun)f64(v);f64(p.x);f64(p.y);f64(moon.fraction);u8(moon.waxing?1:0);
     for(const c of `${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}Z`)u8(c.charCodeAt(0));
-    for(const c of String(d.getUTCMinutes()).padStart(2,'0'))u8(c.charCodeAt(0));
+    for(const c of clockParts(t,timeZone).m)u8(c.charCodeAt(0));
     const top=body!=='sun'&&body!=='moon'&&state.home?passText(body,state.home,t,timeZone):'';
     for(let k=0;k<24;k++)u8(k<top.length?(top[k]==='°'?0x7f:top.charCodeAt(k)):0);
+    const [x0,x1]=tape?[tape.x0,tape.x1]:[0,0],ix=tape?Math.round(forward?x0+(x1-x0)*m/60:x1-(x1-x0)*m/60):0;i16(ix);
+    const height=cam.world?`${Math.round(b.altitude)} KM`:'';for(let k=0;k<8;k++)u8(k<height.length?height.charCodeAt(k):0);
+    let circle=255;
+    if(cam.world&&state.home){
+      const px=homeCircle(cam,state.home,b.altitude),k=px.map(q=>q.join(',')).join(' ');
+      if(!circleKeys.has(k)){circleKeys.set(k,circles.length);circles.push(px);}
+      circle=circleKeys.get(k);
+    }
+    u8(circle);
   }
-  u16(cam.track.length);for(const p of cam.track){f64(p.x);f64(p.y);i32(Math.round((p.epoch-start)/1000));u8(p.hour?1:0);}
+  u16(circles.length);for(const px of circles){u16(px.length);for(const [x,y] of px){u8(x);u8(y);}}
+  u16(cam.track.length);cam.track.forEach((p,k)=>{
+    const q=cam.track[k-1],step=!q?0:(Math.abs(p.y-q.y)>Math.abs(p.x-q.x)?1:0)|(Math.abs(p.x-q.x)>W/2?2:0);
+    i16(Math.round(p.x));i16(Math.round(p.y));i32(Math.round((p.epoch-start)/1000));u8(p.hour?1:0);u8(step);
+  });
   // The class plane as row runs: charts are mostly flat, so this is a
   // quarter of the plane's size or less.
   const runs=[],offsets=[0];

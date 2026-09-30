@@ -4,13 +4,14 @@
 // bytes. Skipped where no C compiler is available.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {buildScene} from '../tools/export-scene.mjs';
 import {HOMES} from '../src/home.js';
 import {chartInput} from '../tools/chart-input.mjs';
+import {registerLiveFixture} from './tle-fixture.mjs';
 
 let cc=true;try{execFileSync('make',['-s','-C','native/host','chart_test'],{stdio:'pipe'});}catch{cc=false;}
 
@@ -30,16 +31,32 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       // ticks, and home's pass line through the hour.
       ['sat:36585','2026-09-27T13:00:00Z','crt',true,'America/New_York'],
       ['sat:36585','2026-09-27T19:00:00Z','enroute',true,'UTC'],
-      ['sat:36585','2026-09-28T02:00:00Z','sectional',false,'America/New_York']
+      ['sat:36585','2026-09-28T02:00:00Z','sectional',false,'America/New_York'],
+      // The world band, from CelesTrak's elements: stations and satellites,
+      // polar orbits over the band's edges, home's acquisition circle
+      // through the hour.
+      ['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York'],
+      ['sat:25544','2026-09-30T02:00:00Z','enroute',false,'UTC'],
+      ['sat:48274','2026-10-01T06:30:00Z','hypsometric',true,'Asia/Kolkata'],
+      ['sat:20580','2026-09-30T20:00:00Z','sunlight',true,'Europe/London'],
+      ['sat:49260','2026-10-01T09:00:00Z','plotboard',true,'America/New_York'],
+      ['sat:43013','2026-09-30T17:00:00Z','red',false,null],
+      ['sat:43013','2026-10-01T22:00:00Z','sectional',true,'UTC']
     ];
+    registerLiveFixture();
     for(const [body,iso,plate,flag,zone] of cases){
       const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null;
       const {scene}=buildScene({body,start,plate,flag,timeZone,home});
       const out=join(dir,'c.scene');
-      execFileSync('native/host/chart_test',['native/resources/map.pack','native/resources/figures.bin',out],{input:chartInput({body,start,plate,flag,zone:timeZone,home}),stdio:['pipe','pipe','pipe']});
+      const r=spawnSync('native/host/chart_test',['native/resources/map.pack','native/resources/figures.bin',out],{input:chartInput({body,start,plate,flag,zone:timeZone,home})});
+      assert.equal(r.status,0,r.stderr.toString());
       const c=readFileSync(out);
       let first=-1;for(let i=0;i<Math.max(c.length,scene.length);i++)if(c[i]!==scene[i]){first=i;break;}
       assert.equal(first,-1,`${body} ${iso} ${plate}: first difference at byte ${first} of ${scene.length}`);
+      // The build's memory at its peak, counted as the watch's heap would
+      // (with this machine's larger pointers): the watch has about 71 KB.
+      const peak=Number(/peak (\d+)/.exec(r.stderr.toString())[1]);
+      assert.ok(peak<=69000,`${body} ${iso} ${plate}: the build peaks at ${peak} bytes`);
     }
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

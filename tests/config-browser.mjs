@@ -44,6 +44,8 @@ try{
   assert.equal(await page.locator('input[name=plate]').count(),7);
   assert.equal(await page.locator('input[name=plate]:checked').getAttribute('value'),'crt');
   assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
+  // The Sun, the Moon and the six satellites the watch draws (not QZSS's day).
+  assert.deepEqual(await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value)),['sun','moon','sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585']);
   assert.ok(await page.locator('input[name=flag]').isChecked());
   assert.match(await page.locator('#preset-note').textContent(),/Greenwich/);
   assert.ok(await page.locator('#coords').isHidden());
@@ -76,7 +78,7 @@ try{
   for(let i=0;i<200&&!messages.some(m=>m.RiseSets);i++)await new Promise(r=>setTimeout(r,20));
   assert.deepEqual({body:stored.body,plate:stored.plate,flag:stored.flag,home:JSON.parse(stored.home)},{body:'moon',plate:'sectional',flag:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,0,1,1,...i32(4886),...i32(235)]));
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,0,1,1,...i32(4886),...i32(235),...i32(0),0,0,0,0]));
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
 
   // Cancel changes nothing.
