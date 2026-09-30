@@ -3,6 +3,7 @@
 #include "enroute_core.h"
 #include "departure_font.h"
 #include "fmath.h"
+#include "face.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -176,7 +177,7 @@ static bool crosses(const Ctx *c,int x,int y,enr_real level,int32_t q){
   return false;
 }
 // The night a symbol's ink takes where the browser inks it by one point's
-// (Plotboard's ink changes with night): the rose, hexagon and reporting
+// (Console's ink changes with night): the rose, hexagon and reporting
 // point (ink drawn with the route) by their station's, a network station's
 // ring by its centre's; the rest, their own pixel's.
 static int ink_zone(const Ctx *c,int x,int y,bool route_ink,int z){
@@ -609,7 +610,7 @@ static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
   if(!s->fig_bits)return false;
   const int bx=js_round(m->mx),by=js_round(m->my);
   int fh;Px *line=scratch;
-  if(s->view==ENR_VIEW_DAY){
+  if(VIEW_IS_DAY(s->view)){
     const bool big=time_figure(s,m,2,1,g,n,&fh)<=s->callout_left-6;
     const int fw=time_figure(s,m,big?2:1,big?1:0,g,n,&fh);
     *fy=by-fh;if(*fy>s->callout_bottom-fh-3)*fy=s->callout_bottom-fh-3;
@@ -663,23 +664,23 @@ static Box glyph_bounds(const EnrScene *s,const Glyph *g,int n,int fx,int fy,int
 // figures (both solid, as the browser counts them).
 static int minute_boxes(Ctx *c,Box *out){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;int n=0;
-  if(s->view==ENR_VIEW_DAY||(s->view==ENR_VIEW_HOUR&&(s->flags&ENR_CALLOUT))){
+  if(VIEW_IS_DAY(s->view)||(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_CALLOUT))){
     Glyph g[8];int k,fx,fy,shown;if(callout_place(c,g,&k,&fx,&fy,&shown))out[n++]=glyph_bounds(s,g,k,fx,fy,-W,2*W);
-  }else if(s->view==ENR_VIEW_HOUR&&(s->flags&ENR_MINUTE_FLAG)){
+  }else if(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_MINUTE_FLAG)){
     const int mx=js_round(m->mx),my=js_round(m->my);const enr_real nx=s->normal_x,ny=s->normal_y;
     const int tw=text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
     const enr_real room=s->forward>0?s->c1x-mx:mx-s->c1x;
     const int sx=js_round(mx+nx*20),top=js_round(my+ny*20)-(ny<=0?4:0)-(ny>0?fh-4:0);
     const int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
     out[n++]=(Box){d>0?sx+1:sx-fw-point,top,fw+point,fh};
-  }else if(s->view==ENR_VIEW_WORLD&&(s->flags&ENR_SLIDING_TAPE)&&s->fig_bits){
+  }else if(VIEW_IS_WORLD(s->view)&&(s->flags&ENR_SLIDING_TAPE)&&s->fig_bits){
     const int IX=W/2,PX=3,now=(int)(m-s->minutes);int hn=0,nn=0;while(hn<3&&s->tape_hour[hn])hn++;
     while(nn<3&&s->tape_next[nn])nn++;
     const int cw=run_width(s,s->tape_hour,hn,2),nw=run_width(s,s->tape_next,nn,2);
     const int nx=js_round(IX+(60-now)*PX-nw/(enr_real)2);int cx=js_round(IX+(0-now)*PX-cw/(enr_real)2);cx=cx>4?cx:4;cx=cx<nx-cw-8?cx:nx-cw-8;
     Glyph g[3];int k=figure_run(s,s->tape_hour,hn,2,0,0,G_SOLID,g);out[n]=glyph_bounds(s,g,k,cx,4,0,W-1);if(out[n].w)n++;
     k=figure_run(s,s->tape_next,nn,2,0,0,G_SOLID,g);out[n]=glyph_bounds(s,g,k,nx,4,0,W-1);if(out[n].w)n++;
-  }else if(s->view==ENR_VIEW_WORLD&&(s->flags&ENR_MINUTE_FLAG)){
+  }else if(VIEW_IS_WORLD(s->view)&&(s->flags&ENR_MINUTE_FLAG)){
     const int lw=text_width(m->minute,2),want=js_round(m->index-lw/(enr_real)2),lx=want>s->tape_hi?s->tape_hi:want;
     out[n++]=(Box){lx<s->tape_lo?s->tape_lo:lx,s->tape_baseline-18,lw,8};
   }
@@ -707,7 +708,7 @@ static void draw_events(Ctx *c){
 // single part is drawn alone, to measure where it goes.
 enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_CIRCLE,PARTS};
 static void draw_moving(Ctx *c,int part){
-  const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=s->view==ENR_VIEW_WORLD,flag=(s->flags&ENR_MINUTE_FLAG)&&s->view==ENR_VIEW_HOUR;
+  const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=VIEW_IS_WORLD(s->view),flag=(s->flags&ENR_MINUTE_FLAG)&&VIEW_IS_HOUR(s->view);
   if(part==PART_CIRCLE){draw_circle(c);return;}
   if(!part||part==PART_BODY){
     // The body, then what lies over it; the flag, then what lies over that.
@@ -719,7 +720,7 @@ static void draw_moving(Ctx *c,int part){
       if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_flag(&box);draw_late(c,box.box,true);}
     }
   }
-  if((s->view==ENR_VIEW_DAY||(s->view==ENR_VIEW_HOUR&&(s->flags&ENR_CALLOUT)))&&(!part||part==PART_CALLOUT)){
+  if((VIEW_IS_DAY(s->view)||(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_CALLOUT)))&&(!part||part==PART_CALLOUT)){
     draw_callout(c);
     if(!part){Ctx box=*c;box.measure=true;box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_callout(&box);draw_late(c,box.box,true);}
   }

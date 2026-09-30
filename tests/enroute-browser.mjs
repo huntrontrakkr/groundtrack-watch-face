@@ -17,7 +17,7 @@ try{
   assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['4','24','5']);
   // The canvas and the three proofs show exactly the renderer's native pixels.
   let combinations=0;
-  for(const body of ['sun','moon','iss'])for(const plate of ['enroute','sectional','plotboard','hypsometric','red','crt','sunlight'])for(const clock24 of [false,true]){
+  for(const body of ['sun','moon','iss'])for(const plate of ['enroute','sectional','console','hypsometric','red','crt','sunlight'])for(const clock24 of [false,true]){
     const r=await page.evaluate(({body,plate,clock24})=>{
       const g=groundtrackEnroute;Object.assign(g.state,{body,plate,clock24,epoch:g.demos[body]});g.render();
       const shown=document.getElementById('enroute-watch').getContext('2d').getImageData(0,0,200,228).data,own=g.main.last.rgba;let differ=0,invalid=0;
@@ -34,8 +34,8 @@ try{
   await page.locator('#enroute-minute').fill('41');await page.locator('#enroute-minute').dispatchEvent('input');
   assert.equal(await page.locator('#enroute-time').textContent(),'04:41');
   const after=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));assert.equal(after.geometryBuilds,before.geometryBuilds);assert.ok(after.lightBuilds>before.lightBuilds);
-  await page.locator('#enroute-plates [data-plate="plotboard"]').click();
-  const plated=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));assert.equal(plated.lightBuilds,after.lightBuilds);assert.equal(await page.locator('#enroute-proofs [data-plate="plotboard"]').getAttribute('aria-pressed'),'true');
+  await page.locator('#enroute-plates [data-plate="console"]').click();
+  const plated=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));assert.equal(plated.lightBuilds,after.lightBuilds);assert.equal(await page.locator('#enroute-proofs [data-plate="console"]').getAttribute('aria-pressed'),'true');
   await page.locator('#enroute-proofs [data-plate="sectional"]').click();assert.equal(await page.locator('#enroute-plates [data-plate="sectional"]').getAttribute('aria-pressed'),'true');
   const idle=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));await page.waitForTimeout(1100);assert.deepEqual(await page.evaluate(()=>groundtrackEnroute.main.stats),idle);
   // Moonlight applies to the Moon only: three evenings, three kinds of light.

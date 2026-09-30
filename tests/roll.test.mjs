@@ -43,7 +43,7 @@ test('the hour runs left to right, on a floating net with no cuts',()=>{
 test('the Enroute renderer draws a Fuller sheet in native colors, rose turned to north',()=>{
   const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
   for(const [body,epoch] of [['iss',ISS],['sun',SUN]]){
-    const out=new EnrouteRenderer(atlas,meters).render({body,epoch,timeZone:'UTC',clock24:false,plate:'plotboard',projection:'fuller'});
+    const out=new EnrouteRenderer(atlas,meters).render({body,epoch,timeZone:'UTC',clock24:false,plate:'console',projection:'fuller'});
     for(let i=0;i<out.buf.length;i++)assert.equal(out.buf[i]%85,0);
     assert.ok(out.figure.index.x>=out.figure.scale.x0&&out.figure.index.x<=out.figure.scale.x1);
     assert.ok(out.figure.scale.x1>out.figure.scale.x0);

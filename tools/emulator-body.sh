@@ -6,7 +6,10 @@
 # CLOCK24 set the rest, as tools/emulator-check.mjs reads them; EVENTS_STORED
 # the phone's events as it keeps them (JSON [{epoch, title, label}]).
 set -e
-store="$HOME/.local/share/pebble-sdk/4.33.1/emery/localstorage/a0f61ba3-4580-4bf9-a71c-0a83f3d35600"
+# FACE=plotboard for Groundtrack Plotboard (default Enroute).
+if [ "${FACE:-enroute}" = plotboard ]; then project=native-plotboard; else project=native; fi
+uuid=$(python3 -c "import json;print(json.load(open('$(dirname "$0")/../$project/package.json'))['pebble']['uuid'])")
+store="$HOME/.local/share/pebble-sdk/4.33.1/emery/localstorage/$uuid"
 # The emulator too: pebble-tool starts a fresh one when the phone
 # simulator has gone, and the old one would be left running.
 for p in $(ps -eo pid,args | awk '/toolchain\/bin\/qemu-pebble |python -m pypkjs/ && !/awk/ {print $1}'); do kill "$p"; done
@@ -21,4 +24,4 @@ if os.environ.get('EVENTS_STORED'):d[b'events']=os.environ['EVENTS_STORED'].enco
 d.close()
 PY
 cd "$(dirname "$0")/.."
-PATH="$HOME/.local/bin:$PATH" timeout 150 pb install --emulator emery native/build/native.pbw
+PATH="$HOME/.local/bin:$PATH" timeout 150 pb install --emulator emery $project/build/$project.pbw

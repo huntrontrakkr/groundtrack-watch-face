@@ -1,6 +1,6 @@
-# Pebble app-store listing (draft)
+# Pebble app-store listing: Groundtrack Enroute (draft)
 
-Name: **Groundtrack Enroute** (a working title)  
+Name: **Groundtrack Enroute**  
 Type: **Watchface**  
 Platform: **Pebble Time 2 / Emery**  
 Source and support: https://github.com/huntrontrakkr/groundtrack-watch-face
@@ -11,13 +11,13 @@ None yet. Once the listing exists in the Pebble developer dashboard, its id goes
 
 ## Description
 
-The hour as an aeronautical chart. The ground route of the Sun, the Moon or a GPS satellite runs across the map in magenta, from this hour's compass rose to the next hour's reporting point, graduated like a ruler a mark every minute. The body stands on the route at the minute.
+The hour as an aeronautical chart. The ground route of the Sun, the Moon, a GPS satellite or Japan's QZSS runs across the map in magenta, from this hour's compass rose to the next hour's reporting point, graduated like a ruler a mark every minute. The body stands on the route at the minute.
 
 Contour relief, the continental shelf and the coastline come from public-domain elevation data, stored on the watch without loss. Mercury and Apollo tracking stations mark the map, and the calculated Sun brings the night across it.
 
 A home station gives the day's sunrise and sunset, or the satellite's next pass overhead. The margins carry the local date, Zulu time and the day of the year.
 
-Seven plates: Enroute, Sectional, Plotboard, Hypsometric, Night red, Green CRT and Sunlight.
+Seven plates: Enroute, Sectional, Console, Hypsometric, Night red, Green CRT and Sunlight.
 
 The watch draws each hour's chart itself and repaints only what moves each minute. The phone sends the Sun and Moon weeks ahead, and a satellite's orbit a few days ahead, so the face keeps going without it.
 

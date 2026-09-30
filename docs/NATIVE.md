@@ -1,6 +1,13 @@
-# Native: Groundtrack Enroute on the watch
+# Native: Groundtrack Enroute and Plotboard on the watch
 
-The Enroute face on Pebble Time 2 (`emery`, 200×228, 64 colours). `native/` is a Pebble SDK project. For the Sun, the Moon and all seven satellites (GPS on the hour chart; the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20 on the world band; QZSS on the whole-day chart) the watch draws each hour's chart itself, from its own map and ephemeris, and needs the phone only now and then; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel.
+Study 06 on Pebble Time 2 (`emery`, 200×228, 64 colours), as two watch faces built from one source:
+
+- **Groundtrack Enroute** (`native/`): the hour chart of the Sun, the Moon and GPS, and QZSS's whole day (or its hour).
+- **Groundtrack Plotboard** (`native-plotboard/`, whose sources and resources are `native/`'s, linked): the world band of the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20, with its tapes.
+
+Each compiles only its own charts (`native/src/c/face.h`: the other face's code is left out as dead code), so each has room under PebbleOS's 64 KB cap for an app, and heap for its builds: Enroute's code is 53 KB, Plotboard's 52 KB, where the two together were 61 KB. The phone side is one source bundled for each face, with its own bodies and settings; each face has its own app id, listing and settings. The host tests exercise both faces' code together.
+
+For the Sun, the Moon and all seven satellites (GPS on the hour chart; the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20 on the world band; QZSS on the whole-day chart) the watch draws each hour's chart itself, from its own map and ephemeris, and needs the phone only now and then; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel.
 
 ## What runs where
 
@@ -91,7 +98,7 @@ Satellites' element sets are fetched from CelesTrak at most once every two hours
 | The watch's scenes against the phone's (`tests/chart-native.test.mjs`) | byte for byte, across the Sun, the Moon, GPS, the world band's satellites and QZSS's day (from CelesTrak's elements of 29 September 2026, kept in `tests/fixtures`), all seven plates, homes, zones (with a half-hour one) and dates; with each build's peak memory |
 | The map pack (`tests/map-pack.test.mjs`) | every cell exact, in JavaScript and C |
 | Segments, sines, arcsines, arctangents, square roots, remainders (`tests/segments.test.mjs`) | the C gives the JavaScript's bits |
-| The minute renderer against the browser (`tests/native.test.mjs`) | pixel-exact on every plate, Plotboard's symbols inked by their anchor's night as the browser inks them |
+| The minute renderer against the browser (`tests/native.test.mjs`) | pixel-exact on every plate, Console's symbols inked by their anchor's night as the browser inks them |
 | The phone side (`tests/pkjs.test.mjs`, `tests/config-browser.mjs`) | scenes, requests, retries, settings, segments, rise and set |
 | In the emery emulator (firmware 4.33.2, SDK 4.33.1) | the watch's own chart against the browser: 0 pixels differ for the Sun after partial minute redraws, for GPS, the ISS, Landsat 9 (home's acquisition circle and a polar route over the margin) and QZSS's day from live CelesTrak elements; the hour turns with no phone |
 
@@ -103,8 +110,8 @@ These are measurements of the code in the emulator and on the host, not of a wat
 
 | | |
 |---|---|
-| App code and static data | 60.8 KB of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call). The minute renderer's 4.6 KB of working memory is taken from the heap for each drawing, not kept |
-| Heap free at launch | 70 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
+| App code and static data | Enroute 53 KB, Plotboard 52 KB, of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call). The minute renderer's 4.6 KB of working memory is taken from the heap for each drawing, not kept |
+| Heap free at launch | 78–79 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
 | Building the hour, in the emulator | 0.7–1.1 seconds of work, in slices |
 | Radio for the Sun and Moon | settings on launch; about 10 KB of segments every few weeks |
 | Radio for a satellite | GPS about 2.5 KB of segments and passes every day or two; a fast satellite (hour-long segments) about 13 KB every two to three days |
@@ -123,7 +130,7 @@ With [pebble-tool](https://pypi.org/project/pebble-tool/) 5.0.40 and SDK 4.33.1:
 ```sh
 uv tool install --python 3.11 pebble-tool==5.0.40   # or pip
 pebble sdk install 4.33.1
-npm run build:native                  # the phone bundle, then native/build/native.pbw for emery
+npm run build:native                  # both faces: native/build/native.pbw, native-plotboard/build/native-plotboard.pbw
 tools/emulator.sh install --emulator emery native/build/native.pbw
 npm run check:emulator                # screenshot, compared with the browser renderer
 ```
@@ -137,7 +144,7 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 ## Open questions and next steps
 
 1. **Rolling Fuller.** The one view of the study the watch doesn't draw: its map is an icosahedron rolled along the route, and night on it needs each pixel's own direction every minute, which neither the watch's memory nor its 64 KB of code (PebbleOS's cap; a fix, #2174, would raise it) has room for as things stand.
-2. **Code space.** 60 of 64 KB (the plates, stations and relief heights are a resource, `native/resources/tables.bin`, read while a chart is built), and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
+2. **Code space.** 52–53 of 64 KB for each face (the plates, stations and relief heights are a resource, `native/resources/tables.bin`, read while a chart is built), and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
 3. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the `.pbw`, are unchecked.
 4. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.
 5. **Energy on a watch.** The emulator's instruction counts guide the work; current is measured only on a watch, as `docs/ENERGY.md` sets out. No battery claim is made until then.

@@ -4,6 +4,7 @@
 // and cosine from fmath.c. Build without fused multiply-adds.
 #include "chart.h"
 #include "fmath.h"
+#include "face.h"
 #include "departure_font.h"
 #include "generated/chart_data.h"
 #include <math.h>
@@ -542,7 +543,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     if(track[i].b<minlon)minlon=track[i].b;
   }
   Cam cam;memset(&cam,0,sizeof cam);cam.top=0;cam.bottom=H;
-  if(in->view==2){
+  if(VIEW_IS_DAY(in->view)){
     // The whole local day, north up, its shape fitted and set to the right.
     double alo=INFINITY,ahi=-INFINITY,blo=INFINITY,bhi=-INFINITY;
     for(int i=0;i<count;i++){if(track[i].a<alo)alo=track[i].a;if(track[i].a>ahi)ahi=track[i].a;if(track[i].b<blo)blo=track[i].b;if(track[i].b>bhi)bhi=track[i].b;}
@@ -551,7 +552,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     cam.y0=(14+H-16)/2;cam.x0=W-16-(bhi-blo)*cam.k*cam.scale/2;
     h0=0;h1=count-1;
   }
-  else if(in->view){
+  else if(VIEW_IS_WORLD(in->view)){
     // The whole world in a band, fitted to the hour's longitudes, in true
     // proportion.
     cam.world=true;cam.scale=(W-16)/(maxlon-minlon>180?maxlon-minlon:180);cam.k=1;cam.lat0=WORLD_SOUTH;cam.y0=H-10;
@@ -560,6 +561,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     if(in->tape==2){const int i=(in->minute*60+1200)/15;if(i<0||i>=count)FAIL;cam.lonMid=track[i].b;}
     cam.top=(int)ceil(sy(&cam,WORLD_NORTH));cam.bottom=(int)floor(sy(&cam,WORLD_SOUTH));
   }
+  else if(!VIEW_IS_HOUR(in->view))FAIL;
   else if(in->body<2){
     cam.lat0=(maxlat+minlat)/2;cam.k=f_cos(cam.lat0*RAD);
     {const double spread=(maxlon-minlon)*cam.k;cam.scale=CHART_SPAN/(spread>1?spread:1);}
@@ -633,7 +635,7 @@ static bool finish_draw(ChartBuild *b){
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
   const Plate *pal=&b->plate;
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
-  const int count=b->count,h0=b->h0,h1=b->h1;const Cam cam=b->cam;const bool world=cam.world;
+  const int count=b->count,h0=b->h0,h1=b->h1;const Cam cam=b->cam;const bool world=FACE_WORLD&&(!FACE_HOUR||cam.world);
   const int top=cam.top,bottom=cam.bottom;
   Draw *draw=NULL;Px *scratch=NULL;EnrScene *out=NULL;EnrPoint *points=NULL;int16_t zulu_x=0,zulu_baseline=0;
   int16_t tape_lo=0,tape_hi=0;
@@ -668,7 +670,7 @@ static bool finish_draw(ChartBuild *b){
 
   // Graticule: crosses every 5 degrees (30 on the world band), ticks every
   // degree (10) along the edges of the map.
-  const bool day=cam.day;
+  const bool day=FACE_HOUR&&cam.day;
   const int step=world?30:day?10:5,minor=world?10:day?5:1;
   {const double g0lat=glat(&cam,bottom),g0lon=glon(&cam,0),g1lat=glat(&cam,top),g1lon=glon(&cam,W);
   for(double lat=ceil(g0lat/step)*step;lat<=g1lat;lat+=step)for(double lon=ceil(g0lon/step)*step;lon<=g1lon;lon+=step){
@@ -983,7 +985,7 @@ fail:
 // Minutes m0 up to m1 of the scene; home's acquisition circles, minutes
 // that plot the same pixels sharing one.
 static bool finish_minutes(ChartBuild *b,int m0,int m1){
-  const ChartInput *in=&b->in;const ChartSources *src=&b->src;const Cam cam=b->cam;const bool world=cam.world,forward=b->forward;
+  const ChartInput *in=&b->in;const ChartSources *src=&b->src;const Cam cam=b->cam;const bool world=FACE_WORLD&&(!FACE_HOUR||cam.world),forward=b->forward;
   EnrScene *const out=b->out;uint8_t ring[2*120];
   for(int m=m0;m<m1;m++){
     const int64_t t=in->start+m*60;EnrMinute *e=&out->minutes[m];

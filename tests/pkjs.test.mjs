@@ -116,10 +116,12 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     const pe=phone(bundle,now,{body:'sun',timeZone:zone,events});pe.listeners.ready({});await pe.quiet();
     const ebytes=pe.messages.find(m=>m.Events).Events,et=(now+3600000)/1000;
     assert.equal(JSON.stringify(ebytes),JSON.stringify([et&255,(et>>8)&255,(et>>16)&255,(et>>>24)&255,...'RUNNN'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
-    // A satellite: its catalog number, kind (a station, on the world band)
-    // and code.
-    const q=phone(bundle,now,{body:'sat:25544',plate:'crt',flag:'0',timeZone:zone});q.listeners.ready({});await q.quiet();
-    assert.equal(JSON.stringify(q.messages[0].Settings.slice(13,21)),JSON.stringify([25544&255,25544>>8,0,0,1|1<<1,...'ISS'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
+    // A satellite: its catalog number, kind (on the hour chart) and code; a
+    // body of the other face (the ISS) is not taken.
+    const q=phone(bundle,now,{body:'sat:36585',plate:'crt',flag:'0',timeZone:zone});q.listeners.ready({});await q.quiet();
+    assert.equal(JSON.stringify(q.messages[0].Settings.slice(13,21)),JSON.stringify([36585&255,36585>>8,0,0,0,...'GPS'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
+    const o=phone(bundle,now,{body:'sat:25544',timeZone:zone});o.listeners.ready({});await o.quiet();
+    assert.equal(o.messages[0].Settings[0],0);
     // Asked from a day, the Sun and Moon to 45 days ahead, and home's rise
     // and set for 45 local dates.
     const today=Math.floor(now/86400000);p.messages.length=0;
@@ -136,5 +138,29 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     assert.equal(rise[0]|rise[1]<<8|rise[2]<<16,Date.UTC(2026,8,29)/86400000);
     assert.deepEqual([`HOM SR ${hhmm(u16(0))}`,`SS ${hhmm(u16(1))}`],riseText('sun',HOMES[zone],Date.parse('2026-09-29T22:00:00Z'),zone));
     assert.deepEqual([`HOM MR ${hhmm(u16(2))}`,`MS ${hhmm(u16(3))}`],riseText('moon',HOMES[zone],Date.parse('2026-09-29T22:00:00Z'),zone));
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('Groundtrack Plotboard\'s phone side: the fast satellites, the ISS first, the world band\'s options',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
+  try{
+    const out=join(dir,'index.js');execFileSync(process.execPath,['tools/build-pkjs.mjs','--face','plotboard',out],{stdio:'pipe'});
+    const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-29T22:30:00Z');
+    // With nothing set, the ISS on the world band; a body of the other face
+    // is not taken.
+    for(const stored of [{timeZone:'UTC'},{timeZone:'UTC',body:'sun'}]){
+      const p=phone(bundle,now,stored);p.listeners.ready({});await p.quiet();
+      const set=p.messages.find(m=>m.Settings).Settings;
+      assert.equal(JSON.stringify([set[0],set[13]|set[14]<<8,set[17],String.fromCharCode(...set.slice(18,21))]),JSON.stringify([2,25544,1|1<<1,'ISS']));
+    }
+    // The settings page: the five fast satellites, no Sun or Moon.
+    let opened=null;const listeners={};
+    const context=vm.createContext({console:{log:()=>{}},setTimeout,navigator:{},localStorage:{getItem:()=>null,setItem:()=>{}},
+      Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{opened=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
+    vm.runInContext(`Date.now=()=>${now};`,context);vm.runInContext(bundle,context);
+    listeners.showConfiguration({});for(let i=0;i<300&&!opened;i++)await new Promise(r=>setTimeout(r,20));
+    const config=JSON.parse(/var config=(\{.*?\}),s=config/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
+    assert.equal(config.face,'plotboard');
+    assert.deepEqual(config.bodies.map(b=>b[0]),['sat:25544','sat:48274','sat:20580','sat:49260','sat:43013']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

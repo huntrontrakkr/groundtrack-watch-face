@@ -51,6 +51,6 @@ test('events stand on the day strip and the satellite’s world band too',()=>{
   const r=new EnrouteRenderer(atlas,meters);
   const day=r.render({body:'sun',epoch:SUN,timeZone:'America/New_York',clock24:false,plate:'enroute',projection:'fuller',events:STUDY_EVENTS});
   assert.deepEqual(day.events.map(e=>e.label),['RUNNN','DINNR']);
-  const world=r.render({body:'iss',epoch:ISS,timeZone:'UTC',clock24:false,plate:'plotboard',events:STUDY_EVENTS});
+  const world=r.render({body:'iss',epoch:ISS,timeZone:'UTC',clock24:false,plate:'console',events:STUDY_EVENTS});
   assert.deepEqual(world.events.map(e=>e.label),['STAND']);assert.ok(world.events[0].box);
 });

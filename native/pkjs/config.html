@@ -42,13 +42,13 @@
 </head>
 <body>
 <header>
-  <h1>Groundtrack Enroute</h1>
+  <h1 id="title">Groundtrack Enroute</h1>
   <p>The watch draws each hour's chart from its own map, with the Sun, Moon and satellites the phone sends ahead. Saving draws this hour again.</p>
 </header>
 <form id="form">
   <fieldset><legend>Track</legend>
-    <label class="row"><input type="radio" name="body" value="sun"><span class="name">Sun<span class="note">Its ground point, where it stands overhead</span></span></label>
-    <label class="row"><input type="radio" name="body" value="moon"><span class="name">Moon<span class="note">In its calculated phase</span></span></label>
+    <label class="row enroute"><input type="radio" name="body" value="sun"><span class="name">Sun<span class="note">Its ground point, where it stands overhead</span></span></label>
+    <label class="row enroute"><input type="radio" name="body" value="moon"><span class="name">Moon<span class="note">In its calculated phase</span></span></label>
     <div id="satellites"></div>
   </fieldset>
   <fieldset><legend>Plate</legend><div id="plates"></div></fieldset>
@@ -58,9 +58,9 @@
   <fieldset><legend>Minute readout</legend>
     <label class="row"><input type="radio" name="readout" value="off"><span class="name">Off<span class="note">The body on the graduated route is the index</span></span></label>
     <label class="row"><input type="radio" name="readout" value="flag"><span class="name">Minute flag<span class="note">A pennant on a staff from the body, with the minutes</span></span></label>
-    <label class="row"><input type="radio" name="readout" value="callout"><span class="name">Time callout<span class="note">The time in full, hung from a leader</span></span></label>
+    <label class="row enroute"><input type="radio" name="readout" value="callout"><span class="name">Time callout<span class="note">The time in full, hung from a leader</span></span></label>
   </fieldset>
-  <fieldset><legend>Callout time</legend>
+  <fieldset class="enroute"><legend>Callout time</legend>
     <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Four figures, minutes outlined</span></label>
     <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Minutes in route ink</span></label>
     <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Minutes in Departure Mono</span></label>
@@ -71,12 +71,12 @@
     <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)</span></label>
     <label class="row"><input type="radio" name="margin" value="body"><span class="name">Nautical zone under the body<span class="note">Its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
   </fieldset>
-  <fieldset><legend>Time scale</legend>
+  <fieldset class="plotboard"><legend>Time scale</legend>
     <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Fixed<span class="note">For the world band: a ruler with a moving pointer</span></span></label>
     <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
     <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Tape + world<span class="note">The map scrolls too, the satellite always under the index; the watch draws the whole chart each minute, which costs battery</span></span></label>
   </fieldset>
-  <fieldset><legend>QZSS chart</legend>
+  <fieldset class="enroute"><legend>QZSS chart</legend>
     <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">Its figure-8, the day's hours along it</span></span></label>
     <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">On the hour chart, zoomed far in over Japan or Australia</span></span></label>
   </fieldset>
@@ -109,6 +109,11 @@
   // satellites), plates:[[key,name,note]], preset, position: the phone's fix
   // {lat, lon} or null}
   var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
+  // Each face shows what it draws: Enroute the hour chart and the whole day,
+  // Plotboard the world band.
+  var plotboard=config.face==='plotboard';
+  document.getElementById('title').textContent=plotboard?'Groundtrack Plotboard':'Groundtrack Enroute';
+  [].forEach.call(document.querySelectorAll(plotboard?'.enroute':'.plotboard'),function(e){e.remove();});
   function rows(list,name,into){
     list.forEach(function(p){
       var row=document.createElement('label');row.className='row';
@@ -121,8 +126,9 @@
   }
   rows(config.bodies||[],'body',document.getElementById('satellites'));
   rows(config.plates,'plate',document.getElementById('plates'));
-  function pick(name,value){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
-  function picked(name){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
+  // (A face may show only some of the options.)
+  function pick(name,value){var inputs=form.elements[name];if(!inputs)return;for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
+  function picked(name){var inputs=form.elements[name];if(!inputs)return null;for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
   pick('body',s.body);pick('plate',s.plate);pick('readout',s.readout);pick('numerals',s.numerals);pick('margin',s.margin);pick('span',s.span);pick('tape',s.tape);
   form.elements.clock24.checked=s.clock24!=='0';
   document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+s.timeZone+')':'None for '+s.timeZone;

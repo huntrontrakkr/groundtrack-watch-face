@@ -3,7 +3,7 @@ import os.path
 
 top = '.'
 out = 'build'
-FACE = 'FACE_ENROUTE'
+FACE = 'FACE_PLOTBOARD'
 
 
 def options(ctx):
@@ -21,8 +21,8 @@ def build(ctx):
     for platform in ctx.env.TARGET_PLATFORMS:
         ctx.env = ctx.all_envs[platform]
         # Arithmetic as the JavaScript does it: no fused multiply-adds.
-        # This project is Groundtrack Enroute (see src/c/face.h;
-        # native-plotboard/ builds the same sources as Plotboard).
+        # This project is Groundtrack Plotboard (see src/c/face.h;
+        # its sources and resources are native/'s, linked).
         ctx.env.append_value('CFLAGS', ['-ffp-contract=off', '-D' + FACE])
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)

@@ -44,11 +44,14 @@ try{
   assert.equal(await page.locator('input[name=plate]').count(),7);
   assert.equal(await page.locator('input[name=plate]:checked').getAttribute('value'),'crt');
   assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
-  // The Sun, the Moon and the seven satellites.
-  assert.deepEqual(await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value)),['sun','moon','sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585','sat:42738']);
+  // Enroute's: the Sun, the Moon, GPS and QZSS (Plotboard has the fast satellites).
+  assert.deepEqual(await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value)),['sun','moon','sat:36585','sat:42738']);
   assert.equal(await page.locator('input[name=readout]:checked').getAttribute('value'),'flag');
   assert.equal(await page.locator('input[name=numerals]:checked').getAttribute('value'),'even');
   assert.ok(await page.locator('input[name=clock24]').isChecked());
+  // Enroute's options only: no time scale for the world band.
+  assert.equal(await page.locator('input[name=tape]').count(),0);
+  assert.equal(await page.locator('#title').textContent(),'Groundtrack Enroute');
   assert.match(await page.locator('#preset-note').textContent(),/Greenwich/);
   assert.ok(await page.locator('#coords').isHidden());
   // Nothing wider than a small phone.

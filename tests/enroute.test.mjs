@@ -142,8 +142,8 @@ test('paper plates print night as a dot screen that deepens through twilight',()
   }
   assert.ok(bands.day[1]/bands.day[0]<.01,`day ${bands.day}`);
   assert.ok(Math.abs(bands.night[1]/bands.night[0]-.25)<.04,`night ${bands.night}`);
-  // The plotboard keeps flat light zones instead.
-  const board=draw({...state,plate:'plotboard'}).out,zones=lightLayer(r.ground,state.epoch);
+  // The Console plate keeps flat light zones instead.
+  const board=draw({...state,plate:'console'}).out,zones=lightLayer(r.ground,state.epoch);
   assert.ok(zones.some(z=>z===2));assert.notDeepEqual(board.buf,out.buf);
 });
 
@@ -158,7 +158,7 @@ test('caches follow the clock: chart by the hour, light by the minute, plate las
   const r=new EnrouteRenderer(atlas,meters),state=scene('moon',MOON_DUSK);r.render(state);const first={...r.stats};
   r.render(state);assert.deepEqual(r.stats,first);
   r.render({...state,epoch:state.epoch+MINUTE});assert.equal(r.stats.geometryBuilds,first.geometryBuilds);assert.equal(r.stats.lightBuilds,first.lightBuilds+1);
-  const minute={...r.stats};r.render({...state,epoch:state.epoch+MINUTE,plate:'plotboard'});assert.equal(r.stats.lightBuilds,minute.lightBuilds);assert.equal(r.stats.renders,minute.renders+1);
+  const minute={...r.stats};r.render({...state,epoch:state.epoch+MINUTE,plate:'console'});assert.equal(r.stats.lightBuilds,minute.lightBuilds);assert.equal(r.stats.renders,minute.renders+1);
   r.render({...state,epoch:state.epoch+60*MINUTE});assert.equal(r.stats.geometryBuilds,first.geometryBuilds+1);
   // A standalone render of the cached layers matches the renderer.
   const camera=chartCamera('moon',civilHour(state.epoch,state.timeZone),{span:SPAN}),ground=groundLayer(camera,atlas);

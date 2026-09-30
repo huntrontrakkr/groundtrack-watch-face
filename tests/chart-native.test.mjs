@@ -26,8 +26,8 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       ['sun','2027-01-31T23:00:00Z','sunlight',true,'Europe/London'],
       ['moon','2026-09-19T09:00:00Z','crt',true,'America/New_York'],
       ['moon','2026-03-10T05:00:00Z','red',false,'UTC'],
-      ['moon','2025-12-06T02:30:00Z','plotboard',true,'Asia/Kolkata'],
-      ['sun','2026-03-20T11:00:00Z','plotboard',false,null],
+      ['moon','2025-12-06T02:30:00Z','console',true,'Asia/Kolkata'],
+      ['sun','2026-03-20T11:00:00Z','console',false,null],
       // GPS on its nominal orbit: the slow orbit's camera, figures and
       // ticks, and home's pass line through the hour.
       ['sat:36585','2026-09-27T13:00:00Z','crt',true,'America/New_York'],
@@ -40,7 +40,7 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       ['sat:25544','2026-09-30T02:00:00Z','enroute',false,'UTC'],
       ['sat:48274','2026-10-01T06:30:00Z','hypsometric',true,'Asia/Kolkata'],
       ['sat:20580','2026-09-30T20:00:00Z','sunlight',true,'Europe/London'],
-      ['sat:49260','2026-10-01T09:00:00Z','plotboard',true,'America/New_York'],
+      ['sat:49260','2026-10-01T09:00:00Z','console',true,'America/New_York'],
       ['sat:43013','2026-09-30T17:00:00Z','red',false,null],
       ['sat:43013','2026-10-01T22:00:00Z','sectional',true,'UTC'],
       // Runs too long for the arena's room (a dense plate on a polar band).
@@ -63,11 +63,11 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
     // or not; on the world band, the day and the hour chart with a callout.
     const ev=(iso,title)=>({epoch:Date.parse(iso),label:nameCode(title)});
     cases.push(['sun','2026-09-27T08:00:00Z','enroute',true,'America/New_York',{events:[ev('2026-09-27T08:45:00Z','Run'),ev('2026-09-27T08:47:00Z','Standup'),ev('2026-09-27T09:20:00Z','Dinner'),ev('2026-09-27T07:30:00Z','Early')]}],
-      ['moon','2026-09-19T09:00:00Z','plotboard',false,'UTC',{readout:'callout',events:[ev('2026-09-19T09:50:00Z','Run'),ev('2026-09-19T09:10:00Z','Lecture')]}],
+      ['moon','2026-09-19T09:00:00Z','console',false,'UTC',{readout:'callout',events:[ev('2026-09-19T09:50:00Z','Run'),ev('2026-09-19T09:10:00Z','Lecture')]}],
       ['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{events:[ev('2026-09-30T13:12:00Z','Launch'),ev('2026-09-30T13:40:00Z','Call')]}],
       ['sat:42738','2026-09-27T05:00:00Z','sunlight',false,'America/New_York',{events:[ev('2026-09-27T09:00:00Z','Breakfast'),ev('2026-09-27T21:00:00Z','Supper')]}]);
     // The world band's sliding tape.
-    cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{tape:'tape'}],['sat:43013','2026-09-30T17:00:00Z','plotboard',false,'UTC',{tape:'tape',clock24:false}]);
+    cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{tape:'tape'}],['sat:43013','2026-09-30T17:00:00Z','console',false,'UTC',{tape:'tape',clock24:false}]);
     cases.forEach((c,k)=>{if(!c[5])c[5]=options[k%options.length];});
     for(const [body,iso,plate,flag,zone,more] of cases){
       const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null,o={flag,...more};

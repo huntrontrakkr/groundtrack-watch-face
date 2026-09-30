@@ -55,22 +55,22 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
       // Events: their names giving way, minute by minute, to the flag, the
       // callout, the tape's minutes and figures, and to each other.
       ['sun-events',['sun','2026-09-27T08:00:00Z','enroute','flag'],[0,20,40,44,45,47,50,59],{EVENTS:JSON.stringify([{epoch:'2026-09-27T08:45:00Z',title:'Run'},{epoch:'2026-09-27T08:47:00Z',title:'Standup'},{epoch:'2026-09-27T08:20:00Z',title:'Call'}])}],
-      ['moon-events',['moon','2026-09-19T09:00:00Z','plotboard','callout'],[0,10,30,50,59],{NUMERALS:'mono',EVENTS:JSON.stringify([{epoch:'2026-09-19T09:50:00Z',title:'Run'},{epoch:'2026-09-19T09:10:00Z',title:'Lecture'},{epoch:'2026-09-19T09:30:00Z',title:'Review'}])}],
+      ['moon-events',['moon','2026-09-19T09:00:00Z','console','callout'],[0,10,30,50,59],{NUMERALS:'mono',EVENTS:JSON.stringify([{epoch:'2026-09-19T09:50:00Z',title:'Run'},{epoch:'2026-09-19T09:10:00Z',title:'Lecture'},{epoch:'2026-09-19T09:30:00Z',title:'Review'}])}],
       ['iss-events',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[0,12,40,55],{EVENTS:JSON.stringify([{epoch:'2026-09-30T13:12:00Z',title:'Launch'},{epoch:'2026-09-30T13:40:00Z',title:'Call'}])}],
       ['iss-tape-events',['sat:25544','2026-09-30T13:00:00Z','sectional','noflag'],[0,30,59],{TAPE:'tape',EVENTS:JSON.stringify([{epoch:'2026-09-30T13:12:00Z',title:'Launch'},{epoch:'2026-09-30T13:05:00Z',title:'Tea'}])}],
       ['qzs-events',['sat:42738','2026-09-27T05:00:00Z','crt','noflag'],[0,30],{EVENTS:JSON.stringify([{epoch:'2026-09-27T09:00:00Z',title:'Breakfast'},{epoch:'2026-09-27T05:40:00Z',title:'Walk'}])}],
       // The world sliding too: a scene for each minute.
       ['iss-slide-23',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[23],{TAPE:'slide'}],
       ['ls9-slide-47',['sat:49260','2026-10-01T09:00:00Z','hypsometric','flag'],[47],{TAPE:'slide'}],
-      ['ls9-slide-0',['sat:49260','2026-10-01T09:00:00Z','plotboard','noflag'],[0],{TAPE:'slide'}]
+      ['ls9-slide-0',['sat:49260','2026-10-01T09:00:00Z','console','noflag'],[0],{TAPE:'slide'}]
     ]){
       for(const f of run(dir,name,args,minutes,more))assert.equal(f.differ,0,`${name} minute ${f.minute}: first difference at ${f.first}`);
     }
-    // Plotboard's ink changes with night, and the browser inks some symbols
+    // Console's ink changes with night, and the browser inks some symbols
     // by one point's night: the watch does too.
-    for(const f of run(dir,'moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','noflag'],[0,12,24,36,47,59]))assert.equal(f.differ,0,`moon-plotboard minute ${f.minute}: first difference at ${f.first}`);
-    for(const f of run(dir,'iss-plotboard',['sat:25544','2026-09-30T02:00:00Z','plotboard','flag'],[0,20,40]))assert.equal(f.differ,0,`iss-plotboard minute ${f.minute}: first difference at ${f.first}`);
-    for(const f of run(dir,'sun-plotboard',['sun','2026-09-27T20:00:00Z','plotboard','callout'],[0,30,59]))assert.equal(f.differ,0,`sun-plotboard minute ${f.minute}: first difference at ${f.first}`);
+    for(const f of run(dir,'moon-console',['moon','2026-09-19T09:00:00Z','console','noflag'],[0,12,24,36,47,59]))assert.equal(f.differ,0,`moon-console minute ${f.minute}: first difference at ${f.first}`);
+    for(const f of run(dir,'iss-console',['sat:25544','2026-09-30T02:00:00Z','console','flag'],[0,20,40]))assert.equal(f.differ,0,`iss-console minute ${f.minute}: first difference at ${f.first}`);
+    for(const f of run(dir,'sun-console',['sun','2026-09-27T20:00:00Z','console','callout'],[0,30,59]))assert.equal(f.differ,0,`sun-console minute ${f.minute}: first difference at ${f.first}`);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -82,18 +82,18 @@ test('a minute drawn over the last draws only what changed, and the same pixels'
     // minute drawn whole.
     for(const [name,args,more={}] of [
       ['sun-enroute',['sun','2026-09-27T08:00:00Z','enroute','flag']],['sun-sectional',['sun','2026-06-21T13:00:00Z','sectional','flag']],
-      ['moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','flag']],['moon-hypsometric',['moon','2026-09-19T09:00:00Z','hypsometric','noflag']],
+      ['moon-console',['moon','2026-09-19T09:00:00Z','console','flag']],['moon-hypsometric',['moon','2026-09-19T09:00:00Z','hypsometric','noflag']],
       ['moon-red',['moon','2026-09-19T09:00:00Z','red','noflag']],['moon-crt',['moon','2026-09-19T09:00:00Z','crt','flag']],
       ['moon-sunlight',['moon','2026-09-19T09:00:00Z','sunlight','flag']],['gps-crt',['sat:36585','2026-09-27T13:00:00Z','crt','flag']],
-      ['iss-crt',['sat:25544','2026-09-30T13:00:00Z','crt','flag']],['ls9-plotboard',['sat:49260','2026-10-01T09:00:00Z','plotboard','flag']],
+      ['iss-crt',['sat:25544','2026-09-30T13:00:00Z','crt','flag']],['ls9-console',['sat:49260','2026-10-01T09:00:00Z','console','flag']],
       ['qzs-hypsometric',['sat:42738','2026-09-27T05:00:00Z','hypsometric','noflag']],
       ['sun-callout',['sun','2026-09-27T08:00:00Z','enroute','callout'],{NUMERALS:'accent'}],
-      // Plotboard, the night crossing this hour's and the next hour's
+      // Console, the night crossing this hour's and the next hour's
       // stations.
-      ['sun-plotboard',['sun','2026-09-27T20:00:00Z','plotboard','flag']],['iss-plotboard',['sat:25544','2026-09-30T02:00:00Z','plotboard','flag']],
+      ['sun-console',['sun','2026-09-27T20:00:00Z','console','flag']],['iss-console',['sat:25544','2026-09-30T02:00:00Z','console','flag']],
       ['iss-tape',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],{TAPE:'tape'}],
       ['sun-events',['sun','2026-09-27T08:00:00Z','enroute','flag'],{EVENTS:JSON.stringify([{epoch:'2026-09-27T08:45:00Z',title:'Run'},{epoch:'2026-09-27T08:47:00Z',title:'Standup'}])}],
-      ['moon-events',['moon','2026-09-19T09:00:00Z','plotboard','callout'],{EVENTS:JSON.stringify([{epoch:'2026-09-19T09:50:00Z',title:'Run'},{epoch:'2026-09-19T09:10:00Z',title:'Lecture'}])}],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
+      ['moon-events',['moon','2026-09-19T09:00:00Z','console','callout'],{EVENTS:JSON.stringify([{epoch:'2026-09-19T09:50:00Z',title:'Run'},{epoch:'2026-09-19T09:10:00Z',title:'Lecture'}])}],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
     ]){
       execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,'0'],{stdio:'pipe',env:{...env,...more}});
       const r=JSON.parse(execFileSync('native/host/harness',[join(dir,`${name}.scene`),join(dir,name),'-u']).toString());
@@ -111,7 +111,7 @@ test('night decided by fixed point first is night decided by the double sums, ev
     // drawn terminator; the terminator across the world band.
     for(const [name,args] of [
       ['moon-crt',['moon','2026-09-19T09:00:00Z','crt','flag']],['moon-sunlight',['moon','2026-09-19T09:00:00Z','sunlight','flag']],
-      ['moon-sectional',['moon','2026-09-19T09:00:00Z','sectional','flag']],['moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','flag']],
+      ['moon-sectional',['moon','2026-09-19T09:00:00Z','sectional','flag']],['moon-console',['moon','2026-09-19T09:00:00Z','console','flag']],
       ['sun-red',['sun','2026-06-21T13:00:00Z','red','noflag']],['iss-enroute',['sat:25544','2026-09-30T02:00:00Z','enroute','noflag']],
       ['n20-crt',['sat:43013','2026-09-30T17:00:00Z','crt','noflag']],['ls9-sunlight',['sat:49260','2026-10-01T09:00:00Z','sunlight','flag']]
     ]){

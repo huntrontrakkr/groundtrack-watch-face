@@ -20,3 +20,6 @@ native/src/pkjs/index.js
 # Release packages (tools/release.py)
 release-artifacts/
 __pycache__/
+native-plotboard/build/
+native-plotboard/.lock-waf*
+native-plotboard/src/pkjs/index.js

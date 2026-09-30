@@ -76,7 +76,7 @@ Tests check the following:
 | --- | --- | --- | --- | --- | --- |
 | **Enroute** (default) | IFR enroute chart | white land, pale water | gray contours, cobalt coast | navy | magenta |
 | **Sectional** | VFR sectional chart | cream land, pale water | olive contours, cobalt coast | cobalt | magenta |
-| **Plotboard** | 1960s mission control display | teal land, dark water | cyan contours and coast | white | amber |
+| **Console** | 1960s mission control display | teal land, dark water | cyan contours and coast | white | amber |
 | **Hypsometric** | jet navigation chart layer tints | green lowland to tan and brown peaks; sea deepens off the shelf | olive contours, cobalt coast | navy | magenta |
 | **Night red** | red cockpit lighting | outlines on black; night dotted, with a dashed terminator | dark red contours | light red | red |
 | **Green CRT** | mission control console phosphor | green land on black; night in scan lines, with a dashed terminator | green contours and coast | pale green | green |

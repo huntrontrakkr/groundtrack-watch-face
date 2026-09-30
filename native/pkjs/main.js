@@ -1,4 +1,5 @@
-// Groundtrack Enroute, phone side. The watch draws every chart itself; the
+// Groundtrack Enroute and Groundtrack Plotboard, phone side (one source,
+// bundled for each face: GROUNDTRACK_FACE). The watch draws every chart itself; the
 // phone sends it what it needs for that: its settings, the Sun and Moon as
 // daily segments some weeks ahead, home's rise and set, and a satellite's
 // segments and passes a few days ahead, when the watch asks and when
@@ -85,7 +86,7 @@ var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['co
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
 function view(body){var v=viewOf(body);return v==='day'&&setting('span','day')==='hour'?'hour':v;}
 function watchSettings(){
-  var body=setting('body','sun'),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
+  var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
   var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null,numerals=NUMERALS.indexOf(setting('numerals','even'));
   var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,READOUTS.indexOf(readout()),setting('clock24','1')==='0'?0:1,h?1:0];
   function i32(v){bytes.push(v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255);}
@@ -219,7 +220,11 @@ function sendEvents(){
 }
 
 // The settings page, offline: a data URL holding the page and the settings.
-var BODIES=['sun','moon'].concat(CATALOG.map(function(c){return bodyId(c.norad);}));
+// Enroute: the Sun, the Moon, and the satellites on the hour chart or the
+// whole day (GPS, QZSS); Plotboard: the fast satellites on the world band.
+var FACE=typeof GROUNDTRACK_FACE==='string'?GROUNDTRACK_FACE:'enroute';
+var BODIES=(FACE==='plotboard'?[]:['sun','moon']).concat(CATALOG.filter(function(c){return (viewOf(bodyId(c.norad))==='world')===(FACE==='plotboard');}).map(function(c){return bodyId(c.norad);}));
+function currentBody(){var b=setting('body',BODIES[0]);return BODIES.indexOf(b)>=0?b:BODIES[0];}
 // A data-URL page can't reliably ask for the phone's location itself (as
 // Dymaxion found), so the phone takes a coarse fix first, waiting at most
 // five seconds, and passes it in, rounded to 0.01°.
@@ -227,9 +232,9 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),
+    var config={settings:{body:currentBody(),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},events:storedEvents(),
-      bodies:BODIES.slice(2).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
+      face:FACE,bodies:BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
     var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');});

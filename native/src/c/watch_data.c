@@ -20,7 +20,12 @@
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
   // the phone sends one.
+  // The Sun on Enroute, the ISS on Plotboard.
+#ifdef FACE_PLOTBOARD
+  const WatchSettings defaults={4,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_WORLD,"ISS",ENR_EVEN,0,0};
+#else
   const WatchSettings defaults={4,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0};
+#endif
   if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=4)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
