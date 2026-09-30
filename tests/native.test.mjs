@@ -64,6 +64,16 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
       ['n20-comb',['sat:43013','2026-09-30T17:00:00Z','enroute','noflag'],[10,40],{TRANSFER:'comb'}],
       ['ls9-chevrons',['sat:49260','2026-10-01T09:00:00Z','red','flag'],[0,59],{TRANSFER:'chevrons'}],
       ['iss-chevrons',['sat:25544','2026-09-30T02:00:00Z','console','noflag'],[21],{TRANSFER:'chevrons'}],
+      // Rolling Fuller sheets, lit from their faces' grids: a satellite's
+      // hour, the Sun's and QZSS's days, GPS zoomed in, one-ink plates'
+      // heavier route, home's circle each minute.
+      ['iss-fuller',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[0,24,59],{PROJECTION:'fuller'}],
+      ['n20-fuller',['sat:43013','2026-09-30T17:00:00Z','sectional','callout'],[0,17,44],{PROJECTION:'fuller'}],
+      ['ls9-fuller',['sat:49260','2026-10-01T09:00:00Z','red','noflag'],[17,59],{PROJECTION:'fuller'}],
+      ['sun-fuller',['sun','2026-09-27T08:00:00Z','enroute','flag'],[0,24,59],{PROJECTION:'fuller'}],
+      ['moon-fuller',['moon','2026-09-19T09:00:00Z','console','callout'],[10,50],{PROJECTION:'fuller'}],
+      ['gps-fuller',['sat:36585','2026-09-27T13:00:00Z','hypsometric','flag'],[3,40],{PROJECTION:'fuller'}],
+      ['qzs-fuller',['sat:42738','2026-09-27T05:00:00Z','sunlight','callout'],[0,33],{PROJECTION:'fuller'}],
       // The world sliding too: a scene for each minute.
       ['iss-slide-23',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[23],{TAPE:'slide'}],
       ['ls9-slide-47',['sat:49260','2026-10-01T09:00:00Z','hypsometric','flag'],[47],{TAPE:'slide'}],
@@ -96,7 +106,7 @@ test('a minute drawn over the last draws only what changed, and the same pixels'
       // Console, the night crossing this hour's and the next hour's
       // stations.
       ['sun-console',['sun','2026-09-27T20:00:00Z','console','flag']],['iss-console',['sat:25544','2026-09-30T02:00:00Z','console','flag']],
-      ['iss-tape',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],{TAPE:'tape'}],['n20-comb',['sat:43013','2026-09-30T17:00:00Z','sunlight','flag'],{TRANSFER:'comb'}],
+      ['iss-tape',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],{TAPE:'tape'}],['iss-fuller',['sat:25544','2026-09-30T13:00:00Z','sunlight','flag'],{PROJECTION:'fuller'}],['sun-fuller',['sun','2026-09-27T08:00:00Z','console','callout'],{PROJECTION:'fuller'}],['n20-comb',['sat:43013','2026-09-30T17:00:00Z','sunlight','flag'],{TRANSFER:'comb'}],
       ['sun-events',['sun','2026-09-27T08:00:00Z','enroute','flag'],{EVENTS:JSON.stringify([{epoch:'2026-09-27T08:45:00Z',title:'Run'},{epoch:'2026-09-27T08:47:00Z',title:'Standup'}])}],
       ['moon-events',['moon','2026-09-19T09:00:00Z','console','callout'],{EVENTS:JSON.stringify([{epoch:'2026-09-19T09:50:00Z',title:'Run'},{epoch:'2026-09-19T09:10:00Z',title:'Lecture'}])}],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
     ]){

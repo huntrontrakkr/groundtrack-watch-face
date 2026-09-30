@@ -91,8 +91,9 @@ const LABEL=departure.regular;
 // stage of the drawing it was last drawn in: 0 the graticule, 1 the network
 // (after home's acquisition circle), 2 the route and what follows, 3 all
 // drawn after the body, which the body passes under.
-let TRACE=null,EARLY=null,STAGE=null,early=false,stage=0;
-function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];if(TRACE){TRACE[i/3]=1;EARLY[i/3]=early?1:0;STAGE[i/3]=stage;}}
+// OUTLINE: the Fuller net's outline pixels not yet drawn over.
+let TRACE=null,EARLY=null,STAGE=null,OUTLINE=null,early=false,stage=0;
+function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];if(OUTLINE)OUTLINE[i/3]=0;if(TRACE){TRACE[i/3]=1;EARLY[i/3]=early?1:0;STAGE[i/3]=stage;}}
 function segment(a,b,fn){
   let x=Math.round(a.x),y=Math.round(a.y);const xx=Math.round(b.x),yy=Math.round(b.y);
   const dx=Math.abs(xx-x),sx=x<xx?1:-1,dy=-Math.abs(yy-y),sy=y<yy?1:-1;let err=dx+dy;
@@ -198,7 +199,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const baseOnly=layers==='base';if(baseOnly){readout=false;}
   // Pixels drawn before the route (early) may be covered by its bold line.
   const trace=baseOnly?new Uint8Array(W*H):null,overlay=baseOnly?new Uint8Array(W*H):null,beforeRoute=baseOnly?new Uint8Array(W*H):null,stages=baseOnly?new Uint8Array(W*H):null;TRACE=trace;EARLY=beforeRoute;STAGE=stages;early=true;stage=0;
-  try{return drawEnroute();}finally{TRACE=null;EARLY=null;STAGE=null;}
+  try{return drawEnroute();}finally{TRACE=null;EARLY=null;STAGE=null;OUTLINE=null;}
   function drawEnroute(){
   const pal=typeof plate==='string'?PLATES[plate]:plate,buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
@@ -261,8 +262,11 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const step=camera.world?30:camera.wide?10:5,minor=camera.world?10:camera.wide?5:1,{bottom}=camera.band,top=camera.band.top,inBand=y=>y>=top&&y<=bottom;
   if(camera.fuller){
     // Rolling Fuller: the net's outline in ink, folds inside it dotted.
+    // The outline stays over the bold route behind the body, as the watch
+    // draws it.
+    OUTLINE=new Uint8Array(W*H);
     for(const t of camera.tiles)for(const e of t.edges){
-      let n=0;segment(e.a,e.b,(x,y)=>{if(e.outline)plot(buf,x,y,pal.spaceInk);else if(e.cut||(n++%4===0))plot(buf,x,y,ink('grid')(x,y));});
+      let n=0;segment(e.a,e.b,(x,y)=>{if(e.outline){plot(buf,x,y,pal.spaceInk);if(x>=0&&y>=0&&x<W&&y<H)OUTLINE[y*W+x]=1;}else if(e.cut||(n++%4===0))plot(buf,x,y,ink('grid')(x,y));});
     }
   }else{
   const g0=camera.toGround(0,bottom),g1=camera.toGround(W,top);
@@ -296,7 +300,9 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const q=camera.project(home.lat,home.lon),x=Math.round(q.x),y=Math.round(q.y),col=ink('mark');
     // It changes with the satellite's height: a base layer leaves it to
     // the native renderer, which draws it each minute.
-    if(camera.world&&!baseOnly||camera.wide&&!camera.day)for(const [cx,cy] of homeCircle(camera,home,position(camera.body,epoch).altitude))plot(buf,cx,cy,col(cx,cy));
+    // So does a Fuller sheet's, which the net's outline stays over.
+    const minutely=camera.world||camera.fuller&&camera.wide&&!camera.day;
+    if(minutely?!baseOnly:camera.wide&&!camera.day)for(const [cx,cy] of homeCircle(camera,home,position(camera.body,epoch).altitude))if(!OUTLINE?.[cy*W+cx])plot(buf,cx,cy,col(cx,cy));
     const w=textWidth(LABEL,home.code),right=x+7+w<W-3,box={x:right?x-5:x-8-w,y:y-6,w:w+13,h:13};
     if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!camera.outside?.(x,y)&&!overlaps(box)){
       // Placed now so the network gives way; drawn last, over everything.
@@ -341,8 +347,9 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const hour=a.hour&&b.hour,bold=hour&&b.epoch<=now,steep=Math.abs(b.y-a.y)>Math.abs(b.x-a.x);
     segment(a,b,(x,y)=>{
       if(!hour){if(((x+y)>>1)%2===0)plot(buf,x,y,ink('route')(x,y));return;}
-      plot(buf,x,y,ink('route')(x,y));if(bold||heavy)plot(buf,steep?x+1:x,steep?y:y-1,ink('route')(x,y));
-      if(bold&&heavy)plot(buf,steep?x-1:x,steep?y:y+1,ink('route')(x,y));
+      const under=(u,v)=>OUTLINE&&u>=0&&v>=0&&u<W&&v<H&&OUTLINE[v*W+u];
+      plot(buf,x,y,ink('route')(x,y));if(heavy||bold&&!under(steep?x+1:x,steep?y:y-1))plot(buf,steep?x+1:x,steep?y:y-1,ink('route')(x,y));
+      if(bold&&heavy&&!under(steep?x-1:x,steep?y:y+1))plot(buf,steep?x-1:x,steep?y:y+1,ink('route')(x,y));
     });
   }
   // On the zoomed charts the route is itself the scale: a graduation every

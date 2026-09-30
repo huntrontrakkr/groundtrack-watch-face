@@ -693,7 +693,7 @@ static bool finish_draw(ChartBuild *b){
   Box avoid[24];int avoid_n=0;
   #define AVOID(b) do{if(avoid_n<24)avoid[avoid_n++]=(b);}while(0)
   if(!world){taken[taken_n++]=(Box){0,H-16,W,16};if(in->home)taken[taken_n++]=(Box){0,0,W,14};}
-  bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};Px *const home_code=draw->home_code;int home_code_n=0;
+  bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};uint16_t marks[128];int mark_n=0;Px *const home_code=draw->home_code;int home_code_n=0;
   if(in->home){
     double qx,qy;project(&cam,in->home_lat,in->home_lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
@@ -897,6 +897,17 @@ static bool finish_draw(ChartBuild *b){
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++)if(dx*dx+dy*dy<=36)clear(&cv,hx+dx,hy+dy);
     for(int dy=0;dy<11;dy++)for(int dx=0;dx<11;dx++)if(AIRPORT[dy][dx]=='#')plot(&cv,hx+dx-5,hy+dy-5,L_MARK);
     letter(&cv,home_code,home_code_n,L_MARK,1);
+    // Its mark's pixels, in order: the symbol's and, over the ground, the
+    // code's, where no knockout has cleared them.
+    #define MARK_AT(px,py,code) do{const int X=(px),Y=(py);if(X>=0&&Y>=0&&X<W&&Y<H&&(classes[Y*W+X]>>4)==L_LATE_INK&&mark_n<128){\
+      bool over_space_code=false;for(int i=0;i<home_code_n;i++)if(home_code[i].x==X&&home_code[i].y==Y&&(classes[Y*W+X]&15)==G_SPACE)over_space_code=true;\
+      if(!over_space_code&&(!(code)||(classes[Y*W+X]&15)!=G_SPACE))marks[mark_n++]=(Y)*W+(X);}}while(0)
+    for(int dy=0;dy<11;dy++)for(int dx=0;dx<11;dx++)if(AIRPORT[dy][dx]=='#')MARK_AT(hx+dx-5,hy+dy-5,false);
+    for(int i=0;i<home_code_n;i++)MARK_AT(home_code[i].x,home_code[i].y,true);
+    #undef MARK_AT
+    // Sorted, each once.
+    for(int i=1;i<mark_n;i++){const uint16_t v=marks[i];int j=i;while(j>0&&marks[j-1]>v){marks[j]=marks[j-1];j--;}marks[j]=v;}
+    int kept=0;for(int i=0;i<mark_n;i++)if(!kept||marks[kept-1]!=marks[i])marks[kept++]=marks[i];mark_n=kept;
   }
   int16_t top_x=6,top_baseline=11,height_right=0,height_baseline=0;
   if(world){
@@ -1008,6 +1019,7 @@ static bool finish_draw(ChartBuild *b){
     for(int k=0;k<avoid_n;k++){out->avoid[k][0]=(int16_t)avoid[k].x;out->avoid[k][1]=(int16_t)avoid[k].y;out->avoid[k][2]=(int16_t)avoid[k].w;out->avoid[k][3]=(int16_t)avoid[k].h;}
     if((day||in->readout==2)&&!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
   }
+  out->mark_count=(uint8_t)mark_n;for(int k=0;k<mark_n;k++){out->marks[k][0]=(uint8_t)(marks[k]%W);out->marks[k][1]=(uint8_t)(marks[k]/W);}
   if(home_mark){out->home_box[0]=(int16_t)home_box.x;out->home_box[1]=(int16_t)home_box.y;out->home_box[2]=(int16_t)home_box.w;out->home_box[3]=(int16_t)home_box.h;}
   b->out=out;b->forward=forward;b->minute=0;
   if(world&&in->home){b->sb=alloc(2*120*sizeof(double));if(!b->sb)FAIL;b->cb=b->sb+120;bearings(3,b->sb,b->cb);}

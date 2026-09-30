@@ -4,6 +4,8 @@
 #include "departure_font.h"
 #include "fmath.h"
 #include "face.h"
+// A Fuller sheet, on a face that can draw one.
+#define ROLLED(s) (FACE_ROLL&&(s)->fuller)
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -57,16 +59,60 @@ typedef struct {int16_t x,y;} Px;
 #define SCRATCH 640
 // The minute renderer's working memory, taken for each drawing only: a
 // chart is built while none is drawn, and has it then.
-typedef struct {Px scratch[SCRATCH];uint8_t window[3][ENR_W];uint16_t mask[ENR_H];FastNight f;} Work;
+// A Fuller sheet's Sun heights, a few rows at a time (FULLER_NONE off its
+// net), and the Sun in each tile's face frame.
+#define FULLER_NONE INT32_MIN
+typedef struct {const EnrMinute *m;int32_t sun[ENR_TILES][3];int held[3];int32_t h[3][ENR_W];} FullerNight;
+typedef struct {Px scratch[SCRATCH];uint8_t window[3][ENR_W];uint16_t mask[ENR_H];FastNight f;FullerNight g;} Work;
 static Work *work;
 #define F (work->f)
 #define scratch (work->scratch)
+static void fuller_ready(const EnrScene *s,const EnrMinute *m);
 static void fast_ready(const EnrScene *s,const EnrMinute *m){
+  if(ROLLED(s)){fuller_ready(s,m);return;}
   if(F.s==s&&F.m==m)return;
   F.s=s;F.m=m;
   for(int x=0;x<W;x++)F.p[x]=q30(s->col_cos[x]*m->sun[0]+s->col_sin[x]*m->sun[1]);
   F.u2=q30(m->sun[2]);
 }
+// fuller-ground.js: the Sun in each tile's face frame, and a row's heights
+// from the three grid points round each pixel, all in integers; a height
+// is h / 2^29.
+static void fuller_ready(const EnrScene *s,const EnrMinute *m){
+  FullerNight *g=&work->g;if(g->m==m)return;
+  g->m=m;g->held[0]=g->held[1]=g->held[2]=-100;
+  const EnrFuller *f=s->fuller;const enr_real *u=m->sun;
+  for(int t=0;t<f->tile_count;t++){const double *b=f->bases[f->tile_face[t]];for(int k=0;k<3;k++){const double v=(u[0]*b[3*k]+u[1]*b[3*k+1]+u[2]*b[3*k+2])*32768,r=floor(v);g->sun[t][k]=(int32_t)(v-r>=0.5?r+1:r);}}
+}
+static int64_t floor_div(int64_t v,int d){return v>=0?v/d:-((-v+d-1)/d);}
+static void fuller_row(const EnrScene *s,int y,int32_t *out){
+  const EnrFuller *f=s->fuller;const FullerNight *g=&work->g;const int N=ENR_FULLER_N;
+  const uint8_t *p=f->tile_runs+f->tile_offset[y],*end=f->tile_runs+f->tile_offset[y+1];
+  for(int x=0;p<end;p+=2)for(int k=0;k<p[0];k++,x++){
+    const int t=p[1]-1;if(t<0){out[x]=FULLER_NONE;continue;}
+    const int32_t *q=f->tile_grid[t];const int64_t qx=4*x+2,qy=4*y+2;
+    int64_t a=floor_div(q[0]+q[1]*qx+q[2]*qy,256),b=floor_div(q[3]+q[4]*qx+q[5]*qy,256);
+    a=a<0?0:a>N*256?N*256:a;b=b<0?0:b>N*256-a?N*256-a:b;
+    const int ia=(int)(a/256),ib=(int)(b/256),fa=(int)(a-ia*256),fb=(int)(b-ib*256);
+    int i0,w0,i1=0,w1=0,i2=0,w2=0;
+    #define GI(aa,bb) ((aa)*(N+1)-(aa)*((aa)-1)/2+(bb))
+    if(ia+ib>=N){i0=GI(ia,ib);w0=256;}
+    else if(fa+fb<=256){i0=GI(ia,ib);w0=256-fa-fb;i1=GI(ia+1,ib);w1=fa;i2=GI(ia,ib+1);w2=fb;}
+    else{i0=GI(ia+1,ib+1);w0=fa+fb-256;i1=GI(ia,ib+1);w1=256-fa;i2=GI(ia+1,ib);w2=256-fb;}
+    #undef GI
+    const int16_t *d=f->dirs;int64_t h=0;
+    for(int k=0;k<3;k++){const int32_t c=(d[i0*3+k]*w0+d[i1*3+k]*w1+d[i2*3+k]*w2)>>8;h+=(int64_t)c*g->sun[t][k];}
+    out[x]=(int32_t)h;
+  }
+}
+static int32_t fuller_h(const EnrScene *s,int x,int y){
+  FullerNight *g=&work->g;
+  for(int k=0;k<3;k++)if(g->held[k]==y)return g->h[k][x];
+  // Keep the rows either side of y; replace the farthest.
+  int slot=0;for(int k=1;k<3;k++){const int dk=abs(g->held[k]-y),ds=abs(g->held[slot]-y);if(dk>ds)slot=k;}
+  fuller_row(s,y,g->h[slot]);g->held[slot]=y;return g->h[slot][x];
+}
+static enr_real fuller_dot(const EnrScene *s,int x,int y){return (enr_real)fuller_h(s,x,y)/536870912.0;}
 static int64_t fast_h(const EnrScene *s,int x,int y){return ((int64_t)s->row_q[y][0]*F.p[x]+(int64_t)s->row_q[y][1]*F.u2)>>30;}
 static void touch(Ctx *c,int x,int y){
   if(x<c->box[0])c->box[0]=x;
@@ -95,6 +141,7 @@ static enr_real sun_dot(const Ctx *c,int x,int y){
 // Whether the Sun's height at a pixel is at least a threshold (level, and
 // its fixed-point value q).
 static bool above(const Ctx *c,int x,int y,enr_real level,int32_t q){
+  if(ROLLED(c->s))return fuller_dot(c->s,x,y)>=level;
   const int64_t h=fast_h(c->s,x,y);
   if(h>=(int64_t)q+MARGIN)return true;
   if(h<(int64_t)q-MARGIN)return false;
@@ -103,7 +150,15 @@ static bool above(const Ctx *c,int x,int y,enr_real level,int32_t q){
 // Day, dusk or night as flat zones, dithered through civil twilight.
 static int zone(const Ctx *c,int x,int y){
   if(!(c->s->flags&ENR_NIGHT_ZONES)||!has_dir(c,x,y))return 0;
-  const EnrScene *s=c->s;const int64_t h=fast_h(s,x,y);const int b=BAYER[(y&3)*4+(x&3)];
+  const EnrScene *s=c->s;const int b=BAYER[(y&3)*4+(x&3)];
+  if(ROLLED(s)){
+    const enr_real a=fuller_dot(s,x,y);
+    if(a>=SUNRISE_SINE)return 0;
+    if(a<CIVIL_TWILIGHT_SINE)return 2;
+    const enr_real t=(SUNRISE_SINE-a)/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE);
+    return t*16>b+(enr_real)0.5?2:1;
+  }
+  const int64_t h=fast_h(s,x,y);
   const int32_t *q=s->night_q;
   // Clear of every threshold that matters here: decided by the fast sum.
   if(h>=(int64_t)q[0]+MARGIN)return 0;
@@ -128,11 +183,13 @@ static uint8_t base_color(const EnrScene *s,int ground,int z){
 }
 // Ink drawn after the body: the space ink over space, home's mark round
 // home, the ink elsewhere.
+static bool home_mark(const EnrScene *s,int x,int y){
+  for(int k=0;k<s->mark_count;k++)if(s->marks[k][0]==x&&s->marks[k][1]==y)return true;
+  return false;
+}
 static uint8_t late_ink(const EnrScene *s,int ground,int x,int y,int z){
-  if(ground==G_SPACE)return s->space_ink;
-  const int16_t *b=s->home_box;
-  const bool home=(abs(x-s->home_x)<=6&&abs(y-s->home_y)<=6)||(x>=b[0]&&x<b[0]+b[2]&&y>=b[1]&&y<b[1]+b[3]);
-  return s->zoned[home?ENR_MARK:ENR_INK][z];
+  if(home_mark(s,x,y))return s->zoned[ENR_MARK][z];
+  return ground==G_SPACE?s->space_ink:s->zoned[ENR_INK][z];
 }
 static void plot(Ctx *c,int x,int y,uint8_t color){
   if(x<0||y<0||x>=W||y>=H)return;
@@ -163,6 +220,7 @@ static void block_bounds(const EnrScene *s,int m,enr_real lo[BLOCKS],enr_real hi
   for(int x=0;x<W;x++){const enr_real p=s->col_cos[x]*u[0]+s->col_sin[x]*u[1];if(p<lo[x>>4])lo[x>>4]=p;if(p>hi[x>>4])hi[x>>4]=p;}
 }
 static int block_state(const EnrScene *s,int m,const enr_real *lo,const enr_real *hi,int y,int b){
+  if(ROLLED(s))return 2;
   const enr_real u2=s->minutes[m].sun[2],a=s->row_cos[y]*lo[b]+s->row_sin[y]*u2,z=s->row_cos[y]*hi[b]+s->row_sin[y]*u2;
   return a>=SUNRISE_SINE+EPS?0:z<CIVIL_TWILIGHT_SINE-EPS?1:2;
 }
@@ -266,9 +324,10 @@ static int draw_base(Ctx *c,const uint16_t *mask){
       }
       if(!zones&&has_dir(c,x,y)){
         // The screen's dot shows where t > 0 and t*4 > its Bayer value.
-        const int b=BAYER[(y&3)*4+(x&3)];const int64_t h=fast_h(s,x,y),q=s->night_q[18+b];
+        const int b=BAYER[(y&3)*4+(x&3)];const int64_t h=ROLLED(s)?0:fast_h(s,x,y),q=s->night_q[18+b];
         bool dot;
-        if(h<q-MARGIN)dot=true;else if(h>=q+MARGIN)dot=false;
+        if(ROLLED(s)){enr_real t=(SUNRISE_SINE-fuller_dot(s,x,y))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE);t=t<0?0:t>1?1:t;dot=t>0&&b<t*4;}
+        else if(h<q-MARGIN)dot=true;else if(h>=q+MARGIN)dot=false;
         else{enr_real t=(SUNRISE_SINE-sun_dot(c,x,y))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE);t=t<0?0:t>1?1:t;dot=t>0&&b<t*4;}
         if(dot)col=s->screen;
       }
@@ -295,7 +354,9 @@ static void segment(Ctx *c,int x,int y,int xx,int yy,PixelFn fn,void *arg){
   for(int n=0;n<4000;n++){fn(c,x,y,arg);if(x==xx&&y==yy)break;const int e=2*err;if(e>=dy){err+=dy;x+=sx;}if(e<=dx){err+=dx;y+=sy;}}
 }
 static void bold_pixel(Ctx *c,int x,int y,void *arg){
-  const bool steep=*(bool *)arg;const int bx=steep?x+1:x,by=steep?y:y-1;
+  // A heavy route's second pixel is the hour's; behind the body it takes
+  // a third, on the other side.
+  const bool steep=*(bool *)arg,heavy=FACE_ROLL&&c->s->heavy;const int bx=steep?(heavy?x-1:x+1):x,by=steep?y:(heavy?y+1:y-1);
   if(bx<0||by<0||bx>=W||by>=H)return;
   const int layer=class_at(c,bx,by)>>4;
   // Only what was drawn before the route (ground, grid, the network's ink
@@ -610,7 +671,26 @@ static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
   if(!s->fig_bits)return false;
   const int bx=js_round(m->mx),by=js_round(m->my);
   int fh;Px *line=scratch;
-  if(VIEW_IS_DAY(s->view)){
+  if(VIEW_IS_DAY(s->view)&&ROLLED(s)){
+    // A Fuller day sheet: the time hangs in the open paper above the net
+    // where there is room, otherwise above or below the body, on the side
+    // whose leader crosses least lettering.
+    const int fs=fig_height(s,2,'0'),head=s->callout_top-4;const double net=s->fuller->net_top;
+    const bool room=net-head>=fs+16,up=room||by-26-fs>=4+head;
+    const double mid=(net-head-fs)/2,low=floor(mid);
+    const int reach=room?by-(head+(int)(mid-low>=0.5?low+1:low)+fs+3):26,sy=up?by-reach:by+reach;
+    const int fw=time_figure(s,m,2,1,g,n,&fh);
+    int best=0,score[2];
+    for(int k=0;k<2;k++){
+      const int side=k?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;f=f>4?f:4;
+      int open;const int len=leader(s,bx,by,sx,sy,side>0?f+fw:f-1,line,&open);
+      const bool fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
+      score[k]=(fits?0:1000)+(len-open)*10+(side==(bx<W/2?1:-1)?0:1);
+    }
+    if(score[1]<score[0])best=1;
+    const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;*fx=f>4?f:4;
+    leader(s,bx,by,sx,sy,side>0?*fx+fw:*fx-1,line,shown);*fy=up?sy-3-fh:sy+3;
+  }else if(VIEW_IS_DAY(s->view)){
     const bool big=time_figure(s,m,2,1,g,n,&fh)<=s->callout_left-6;
     const int fw=time_figure(s,m,big?2:1,big?1:0,g,n,&fh);
     *fy=by-fh;if(*fy>s->callout_bottom-fh-3)*fy=s->callout_bottom-fh-3;
@@ -741,7 +821,7 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
   draw_moving(&c,PART_ALL);
   return drawn;
 }
-static bool work_begin(void){work=malloc(sizeof(Work));if(work)work->f.s=NULL;return work;}
+static bool work_begin(void){work=malloc(sizeof(Work));if(work){work->f.s=NULL;work->g.m=NULL;}return work;}
 static void work_end(void){free(work);work=NULL;}
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){if(work_begin()){render(scene,minute,frame,row_stride,NULL);work_end();}}
 
@@ -756,6 +836,8 @@ void enr_ready(EnrScene *s){
   for(int y=0;y<H;y++)for(unsigned k=s->row_offset[y];k<s->row_offset[y+1];k+=2)if((s->runs[k+1]&15)!=G_SPACE){s->ground_rows[y>>3]|=(uint8_t)(1<<(y&7));break;}
 }
 static void night_blocks(const EnrScene *s,int m0,int m1,uint16_t *mask){
+  // A Fuller sheet's night is drawn again wherever there is ground.
+  if(ROLLED(s)){for(int y=0;y<H;y++)if(s->ground_rows[y>>3]>>(y&7)&1)mask[y]=(uint16_t)((1<<BLOCKS)-1);return;}
   enr_real lo[2][BLOCKS],hi[2][BLOCKS];
   block_bounds(s,m0,lo[0],hi[0]);block_bounds(s,m1,lo[1],hi[1]);
   // Night never shows over space.
@@ -820,5 +902,6 @@ void enr_free(EnrScene *s,void (*release)(void *)){
   if(s->fig_bits)release(s->fig_bits);
   s->fig_bits=0;
   if(s->owns_runs)release((void *)s->runs);
+  if(ROLLED(s)){release(s->fuller->tile_runs);release(s->fuller->dirs);release(s->fuller);s->fuller=0;}
   s->track=0;s->runs=0;s->owns_runs=false;
 }

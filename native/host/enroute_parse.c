@@ -19,7 +19,7 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   memset(s,0,sizeof *s);
   char magic[4];take(&r,magic,4);
   if(memcmp(magic,"GTS3",4)||u16(&r)!=W||u16(&r)!=H)return false;
-  s->flags=u8(&r);s->body=u8(&r);s->forward=(int8_t)u8(&r);s->view=u8(&r);s->hour_start=i32(&r);
+  s->flags=u8(&r);s->body=u8(&r);s->forward=(int8_t)u8(&r);const uint8_t view=u8(&r);s->view=view&15;s->heavy=view&ENR_HEAVY;s->hour_start=i32(&r);
   for(int k=0;k<ENR_ZONED;k++)for(int z=0;z<3;z++)s->zoned[k][z]=u8(&r);
   s->space=u8(&r);s->space_ink=u8(&r);s->screen=u8(&r);s->waterline=u8(&r);s->terminator=u8(&r);s->night_dots=u8(&r);
   for(int k=0;k<5;k++)s->tints[k]=u8(&r);
@@ -32,6 +32,8 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   s->top_x=i16(&r);s->top_baseline=i16(&r);s->height_right=i16(&r);s->height_baseline=i16(&r);
   s->tape_x0=i16(&r);s->tape_x1=i16(&r);s->tape_baseline=i16(&r);s->tape_lo=i16(&r);s->tape_hi=i16(&r);
   s->home_x=i16(&r);s->home_y=i16(&r);for(int k=0;k<4;k++)s->home_box[k]=i16(&r);
+  s->mark_count=u8(&r);if(s->mark_count>128)return false;
+  for(int k=0;k<s->mark_count;k++){s->marks[k][0]=u8(&r);s->marks[k][1]=u8(&r);}
   s->callout_left=i16(&r);s->callout_top=i16(&r);s->callout_bottom=i16(&r);take(&r,s->hour_text,3);s->numerals=u8(&r);
   s->avoid_count=u8(&r);if(s->avoid_count>24)return false;
   for(int k=0;k<s->avoid_count;k++)for(int j=0;j<4;j++)s->avoid[k][j]=i16(&r);
@@ -59,7 +61,7 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   for(int k=0;k<s->track_count;k++){EnrPoint *p=&s->track[k];p->x=i16(&r);p->y=i16(&r);p->flags=u8(&r);}
   for(int y=0;y<=H;y++)s->row_offset[y]=u16(&r);
   const size_t runs=s->row_offset[H];
-  if(!r.ok||(size_t)(r.end-r.p)!=runs||runs%2)return false;
+  if(!r.ok||(size_t)(r.end-r.p)<runs||runs%2||(!(view&ENR_FULLER)&&(size_t)(r.end-r.p)!=runs))return false;
   for(int y=0;y<H;y++){
     // Every row's runs must cover exactly its width.
     if(s->row_offset[y]>s->row_offset[y+1])return false;
@@ -68,6 +70,21 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   }
   if(borrow)s->runs=r.p;
   else{uint8_t *copy=alloc(runs?runs:1);if(!copy)return false;memcpy(copy,r.p,runs);s->runs=copy;s->owns_runs=true;}
+  r.p+=runs;
+  if(view&ENR_FULLER){
+    EnrFuller *f=s->fuller=alloc(sizeof *f);if(!f)return false;memset(f,0,sizeof *f);
+    {double v;take(&r,&v,8);f->net_top=v;}
+    for(int k=0;k<20;k++)for(int j=0;j<9;j++){double v;take(&r,&v,8);f->bases[k][j]=v;}
+    f->tile_count=u8(&r);if(f->tile_count>ENR_TILES)return false;
+    for(int t=0;t<f->tile_count;t++){f->tile_face[t]=u8(&r);if(f->tile_face[t]>=20)return false;for(int k=0;k<6;k++)f->tile_grid[t][k]=i32(&r);}
+    for(int y=0;y<=H;y++)f->tile_offset[y]=u16(&r);
+    const size_t n=f->tile_offset[H];
+    f->tile_runs=alloc(n?n:1);if(!f->tile_runs)return false;take(&r,f->tile_runs,n);
+    for(int y=0;y<H;y++){int width=0;for(size_t k=f->tile_offset[y];k<f->tile_offset[y+1];k+=2){width+=f->tile_runs[k];if(f->tile_runs[k+1]>f->tile_count)return false;}if(width!=W)return false;}
+    f->dirs=alloc(sizeof(int16_t)*3*ENR_GRID_POINTS);if(!f->dirs)return false;
+    for(int k=0;k<3*ENR_GRID_POINTS;k++)f->dirs[k]=i16(&r);
+    if(!r.ok||r.p!=r.end)return false;
+  }
   enr_ready(s);
   return true;
 }

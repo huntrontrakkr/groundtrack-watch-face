@@ -16,7 +16,8 @@
 //   f64 c1x, normal x, normal y; i16 zulu x, zulu baseline, pass line x,
 //   pass line baseline, height's right edge, height's baseline
 //   the world band's tape: i16 x0, x1, baseline, the minutes' least and
-//   greatest x; home: i16 x, y (-1000 without), box x, y, w, h
+//   greatest x; home: i16 x, y (-1000 without), box x, y, w, h; u8 n and n
+//   (u8 x, y) pixels of its mark (drawn after the body in its ink), in order
 //   the day's time callout: i16 the track's least x less 8, the top and
 //   bottom it keeps within (the hour chart's callout: 0), char hour[3] (the
 //   hour's figures as the callout sets them, NUL-padded), u8 the figures'
@@ -54,6 +55,7 @@ import {position,moonLight,MINUTE} from './ephemeris.js';
 import {catalogEntry} from './satellites.js';
 import {registerNominal} from './nominal.js';
 import {RAD} from './geometry.js';
+import {tileGrid} from './fuller-ground.js';
 
 registerNominal();
 // Build one hour's scene from the coastline atlas and the decoded relief.
@@ -65,11 +67,10 @@ registerNominal();
 // With tape 'slide' the world scrolls under the index each minute: the
 // scene is for one minute of the hour.
 // events: [{epoch, label}] (label a five-letter name code, src/events.js).
-export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,readout=flag?'flag':false,numerals='even',zone='utc',span='day',tape='fixed',transfer='off',minute=0,events=[],timeZone='UTC',clock24=true,home=null}){
-  const state={body,epoch:start+(tape==='slide'?minute*MINUTE:0),timeZone,clock24,plate:plateKey,home,events,readout:readout==='callout'?true:readout,numerals,zone,span,tape,transfer};
-  const r=new EnrouteRenderer(atlas,meters);r.render(state);
+export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,readout=flag?'flag':false,numerals='even',zone='utc',span='day',tape='fixed',transfer='off',minute=0,events=[],timeZone='UTC',clock24=true,home=null,projection='chart',grids=null}){
+  const state={body,epoch:start+(tape==='slide'?minute*MINUTE:0),timeZone,clock24,plate:plateKey,home,events,readout:readout==='callout'?true:readout,numerals,zone,span,tape,transfer,projection};
+  const r=new EnrouteRenderer(atlas,meters,grids);r.render(state);
   const cam=r.camera,pal=PLATES[plateKey];
-  if(cam.fuller)throw new Error('Rolling Fuller is not exported');
 
   // A probe plate: the target plate's structure, every color unique, so each
   // drawn pixel's class can be read back from its color.
@@ -108,19 +109,25 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,re
   u16(W);u16(H);
   u8((pal.night==='zones'?1:0)|(pal.scan?2:0)|(pal.terminator?4:0)|(pal.nightDots?8:0)|(readout==='flag'?16:0)|(readout==='callout'?32:0)|(base.tapeAt?.mode==='tape'?64:0)|(base.tapeAt?.mode==='slide'?64|128:0));
   const kind=body==='sun'?0:body==='moon'?1:catalogEntry(body)?.symbol==='satellite'?2:3;u8(kind);
-  const [s0,s1]=cam.stations,forward=Math.round(s1.x)>Math.round(s0.x);i8(forward?1:-1);u8(cam.world?1:cam.day?2:0);i32(Math.floor(start/1000));
+  const [s0,s1]=cam.stations,forward=Math.round(s1.x)>Math.round(s0.x);i8(forward?1:-1);u8((cam.world?1:cam.day?2:0)|(cam.fuller?16:0)|(cam.fuller&&pal.mono?32:0));i32(Math.floor(start/1000));
   for(const k of ['water','land','coast','contour','shelf','grid','route','ink','mark'])for(let z=0;z<3;z++)u8(g8(pal[k][z]));
   for(const k of ['space','spaceInk','screen','waterline','terminator','nightDots'])u8(g8(pal[k]));
   for(let k=0;k<5;k++)u8(g8(pal.tints?.[k]?.[1]));for(let k=0;k<2;k++)u8(g8(pal.depths?.[k]?.[1]));
   // The chart is equidistant cylindrical: latitude by row, longitude by column.
   const rows=[],cols=[];
-  for(let y=0;y<H;y++){const lat=cam.toGround(0.5,y+.5).lat*RAD;rows.push([cos(lat),sin(lat)]);}
-  for(let x=0;x<W;x++){const lon=cam.toGround(x+.5,0.5).lon*RAD;cols.push([cos(lon),sin(lon)]);}
+  // (A Fuller sheet lights its pixels from its faces' grids instead.)
+  for(let y=0;y<H;y++){const lat=cam.fuller?null:cam.toGround(0.5,y+.5).lat*RAD;rows.push(cam.fuller?[0,0]:[cos(lat),sin(lat)]);}
+  for(let x=0;x<W;x++){const lon=cam.fuller?null:cam.toGround(x+.5,0.5).lon*RAD;cols.push(cam.fuller?[0,0]:[cos(lon),sin(lon)]);}
   for(const [c] of rows)f64(c);for(const [,s] of rows)f64(s);for(const [c] of cols)f64(c);for(const [,s] of cols)f64(s);
   f64(s1.x);f64(cam.normal?.x??0);f64(cam.normal?.y??-1);i16(base.zuluAt.x);i16(base.zuluAt.baseline);
   i16(base.topAt.x);i16(base.topAt.baseline);i16(base.altAt?.right??0);i16(base.altAt?.baseline??0);
   const fixed=base.tapeAt&&base.tapeAt.x0!==undefined?base.tapeAt:null;for(const v of fixed?[fixed.x0,fixed.x1,fixed.baseline,fixed.inner[0],fixed.inner[1]]:[0,0,0,0,0])i16(v);
   const hm=base.home;for(const v of hm?[hm.x,hm.y,hm.box.x,hm.box.y,hm.box.w,hm.box.h]:[-1000,-1000,0,0,0,0])i16(v);
+  // Home's mark: the pixels drawn after the body in its ink (the rest of
+  // what is drawn then takes the chart's ink).
+  const marks=[];for(let i=0;i<W*H;i++)if(base.trace[i]===1&&base.stages[i]===3&&key(i)===PROBE.mark)marks.push(i);
+  if(marks.length>128)throw new Error('Home\'s mark is too large');
+  u8(marks.length);for(const i of marks){u8(i%W);u8(Math.floor(i/W));}
   const co=base.calloutAt;for(const v of co?[Math.floor(co.left),co.top,co.bottom]:[0,0,0])i16(v);
   // The callout's hour, as its figures set it (two figures with 'even' on
   // the 24-hour clock), and the figures' style.
@@ -148,7 +155,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,re
     const [x0,x1]=fixed?[fixed.x0,fixed.x1]:[0,0],ix=fixed?Math.round(forward?x0+(x1-x0)*m/60:x1-(x1-x0)*m/60):0;i16(ix);
     const height=cam.world?`${Math.round(b.altitude)} KM`:'';for(let k=0;k<8;k++)u8(k<height.length?height.charCodeAt(k):0);
     let circle=255;
-    if(cam.world&&state.home){
+    if((cam.world||cam.fuller&&cam.wide&&!cam.day)&&state.home){
       const px=homeCircle(cam,state.home,b.altitude),k=px.map(q=>q.join(',')).join(' ');
       if(!circleKeys.has(k)){circleKeys.set(k,circles.length);circles.push(px);}
       circle=circleKeys.get(k);
@@ -168,5 +175,19 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,re
   for(let y=0;y<H;y++){for(let x=0;x<W;){let k=1;while(x+k<W&&k<255&&classes[y*W+x+k]===classes[y*W+x])k++;runs.push(k,classes[y*W+x]);x+=k;}offsets.push(runs.length);}
   for(const o of offsets)u16(o);
   bytes.push(...runs);
+  if(cam.fuller){
+    // The faces' grids (fuller-ground.js): the 20 faces' frames, each
+    // placed face's grid place, which face each pixel lies on as row runs
+    // of (count, tile + 1, 0 for none), and the grid's directions.
+    const pack=r.fuller,tiles=cam.tiles;
+    // The net's top edge, which the day's time callout hangs above.
+    f64(Math.max(0,Math.min(...tiles.map(t=>t.box[1]))));
+    for(const b of pack.bases)for(const v of [...b.n,...b.u,...b.v])f64(v);
+    u8(tiles.length);for(const t of tiles){u8(t.face);for(const q of tileGrid(cam,t))for(const v of q)i32(v);}
+    const tileRuns=[],tileOffsets=[0];
+    for(let y=0;y<H;y++){for(let x=0;x<W;){const t=cam.tileAt(x+.5,y+.5);let k=1;while(x+k<W&&k<255&&cam.tileAt(x+k+.5,y+.5)===t)k++;tileRuns.push(k,t+1);x+=k;}tileOffsets.push(tileRuns.length);}
+    for(const o of tileOffsets)u16(o);bytes.push(...tileRuns);
+    for(const v of pack.canon)i16(v);
+  }
   return {scene:Uint8Array.from(bytes),renderer:r,state};
 }

@@ -90,8 +90,10 @@ int main(int argc,char **argv){
   for(int x=0;x<200;x++)f64(s.col_cos[x]);
   for(int x=0;x<200;x++)f64(s.col_sin[x]);
   f64(s.c1x);f64(s.normal_x);f64(s.normal_y);u16((uint16_t)s.zulu_x);u16((uint16_t)s.zulu_baseline);
-  {const int16_t v[18]={s.top_x,s.top_baseline,s.height_right,s.height_baseline,s.tape_x0,s.tape_x1,s.tape_baseline,s.tape_lo,s.tape_hi,s.home_x,s.home_y,s.home_box[0],s.home_box[1],s.home_box[2],s.home_box[3],s.callout_left,s.callout_top,s.callout_bottom};
-  for(int k=0;k<18;k++)u16((uint16_t)v[k]);}
+  {const int16_t v[15]={s.top_x,s.top_baseline,s.height_right,s.height_baseline,s.tape_x0,s.tape_x1,s.tape_baseline,s.tape_lo,s.tape_hi,s.home_x,s.home_y,s.home_box[0],s.home_box[1],s.home_box[2],s.home_box[3]};
+  for(int k=0;k<15;k++)u16((uint16_t)v[k]);}
+  u8(s.mark_count);for(int k=0;k<s.mark_count;k++){u8(s.marks[k][0]);u8(s.marks[k][1]);}
+  u16((uint16_t)s.callout_left);u16((uint16_t)s.callout_top);u16((uint16_t)s.callout_bottom);
   fwrite(s.hour_text,1,3,out);u8(s.numerals);u8(s.avoid_count);for(int k=0;k<s.avoid_count;k++)for(int j=0;j<4;j++)u16((uint16_t)s.avoid[k][j]);
   u16((uint16_t)s.c0[0]);u16((uint16_t)s.c0[1]);u16((uint16_t)s.c1[0]);u16((uint16_t)s.c1[1]);
   u8(s.station_count);for(int k=0;k<s.station_count;k++){u16((uint16_t)s.stations[k][0]);u16((uint16_t)s.stations[k][1]);}

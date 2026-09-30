@@ -1,17 +1,25 @@
 // Which watch face a build is: Groundtrack Enroute (FACE_ENROUTE: the hour
-// chart and the whole day) or Groundtrack Plotboard (FACE_PLOTBOARD: the
-// world band). Each leaves out the other's code, as constants the compiler
+// chart and the whole day), Groundtrack Plotboard (FACE_PLOTBOARD: the
+// world band) or Groundtrack Fuller (FACE_FULLER: rolling Fuller sheets of
+// the hour and the whole day). Each leaves out the other's code, as constants the compiler
 // can see; the host harnesses (neither defined) keep both.
 #pragma once
 #if defined(FACE_PLOTBOARD)
 #define FACE_HOUR 0
 #define FACE_WORLD 1
+#define FACE_ROLL 0
 #elif defined(FACE_ENROUTE)
 #define FACE_HOUR 1
 #define FACE_WORLD 0
+#define FACE_ROLL 0
+#elif defined(FACE_FULLER)
+#define FACE_HOUR 1
+#define FACE_WORLD 0
+#define FACE_ROLL 1
 #else
 #define FACE_HOUR 1
 #define FACE_WORLD 1
+#define FACE_ROLL 1
 #endif
 // A scene's view, as far as this face can have it.
 #define VIEW_IS_WORLD(v) (FACE_WORLD&&(!FACE_HOUR||(v)==1))

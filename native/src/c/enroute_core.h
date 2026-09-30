@@ -60,12 +60,38 @@ typedef struct {
 } EnrPoint;
 
 enum {ENR_VIEW_HOUR,ENR_VIEW_WORLD,ENR_VIEW_DAY};
+// A Fuller sheet (the scene's view byte has ENR_FULLER over the hour or the
+// day): its pixels are lit from its faces' pre-projected grids
+// (src/fuller-ground.js). tile_grid gives a tile's place on its face's grid
+// as a = g[0] + g[1]*qx + g[2]*qy, b likewise from g[3], in 1/65536 of a
+// grid step, for quarter-pixel qx = 4x + k, qy = 4y + j.
+#define ENR_FULLER 16
+// On a one-ink plate a Fuller sheet's route is heavier: two pixels ahead
+// of the body, three behind.
+#define ENR_HEAVY 32
+#define ENR_FULLER_N 64
+#define ENR_GRID_POINTS ((ENR_FULLER_N+1)*(ENR_FULLER_N+2)/2)
+#define ENR_TILES 32
+typedef struct {
+  double net_top;                   // the net's top edge (the day's callout hangs above it)
+  double bases[20][9];              // each face's frame: n, u, v
+  uint8_t tile_count,tile_face[ENR_TILES];
+  int32_t tile_grid[ENR_TILES][6];
+  // Which tile each pixel lies on, as row runs of (count, tile + 1; 0 none).
+  uint16_t tile_offset[ENR_H+1];
+  uint8_t *tile_runs;
+  // Each grid point's direction in its face's frame (n, u, v), x 16384.
+  int16_t *dirs;
+} EnrFuller;
 // Figures of one size for the day's time callout (Jost digits: 20, 28 and
 // 40 px): per digit its width, height and first byte in the scene's
 // fig_bits, rows of (width+7)/8 bytes, the leftmost pixel the high bit.
 typedef struct {uint8_t width[10],height[10];uint16_t first[10];} EnrFigures;
 typedef struct {
   uint8_t flags,body,view;
+  // A Fuller sheet's grids (NULL for the other charts).
+  EnrFuller *fuller;
+  bool heavy;
   int8_t forward;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;
@@ -79,6 +105,8 @@ typedef struct {
   int16_t tape_x0,tape_x1,tape_baseline,tape_lo,tape_hi;
   // Home, whose mark is drawn over the body (x -1000 without), and its box.
   int16_t home_x,home_y,home_box[4];
+  // Home's mark: the pixels drawn after the body in its ink, in order.
+  uint8_t mark_count,marks[128][2];
   // The day's time callout: the track's least x less 8, the top and bottom
   // it keeps within, the hour's figures, the lettering its leader breaks
   // for, and its figures (loaded apart from the scene's blob).
