@@ -1,0 +1,25 @@
+.chart-page{--paper:#ebe9e0;--ink:#1f3b3a;--quiet:#66706b;background:var(--paper)}.chart-page .intro h1{font-family:Georgia,serif;font-weight:400;letter-spacing:-.05em;font-size:clamp(45px,5.4vw,78px);line-height:1.04}.chart-page .intro-note{font-family:Georgia,serif;font-style:italic;font-size:17px;line-height:1.6;max-width:360px}.chart-page .art-stage{background:#dfe1d8}.chart-page .art-case{background:linear-gradient(145deg,#c9d2cc,#a4b4ac 70%,#c5cdc4)}.chart-page .watch-wrap{min-height:575px}.chart-page .theme-options{gap:5px}.chart-page .theme-options button{padding:14px 4px;font-size:11px}.chart-page .swatch-row{max-width:90px}.chart-page .swatch-row i{height:22px}.chart-page .help{line-height:1.8}.chart-page .scene-caption{min-height:20px}.chart-page .stage-meta{background:transparent}.chart-page .watch-mark{letter-spacing:.04em}
+.chart-page .watch canvas{height:auto;aspect-ratio:200/228}
+.chart-page fieldset.muted legend,.chart-page fieldset.muted .help{opacity:.45}.chart-page .segmented button:disabled{cursor:default;color:var(--quiet)}.chart-page .segmented button:disabled[aria-pressed=true]{background:#c3c9c0;border-color:#c3c9c0;color:var(--paper)}
+.chart-page .comparison-grid button{background:#dfe1d8;padding:26px 12px 18px}.chart-page .comparison-grid canvas{border-radius:3px}.chart-page .comparison-grid span{font-size:10px;letter-spacing:.04em}.chart-page .comparison-grid button[aria-pressed=true]{border-color:var(--ink)}
+.chart-page .art-reading h2{font-family:Georgia,serif;font-size:26px}
+@media(max-width:760px){.chart-page .intro-note{font-size:15px}.chart-page .watch-wrap{min-height:430px}.chart-page .comparison-grid span{font-size:8px}.chart-page .section-heading{align-items:start}}
+@media(max-width:370px){.chart-page .watch-wrap{min-height:345px}}
+/* Study 06 lettering: Departure Mono, a pixel face drawn on an 11 px grid; its small sizes stay on multiples of 11. */
+@font-face{font-family:"Departure Mono";src:url('./fonts/DepartureMono-Regular.woff2') format('woff2');font-display:swap}
+.enroute-page{--mono:"Departure Mono",ui-monospace,SFMono-Regular,Consolas,monospace}.enroute-page .stage-meta,.enroute-page .range-ends,.enroute-page .page-footer,.enroute-page .art-study-date,.enroute-page .comparison-grid span,.enroute-page .scene-caption,.enroute-page .edition,.enroute-page .eyebrow{font-size:11px!important;-webkit-font-smoothing:none;font-smooth:never}.enroute-page .art-clock-readout output{font:22px var(--mono)}.enroute-page .brand{font-weight:400}
+/* Study 06 type: Michroma (after Microgramma, the lettering of 1960s space hardware) for headlines, Jost (after Futura) for text. */
+@font-face{font-family:"Jost";src:url('./fonts/Jost-Variable.ttf') format('truetype');font-weight:100 900;font-display:swap}
+@font-face{font-family:"Michroma";src:url('./fonts/Michroma-Regular.ttf') format('truetype');font-display:swap}
+.enroute-page{--sans:"Jost","Futura","Avenir Next",system-ui,sans-serif;font-family:var(--sans)}
+.enroute-page .intro h1{font-family:"Michroma",var(--sans);font-weight:400;letter-spacing:-.01em;font-size:clamp(28px,3.9vw,50px);line-height:1.28}
+.enroute-page .intro-note{font-family:var(--sans);font-style:normal;font-size:18px;line-height:1.6}
+.enroute-page .art-reading h2{font-family:"Michroma",var(--sans);font-size:17px;line-height:1.5;letter-spacing:0}
+.enroute-page legend{font-family:var(--sans);font-weight:500;font-size:14px}.enroute-page .help{font-size:13px}.enroute-page .scene-caption{font-family:var(--mono)!important}
+@media(max-width:760px){.enroute-page .intro h1{font-size:25px}.enroute-page .intro-note{font-size:15px}}
+.enroute-page .help{font-size:14px}.enroute-page .segmented button{font-size:14px}.enroute-page .reading article>p:last-child{font-size:15px}.enroute-page .section-heading>p:last-child{font-size:14px}.enroute-page .theme-options button{font-size:13px}.enroute-page .technical{font-size:14px}
+.enroute-page .live-row{display:flex;gap:8px}.enroute-page .live-row select{flex:1;max-width:none;font:14px var(--sans);padding:9px}.enroute-page .live-row button{border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:9px 14px;font:14px var(--sans)}.enroute-page .range-actions button{font:inherit;border:0;background:none;padding:0;text-decoration:underline;text-underline-offset:3px}
+.enroute-page .live-row select{min-width:0;width:100%}.enroute-page .live-row{min-width:0}.enroute-page .range-ends{flex-wrap:wrap;row-gap:6px}
+.enroute-page .theme-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}.enroute-page .theme-options button{min-width:0;overflow-wrap:anywhere}
+.enroute-page .comparison-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.enroute-page .comparison-grid span{overflow-wrap:anywhere}
+.enroute-page .event-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end}.enroute-page .event-form .select-label{flex:1;min-width:0}.enroute-page .event-form input{width:100%;min-width:0}.enroute-page .event-list{list-style:none;padding:0;margin:10px 0 0;font:11px/2 'Departure Mono',monospace}.enroute-page .event-list button{font-size:11px;margin-left:6px}
