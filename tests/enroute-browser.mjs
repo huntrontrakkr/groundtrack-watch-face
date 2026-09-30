@@ -48,10 +48,19 @@ try{
   await page.locator('#enroute-minute').fill('3');await page.locator('#enroute-minute').dispatchEvent('input');await page.locator('#enroute-reset').click();assert.equal(await page.locator('#enroute-minute').inputValue(),'24');
   await page.locator('[data-body="sun"]').click();await page.locator('.art-options summary').click();await page.locator('#enroute-zone').selectOption('Asia/Kolkata');
   assert.equal(await page.locator('#enroute-time').textContent(),'13:54');
-  assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['1','54','2']);
+  assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['13','54','14']);
   assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
-  await page.locator('#enroute-readout').check();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
-  await page.locator('#enroute-readout').uncheck();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
+  await page.locator('#enroute-readout').selectOption('callout');assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
+  await page.locator('#enroute-readout').selectOption('flag');assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout.h===11));
+  await page.locator('#enroute-readout').selectOption('off');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
+  // 24-hour figures are the default; the callout sets four figures, and the
+  // margin can give the nautical zone under the body.
+  assert.equal(await page.locator('#enroute-24').isChecked(),true);
+  await page.locator('#enroute-readout').selectOption('callout');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.time),'1354');
+  await page.locator('#enroute-numerals').selectOption('colon');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.time),'13:54');
+  await page.locator('#enroute-numerals').selectOption('even');await page.locator('#enroute-readout').selectOption('off');
+  await page.locator('#enroute-margin-zone').selectOption('body');assert.match(await page.evaluate(()=>groundtrackEnroute.main.last.zulu.text),/^\d{4}[A-IK-Z]$/);
+  await page.locator('#enroute-margin-zone').selectOption('utc');assert.match(await page.evaluate(()=>groundtrackEnroute.main.last.zulu.text),/^\d{4}Z$/);
   await page.locator('#enroute-24').check();assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.next];}),['13','14']);
   // Home: New York by default; none; or the browser's location, when asked.
   assert.equal(await page.locator('#home-select').inputValue(),'America/New_York');
@@ -61,6 +70,16 @@ try{
   assert.deepEqual(await page.evaluate(()=>{const h=groundtrackEnroute.state.home;return [h.lat,h.lon];}),[51.48,0]);
   assert.equal(await page.locator('#home-select').inputValue(),'here');assert.match(await page.locator('#home-status').textContent(),/51\.48°N/);
   await page.locator('#home-select').selectOption('Europe/London');assert.equal(await page.evaluate(()=>groundtrackEnroute.state.home.name),'London');
+  // Events: add one in the displayed hour; it stands on the route, is listed,
+  // and can be removed again.
+  await page.locator('#event-time').fill('13:40');await page.locator('#event-label').fill('Gate b12');await page.locator('#event-form button').click();
+  assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.events.some(e=>e.label==='GATEE')));
+  assert.match(await page.locator('#event-list').textContent(),/13:40 GATEE Gate b12/);
+  // A second event of the same name gets its own code.
+  await page.locator('#event-time').fill('13:50');await page.locator('#event-label').fill('Gate B12');await page.locator('#event-form button').click();
+  assert.equal(await page.evaluate(()=>new Set(groundtrackEnroute.state.events.filter(e=>e.title.toUpperCase()==='GATE B12').map(e=>e.label)).size),2);
+  await page.locator('[aria-label="Remove Gate b12"]').click();await page.locator('[aria-label="Remove Gate B12"]').click();
+  assert.ok(await page.evaluate(()=>!groundtrackEnroute.main.last.events.some(e=>e.label.startsWith('GATE'))));
   // Live satellites: CelesTrak is intercepted, so no network is used. One
   // satellite answers with fresh elements, another with an error.
   const requests=[];
@@ -85,6 +104,17 @@ try{
   assert.equal(await page.evaluate(()=>{const d=document.getElementById('enroute-watch').getContext('2d').getImageData(0,0,200,228).data,o=groundtrackEnroute.main.last.rgba;let n=0;for(let i=0;i<d.length;i++)if(d[i]!==o[i])n++;return n;}),0);
   await page.locator('[data-projection="chart"]').click();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.camera.fuller),undefined);
   await page.locator('[data-body="iss"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.world));assert.match(await page.locator('#enroute-caption').textContent(),/ISS/);
+  // The time scale as a tape, and with the world sliding under it.
+  await page.locator('[data-tape="tape"]').click();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.index.x),100);
+  await page.locator('[data-tape="slide"]').click();assert.ok(await page.evaluate(()=>Math.abs(groundtrackEnroute.main.last.marker.x-100)<=1.5));
+  await page.locator('[data-tape="fixed"]').click();
+  // Slow orbits on nominal elements: GPS on the hour chart, QZSS's day.
+  await page.locator('[data-body="sat:36585"]').click();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.world),false);
+  assert.match(await page.locator('#enroute-caption').textContent(),/GPS.*nominal orbit/);
+  await page.locator('[data-body="sat:42738"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.camera.day.hours.length===25));
+  assert.match(await page.locator('#body-note').textContent(),/figure-8/);
+  await page.locator('[data-span="hour"]').click();assert.equal(await page.evaluate(()=>groundtrackEnroute.main.camera.day),null);
+  await page.locator('[data-span="day"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.camera.day.hours.length===25));
   await page.reload();await page.waitForFunction(()=>window.groundtrackEnroute?.ready);await page.screenshot({path:'docs/screenshots/study-06-workshop.png',fullPage:true});
   for(const width of [320,390]){await page.setViewportSize({width,height:844});const scroll=await page.evaluate(()=>[document.documentElement.scrollWidth,innerWidth,[...document.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>innerWidth+.5).slice(0,4).map(e=>e.tagName+'#'+e.id+'.'+e.className)]);assert.ok(scroll[0]<=scroll[1],JSON.stringify(scroll));await page.screenshot({path:`test-results/enroute-mobile-${width}.png`,fullPage:true});}
   assert.deepEqual(failures,[]);console.log('Controls, plates, moonlight, stations, clock zones, zero idle redraws and mobile layouts passed.');

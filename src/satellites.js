@@ -14,10 +14,18 @@ export const CATALOG=[
   {norad:48274,code:'CSS',name:'Tiangong',symbol:'station',note:'China’s space station. 41.5° orbit, about 92 minutes.'},
   {norad:20580,code:'HST',name:'Hubble Space Telescope',symbol:'satellite',note:'Launched 1990. 28.5° orbit, about 95 minutes.'},
   {norad:49260,code:'LS9',name:'Landsat 9',symbol:'satellite',note:'Sun-synchronous: crosses the equator southbound near 10:00 local time on every pass.'},
-  {norad:43013,code:'N20',name:'NOAA-20',symbol:'satellite',note:'Polar weather satellite in the “afternoon” orbit, crossing near 13:30 local time.'}
+  {norad:43013,code:'N20',name:'NOAA-20',symbol:'satellite',note:'Polar weather satellite in the “afternoon” orbit, crossing near 13:30 local time.'},
+  // Slow orbits: the ground moves under them little faster than under the
+  // Sun, so they get the chart instead of the world band.
+  {norad:36585,code:'GPS',name:'GPS BIIF-1 (PRN 25)',symbol:'satellite',view:'hour',note:'Navigation satellite in a 12-hour orbit at 20,200 km, tilted 55°: it crosses the ground at about the Sun’s pace but swings far north and south.'},
+  {norad:42738,code:'QZS',name:'QZS-2 (Michibiki)',symbol:'satellite',view:'day',note:'Japan’s quasi-zenith navigation satellite: a tilted, slightly oval 24-hour orbit that traces a figure-8 over Japan and Australia once a day.'}
 ];
 export const bodyId=norad=>`sat:${norad}`;
 export const catalogEntry=body=>CATALOG.find(c=>bodyId(c.norad)===body);
+// How a body is charted: 'hour' on the zoomed chart (the Sun, the Moon and
+// slow orbits), 'day' as the whole local day on one chart (orbits that take
+// a day to draw their shape), or 'world' on the world band (fast orbits).
+export const viewOf=body=>body==='sun'||body==='moon'?'hour':catalogEntry(body)?.view||'world';
 
 // TLE line checksum: digits count their value, minus signs count one.
 export const checksum=line=>[...line.slice(0,68)].reduce((s,c)=>s+(c==='-'?1:/\d/.test(c)?Number(c):0),0)%10;
