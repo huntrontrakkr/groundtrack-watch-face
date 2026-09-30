@@ -22,3 +22,4 @@
 .enroute-page .live-row select{min-width:0;width:100%}.enroute-page .live-row{min-width:0}.enroute-page .range-ends{flex-wrap:wrap;row-gap:6px}
 .enroute-page .theme-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}.enroute-page .theme-options button{min-width:0;overflow-wrap:anywhere}
 .enroute-page .comparison-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.enroute-page .comparison-grid span{overflow-wrap:anywhere}
+.enroute-page .event-form{display:flex;flex-wrap:wrap;gap:8px;align-items:end}.enroute-page .event-form .select-label{flex:1;min-width:0}.enroute-page .event-form input{width:100%;min-width:0}.enroute-page .event-list{list-style:none;padding:0;margin:10px 0 0;font:11px/2 'Departure Mono',monospace}.enroute-page .event-list button{font-size:11px;margin-left:6px}
