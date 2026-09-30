@@ -23,7 +23,7 @@ Read [the Enroute notes](docs/STUDY-06.md), [the Chart notes](docs/STUDY-05.md),
 
 ## Native watchface
 
-`native/` is a Pebble SDK project for the Enroute face on Pebble Time 2 (`emery`). For the Sun and Moon the watch draws each hour's chart itself, from a lossless 236 KB pack of the coastline and relief data in its resources and daily Chebyshev segments of the Sun and Moon the phone sends weeks ahead; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel. A satellite's chart (GPS) still comes from the phone each hour. A settings page in the Pebble app picks the body, plate, minute flag and home. It hasn't run on a watch or a phone yet. [docs/NATIVE.md](docs/NATIVE.md) has the design, the measurements, how to build and what's still open.
+`native/` is a Pebble SDK project for the Enroute face on Pebble Time 2 (`emery`). For the Sun and Moon the watch draws each hour's chart itself, from a lossless 236 KB pack of the coastline and relief data in its resources and daily Chebyshev segments of the Sun and Moon the phone sends weeks ahead; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel. GPS is built on the watch too, from orbit segments the phone fits to CelesTrak's elements a few days ahead. A settings page in the Pebble app picks the body, plate, minute flag and home. It hasn't run on a watch or a phone yet. [docs/NATIVE.md](docs/NATIVE.md) has the design, the measurements, how to build and what's still open.
 
 ## Data and light
 
@@ -71,6 +71,6 @@ Studies 02–06 cache geography (and, in 02–04, tower geometry) within an hour
 | `tools/` | Reproducible land, relief, dither, font, trajectory and proof generators |
 | `docs/` | Research, architecture, measurements, and visual proofs |
 
-The quarter-degree land atlas is a 129,600-byte flash/resource candidate and the relief grid is 1,036,800 bytes; a native port must not load either wholesale into watch RAM (Study 06's notes sketch a phone-rendered hourly base chart instead). No Dymaxion app identity, credentials, or store release workflow is reused.
+The quarter-degree land atlas is a 129,600-byte flash/resource candidate and the relief grid is 1,036,800 bytes; a native port must not load either wholesale into watch RAM (Study 06's notes sketch a phone-rendered hourly base chart instead). The release tooling follows Dymaxion's with Groundtrack's own app identity; no Dymaxion listing or credentials are used ([docs/RELEASING.md](docs/RELEASING.md)).
 
 Project code: Apache-2.0. Natural Earth, NOAA ETOPO1 and USGS GMTED2010: public domain. Fira Sans, Jost, Michroma, Departure Mono and their derived glyph masks: SIL OFL 1.1. Other dependency and reused Dymaxion notices are in [NOTICE](NOTICE).

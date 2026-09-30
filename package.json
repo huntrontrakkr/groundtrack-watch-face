@@ -16,7 +16,8 @@
     "generate:map-pack": "node tools/generate-map-pack.mjs",
     "build:pkjs": "node tools/build-pkjs.mjs",
     "build:native": "node tools/build-pkjs.mjs && cd native && pebble clean && pebble build",
-    "check:emulator": "node tools/emulator-check.mjs"
+    "check:emulator": "node tools/emulator-check.mjs",
+    "release:prepare": "node tools/prepare-release.mjs"
   },
   "dependencies": {
     "astronomy-engine": "2.1.19",

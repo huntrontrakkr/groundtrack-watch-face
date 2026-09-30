@@ -15,3 +15,7 @@ native/host/fmath_test
 native/host/chart_test
 native/host/*.o
 native/src/pkjs/index.js
+
+# Release packages (tools/release.py)
+release-artifacts/
+__pycache__/

@@ -12,6 +12,7 @@
     "enableMultiJS": true,
     "targetPlatforms": ["emery"],
     "watchapp": {"watchface": true},
+    "capabilities": ["configurable", "location"],
     "messageKeys": ["SceneTotal", "SceneOffset", "SceneChunk", "SceneRequest", "SceneStatus", "Settings", "Segments", "RiseSets", "DataRequest", "DataBody", "SatSegments", "Passes"],
     "resources": {"media": [{"type": "raw", "name": "MAP_PACK", "file": "map.pack"}, {"type": "raw", "name": "FIGURES", "file": "figures.bin"}]}
   }

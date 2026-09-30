@@ -1,0 +1,122 @@
+name: Release watch app
+
+# Tests, builds and packages the watch app on every change. A push to main
+# releases a new version when package.json names one that has release notes
+# (releases/vX.Y.Z.md) and no tag yet; a pushed version tag releases that tag.
+# After Dymaxion's release workflow. See docs/RELEASING.md.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned build tools
+        run: |
+          npm ci
+          pip install pebble-tool==5.0.40
+          pebble sdk install 4.33.1
+      - name: Tests
+        run: npm test
+      - name: Clean watch build and package
+        run: |
+          npm run build:native
+          python tools/release.py package
+          python tools/release.py check
+      - name: Decide whether this push is a release
+        id: release
+        if: github.event_name == 'push'
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="v$(node -p "require('./package.json').version")"
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null || [ ! -f "releases/$tag.md" ]; then
+              tag=""
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release: ${tag:-none}"
+      - name: Verify the release tag belongs to main
+        if: steps.release.outputs.tag != ''
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          python tools/release.py check --tag "$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: groundtrack-release
+          path: release-artifacts/
+          if-no-files-found: error
+
+  publish:
+    needs: verify
+    if: needs.verify.outputs.tag != '' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: pebble-store-publish
+      cancel-in-progress: false
+    env:
+      RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+      GROUNDTRACK_STORE_APP_ID: ${{ vars.GROUNDTRACK_STORE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      # Tag the tested commit. A tag pushed with the workflow's own token starts
+      # no new run, so this run publishes it. If the same tag was pushed by
+      # hand meanwhile, carry on only when it names this commit.
+      - name: Tag the release
+        if: github.ref_type == 'branch'
+        run: |
+          git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG" || [ "$(git ls-remote origin "refs/tags/$RELEASE_TAG" | cut -f1)" = "$GITHUB_SHA" ]
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: groundtrack-release
+          path: release-artifacts
+      # Only once the store listing exists (docs/STORE-LISTING.md).
+      - name: Publish the verified package to Pebble
+        if: env.GROUNDTRACK_STORE_APP_ID != ''
+        env:
+          PEBBLE_FIREBASE_REFRESH_TOKEN: ${{ secrets.PEBBLE_FIREBASE_REFRESH_TOKEN }}
+        run: |
+          pip install pebble-tool==5.0.40
+          python tools/release.py publish --tag "$RELEASE_TAG"
+      - name: Publish GitHub release downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "Groundtrack Enroute $RELEASE_TAG" --notes-file release-artifacts/release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" release-artifacts/groundtrack-enroute.pbw release-artifacts/SHA256SUMS --clobber
