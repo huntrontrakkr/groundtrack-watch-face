@@ -5,6 +5,10 @@ CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter
 harness: harness.c $(CORE) ../src/c/enroute_core.h ../src/c/departure_font.h
 	$(CC) $(CFLAGS) -o $@ harness.c $(CORE) -lm
 
+# Host check of the map pack decoder.
+map_test: map_test.c ../src/c/map_pack.c ../src/c/map_pack.h
+	$(CC) $(CFLAGS) -o $@ map_test.c ../src/c/map_pack.c
+
 # The same with single-precision night arithmetic, as the watch would run it.
 harness-float: harness.c $(CORE) ../src/c/enroute_core.h ../src/c/departure_font.h
 	$(CC) $(CFLAGS) -DENR_FLOAT -o $@ harness.c $(CORE) -lm
@@ -24,5 +28,5 @@ shim-check: ../src/c/main.c
 	arm-none-eabi-gcc -std=gnu11 -Wall -Wno-unused-parameter -Istub -I../src/c -DENR_FLOAT -mcpu=cortex-m4 -mthumb -fsyntax-only ../src/c/main.c
 
 clean:
-	rm -f harness harness-float *.o
+	rm -f harness harness-float map_test *.o
 .PHONY: arm shim-check clean

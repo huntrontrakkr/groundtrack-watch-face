@@ -9,5 +9,6 @@ native/build/
 native/.lock-waf*
 native/host/harness
 native/host/harness-float
+native/host/map_test
 native/host/*.o
 native/src/pkjs/index.js

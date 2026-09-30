@@ -13,6 +13,7 @@
     "measure": "node tools/measure.mjs",
     "proofs": "node tools/render-proofs.mjs",
     "generate:relief": "node tools/generate-relief.mjs",
+    "generate:map-pack": "node tools/generate-map-pack.mjs",
     "build:pkjs": "node tools/build-pkjs.mjs",
     "build:native": "node tools/build-pkjs.mjs && cd native && pebble clean && pebble build",
     "check:emulator": "node tools/emulator-check.mjs"

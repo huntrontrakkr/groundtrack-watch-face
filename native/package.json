@@ -13,6 +13,6 @@
     "targetPlatforms": ["emery"],
     "watchapp": {"watchface": true},
     "messageKeys": ["SceneTotal", "SceneOffset", "SceneChunk", "SceneRequest", "SceneStatus"],
-    "resources": {"media": []}
+    "resources": {"media": [{"type": "raw", "name": "MAP_PACK", "file": "map.pack"}]}
   }
 }
