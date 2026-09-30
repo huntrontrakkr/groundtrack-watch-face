@@ -17,7 +17,7 @@ const NOTES={
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
   iss:'An archived orbit from 5 June 2019. The station laps most of the world in an hour, so the whole world is the chart.'
 };
-const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:false,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed'};
+const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',numerals:'even',zone:'utc',span:'day'};
 let main,studyEpoch=state.epoch;
 const proofs={};
 function paint(canvas,buf){
@@ -26,9 +26,10 @@ function paint(canvas,buf){
 }
 function render(){
   const r=main.render(state);$('enroute-watch').getContext('2d').putImageData(new ImageData(r.rgba,W,H),0,0);
-  for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home,events:state.events,tape:state.tape}).buf);
+  for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home,events:state.events,tape:state.tape,numerals:state.numerals,zone:state.zone}).buf);
+  $('orbit-span').classList.toggle('muted',viewOf(state.body)!=='day');document.querySelectorAll('[data-span]').forEach(b=>b.disabled=viewOf(state.body)!=='day');
   $('time-scale').classList.toggle('muted',viewOf(state.body)!=='world'||state.projection==='fuller');
-  for(const key of ['body','observation','plate','projection','tape'])document.querySelectorAll(`[data-${key}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[key]===state[key])));
+  for(const key of ['body','observation','plate','projection','tape','span'])document.querySelectorAll(`[data-${key}]`).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[key]===state[key])));
   document.querySelectorAll('[data-observation]').forEach(b=>b.disabled=state.body!=='moon');$('moon-light').classList.toggle('muted',state.body!=='moon');
   $('enroute-minute').value=Math.round((state.epoch-r.start)/MINUTE);$('enroute-time').textContent=r.time;
   $('range-start').textContent=clockParts(r.start,state.timeZone).text;$('range-end').textContent=clockParts(r.start+60*MINUTE,state.timeZone).text;
@@ -41,7 +42,8 @@ function render(){
   }
   if(!list.children.length){const li=document.createElement('li');li.textContent='No events this day.';list.append(li);}
   $('home-select').value=state.home?(Object.keys(HOMES).find(k=>HOMES[k]===state.home)||'here'):'none';
-  $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-readout').checked=state.readout;
+  $('enroute-numerals').value=state.numerals;$('enroute-margin-zone').value=state.zone;
+  $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-readout').value=state.readout===true?'callout':state.readout||'off';
   const sat=catalogEntry(state.body),elements=elementsFor(state.body);
   $('enroute-date').textContent=new Date(state.epoch).toISOString().slice(0,10);$('body-note').textContent=sat?sat.note:NOTES[state.body];
   const lat=r.marker.lat,lon=((r.marker.lon+540)%360)-180,place=`${Math.abs(lat).toFixed(1)}°${lat<0?'S':'N'} ${Math.abs(lon).toFixed(1)}°${lon<0?'W':'E'}`;
@@ -116,6 +118,7 @@ try{
     state.observation=b.dataset.observation;state.epoch=OBSERVATIONS[state.observation];studyEpoch=state.epoch;render();
   }));
   document.querySelectorAll('[data-plate]').forEach(b=>b.addEventListener('click',()=>{state.plate=b.dataset.plate;render();}));
+  document.querySelectorAll('[data-span]').forEach(b=>b.addEventListener('click',()=>{state.span=b.dataset.span;render();}));
   document.querySelectorAll('[data-tape]').forEach(b=>b.addEventListener('click',()=>{state.tape=b.dataset.tape;render();}));
   document.querySelectorAll('[data-projection]').forEach(b=>b.addEventListener('click',()=>{state.projection=b.dataset.projection;render();}));
   $('enroute-now').addEventListener('click',()=>{
@@ -136,6 +139,8 @@ try{
     const epoch=atLocal(state.epoch,state.timeZone,h,m),day=localDay(epoch,state.timeZone),taken=state.events.filter(e=>e.epoch>=day.start&&e.epoch<day.end).map(e=>e.label);
     state.events=[...state.events,{epoch,title,label:uniqueCode(title,taken)}];$('event-label').value='';render();
   });
-  $('enroute-readout').addEventListener('change',()=>{state.readout=$('enroute-readout').checked;render();});
+  $('enroute-numerals').addEventListener('change',()=>{state.numerals=$('enroute-numerals').value;render();});
+  $('enroute-margin-zone').addEventListener('change',()=>{state.zone=$('enroute-margin-zone').value;render();});
+  $('enroute-readout').addEventListener('change',()=>{const v=$('enroute-readout').value;state.readout=v==='callout'?true:v==='flag'?'flag':false;render();});
   render();window.groundtrackEnroute={ready:true,state,main,render,track,demos:DEMOS,observations:OBSERVATIONS,events:STUDY_EVENTS};
 }catch(error){$('enroute-caption').textContent=`The chart could not load: ${error.message}. Please reload.`;console.error(error);}

@@ -74,6 +74,7 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // above a station's horizon (about 15.6 degrees of arc).
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
+export const NUMERALS=['colon','plain','even','mono','accent'];
 export const FIGURE={scale:40,hour:80,hourTwo:72,minute:28,callout:28,calloutMinute:20};
 // The time scale registers with the route: its hour marks stand over the
 // two stations, 120 px apart on the zoomed charts, so each minute is exactly
@@ -83,7 +84,10 @@ export const SPAN=120,SCALE={x0:10,x1:190,baseline:46,panel:67};
 // Chart lettering: Departure Mono, drawn on the display's own pixel grid.
 const LABEL=departure.regular;
 
-function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];}
+// While a base layer is exported, every plotted pixel is marked, so the
+// native renderer can tell drawn symbols from untouched ground.
+let TRACE=null,EARLY=null,early=false;
+function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];if(TRACE){TRACE[i/3]=1;EARLY[i/3]=early?1:0;}}
 function segment(a,b,fn){
   let x=Math.round(a.x),y=Math.round(a.y);const xx=Math.round(b.x),yy=Math.round(b.y);
   const dx=Math.abs(xx-x),sx=x<xx?1:-1,dy=-Math.abs(yy-y),sy=y<yy?1:-1;let err=dx+dy;
@@ -116,6 +120,17 @@ function figurePixels(text,size,x,y){
   const h=Math.max(...[...text].map(c=>glyph(size,c).height)),out=[];let cx=x;
   for(const c of text){const g=glyph(size,c);for(let yy=0;yy<g.height;yy++)for(let xx=0;xx<g.width;xx++)if(g.rows[yy][xx]==='#')out.push([cx+xx,y+h-g.height+yy]);cx+=g.width+gapFor(size);}
   return out;
+}
+// Leaders are routed like circuit traces: a 45° run leaving the start,
+// then a straight horizontal or vertical run to the end, and no other
+// angle. The pixels within `clear` of the start (the body's knockout) are
+// left out.
+export function circuitPath(a,b,clearance=0){
+  const ax=Math.round(a.x),ay=Math.round(a.y),bx=Math.round(b.x),by=Math.round(b.y),dx=bx-ax,dy=by-ay,diag=Math.min(Math.abs(dx),Math.abs(dy)),sx=Math.sign(dx),sy=Math.sign(dy),out=[];
+  let x=ax,y=ay;out.push([x,y]);
+  for(let k=0;k<diag;k++){x+=sx;y+=sy;out.push([x,y]);}
+  while(x!==bx||y!==by){if(x!==bx)x+=sx;else y+=sy;out.push([x,y]);}
+  return out.filter(([px,py])=>Math.hypot(px-ax,py-ay)>=clearance);
 }
 const bounds=pixels=>{
   if(!pixels.length)return null;
@@ -155,8 +170,17 @@ const FIX=['....#....','...###...','...###...','..#####..','..#####..','.#######
 const AIRPORT=['.....#.....','.....#.....','....###....','...#...#...','..#.....#..','###.....###','..#.....#..','...#...#...','....###....','.....#.....','.....#.....'];
 const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['....#....','...#.#...','...#.#...','..#...#..','..#...#..','.#.....#.','#########'];
-export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed'}){
-  const pal=PLATES[plate],buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
+// layers:'base' renders only what stays fixed through the hour, for the
+// native watch renderer: no night, no body, no bold route behind it, no
+// minute readout and no Zulu time. It also returns each pixel's ground
+// class and what, if anything, was drawn over it.
+export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed',numerals='colon',zone='utc',layers='all'}){
+  const baseOnly=layers==='base';if(baseOnly){readout=false;}
+  // Pixels drawn before the route (early) may be covered by its bold line.
+  const trace=baseOnly?new Uint8Array(W*H):null,overlay=baseOnly?new Uint8Array(W*H):null,beforeRoute=baseOnly?new Uint8Array(W*H):null;TRACE=trace;EARLY=beforeRoute;early=true;
+  try{return drawEnroute();}finally{TRACE=null;EARLY=null;}
+  function drawEnroute(){
+  const pal=typeof plate==='string'?PLATES[plate]:plate,buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
   const zoneAt=(x,y)=>light[Math.max(0,Math.min(H-1,Math.round(y)))*W+Math.max(0,Math.min(W-1,Math.round(x)))];
   const tint=(table,v)=>table.find(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit)[1];
@@ -179,17 +203,17 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const i=y*W+x,z=light[i];let c=base(i);
     if(mat[i]!==SPACE){
       const level=contourLevel(relief,land,i,levels);
-      if(level&&((level!==CONTOURS[0]&&!pal.dots)||((x+y)&1)===0))c=pal.contour[z];
-      else if(mat[i]===COAST)c=pal.coast[z];
-      else if(!sparse&&!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF))c=pal.shelf[z];
-      else if(shore&&!land[i]&&shore[i]>=2&&shore[i]<=5&&y%3===0)c=pal.waterline;
+      if(level&&((level!==CONTOURS[0]&&!pal.dots)||((x+y)&1)===0)){c=pal.contour[z];if(overlay)overlay[i]=1;}
+      else if(mat[i]===COAST){c=pal.coast[z];if(overlay)overlay[i]=2;}
+      else if(!sparse&&!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF)){c=pal.shelf[z];if(overlay)overlay[i]=3;}
+      else if(shore&&!land[i]&&shore[i]>=2&&shore[i]<=5&&y%3===0){c=pal.waterline;if(overlay)overlay[i]=4;}
     }
     // Console night: dark scan lines, every other line by night and every
     // fourth through twilight.
-    if(pal.scan&&z&&y%(z===2?2:4)===1)c=pal.space;
+    if(!baseOnly&&pal.scan&&z&&y%(z===2?2:4)===1)c=pal.space;
     // The dark plates draw the terminator itself, as the plotboards did:
     // dashed where the Sun sets, dotted where twilight ends.
-    if(pal.terminator&&ground.dirs[i]){
+    if(!baseOnly&&pal.terminator&&ground.dirs[i]){
       // Traced from the Sun's height at each pixel, not the dithered zones.
       const h=dot(ground.dirs[i],sun),cross=level=>[x>0?i-1:-1,x<W-1?i+1:-1,i-W,y<H-1?i+W:-1].some(j=>j>=0&&ground.dirs[j]&&(dot(ground.dirs[j],sun)>=level)!==(h>=level));
       if(cross(SUNRISE_SINE)&&((x+y)>>1)%3!==2)c=pal.terminator;
@@ -201,13 +225,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   }
   // Paper plates show night as a regular dot tint, deepening through civil
   // twilight to a 25 percent screen, printed under every symbol.
-  if(pal.night==='screen')for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  if(!baseOnly&&pal.night==='screen')for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const d=ground.dirs[y*W+x];if(!d)continue;
     const t=Math.max(0,Math.min(1,(SUNRISE_SINE-dot(d,sun))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE)));
     if(t>0&&BAYER[(y&3)*4+(x&3)]<t*4)plot(buf,x,y,pal.screen);
   }
   // Knockouts clear to plain paper under lettering, as on a printed chart.
-  const clear=(x,y)=>{x=Math.round(x);y=Math.round(y);if(x>=0&&y>=0&&x<W&&y<H)plot(buf,x,y,base(y*W+x));};
+  const clear=(x,y)=>{x=Math.round(x);y=Math.round(y);if(x>=0&&y>=0&&x<W&&y<H){plot(buf,x,y,base(y*W+x));if(trace)trace[y*W+x]=2;}};
   const letter=(pixels,color,halo=1)=>{
     for(const [a,b] of pixels)for(let dy=-halo;dy<=halo;dy++)for(let dx=-halo;dx<=halo;dx++)clear(a+dx,b+dy);
     for(const [a,b] of pixels)plot(buf,a,b,mat[Math.max(0,Math.min(H-1,b))*W+Math.max(0,Math.min(W-1,a))]===SPACE?pal.spaceInk:color(a,b));
@@ -282,7 +306,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // The route, as the magenta line: bold behind the present, fine ahead,
   // dashed before and after the hour. Ticks every five minutes; the
   // quarter hours are longer and carry their minute, like a plotted track.
-  const track=camera.track,now=Math.floor(epoch/MINUTE)*MINUTE,[s0,s1]=camera.stations,jump=(a,b)=>Math.abs(b.x-a.x)>W/2;
+  const track=camera.track,now=baseOnly?-Infinity:Math.floor(epoch/MINUTE)*MINUTE,[s0,s1]=camera.stations,jump=(a,b)=>Math.abs(b.x-a.x)>W/2;
   // A one-ink plate cases the route in white, so it reads over waterlines.
   // On the Fuller sheets, where the route is small against busy faces, it
   // is also drawn heavier: two pixels ahead of the body, three behind.
@@ -291,6 +315,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const a=track[i-1],b=track[i];if(jump(a,b)||!(a.hour&&b.hour))continue;
     segment(a,b,(x,y)=>{for(let dy=-casing-1;dy<=casing+1;dy++)for(let dx=-casing;dx<=casing;dx++)clear(x+dx,y+dy);});
   }
+  early=false;
   for(let i=1;i<track.length;i++){
     const a=track[i-1],b=track[i];if(jump(a,b))continue;
     const hour=a.hour&&b.hour,bold=hour&&b.epoch<=now,steep=Math.abs(b.y-a.y)>Math.abs(b.x-a.x);
@@ -346,6 +371,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const body=position(camera.body,epoch),p=camera.project(body.lat,body.lon),mx=Math.round(p.x),my=Math.round(p.y);
   const disc=(cx,cy,r,fn)=>{const n=Math.ceil(r);for(let dy=-n;dy<=n;dy++)for(let dx=-n;dx<=n;dx++)if(dx*dx+dy*dy<=r*r)fn(cx+dx,cy+dy,dx,dy);};
   const mk=ink('mark')(mx,my);
+  if(!baseOnly){
   disc(mx,my,6.6,clear);
   if(camera.body==='sun'){disc(mx,my,5.2,(x,y,dx,dy)=>{if(dx*dx+dy*dy>3.6*3.6)plot(buf,x,y,mk);});disc(mx,my,1.5,(x,y)=>plot(buf,x,y,mk));}
   else if(camera.body==='moon'){
@@ -359,6 +385,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   }else{
     for(let k=-5;k<=5;k++){plot(buf,mx+k,my,mk);if(Math.abs(k)>=3){plot(buf,mx+k,my-1,mk);plot(buf,mx+k,my+1,mk);}}
     for(let k=-2;k<=2;k++)for(let d=-1;d<=1;d++)plot(buf,mx+d,my+k,mk);
+  }
   }
   // The hour. On the zoomed charts the figures stand in the chart over their
   // stations, one size and one baseline: this hour solid, the next outlined,
@@ -377,33 +404,50 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // hung from a shoulder, the cartographer's elbow leader, that runs back
   // to the body. The leader is cased with a hairline of paper so it crosses
   // relief cleanly, and it breaks for lettering, as a printed line does.
-  const calloutWidth=(big,small)=>runWidth(hour,big)+2*(gapFor(big)+1)+glyph(small,':').width+runWidth(parts.m,small);
+  // The callout's time, in one of the styles under study: 'colon' (the
+  // hour, a colon and smaller minutes), 'plain' (no colon), 'even' (four
+  // figures at one size, the minutes outlined like the next hour's
+  // figure), 'mono' (minutes in double-size Departure Mono) and 'accent'
+  // (smaller minutes in the route's ink). Pixels are relative to the top
+  // left of the hour figure; every style shares its baseline.
+  const timeFigure=(big,small)=>{
+    const fh=runHeight(big),gap=gapFor(big),hh=numerals==='even'&&clock24?hour.padStart(2,'0'):hour,solid=figurePixels(hh,big,0,0),hollow=[],accent=[];
+    let x=runWidth(hh,big);const sh=runHeight(small),add=(px,to)=>{for(const q of px)to.push(q);};
+    if(numerals==='colon'){x+=gap+1;add(figurePixels(':',small,x,fh-sh),solid);x+=glyph(small,':').width+gap+1;add(figurePixels(parts.m,small,x,fh-sh),solid);x+=runWidth(parts.m,small);}
+    else if(numerals==='even'){x+=gap+3;add(outline(figurePixels(parts.m,big,x,0),1),hollow);x+=runWidth(parts.m,big);}
+    else if(numerals==='mono'){x+=gap+3;add(textPixels(departure.double,parts.m,x,fh),solid);x+=textWidth(departure.double,parts.m)-2;}
+    else{x+=gap+3;add(figurePixels(parts.m,small,x,fh-sh),numerals==='accent'?accent:solid);x+=runWidth(parts.m,small);}
+    return {solid,hollow,accent,w:x,h:fh};
+  };
+  const setTime=(t,fx,fy)=>{
+    const at=px=>px.map(([a,b])=>[a+fx,b+fy]),solid=at(t.solid),hollow=at(t.hollow),accent=at(t.accent);
+    letter([...solid,...hollow],ink('ink'));if(accent.length)letter(accent,ink('route'));
+    return [...solid,...hollow,...accent];
+  };
+  const calloutWidth=(big,small)=>timeFigure(big,small).w;
   const callout=({big,small,x:bx,y:by,up,reach,aside=null})=>{
-    const gap=gapFor(big),colon=gapFor(big)+1,hw=runWidth(hour,big),cw=glyph(small,':').width,mw=runWidth(parts.m,small),fw=hw+colon+cw+colon+mw;
-    const fh=runHeight(big),sh=runHeight(small),sy=up?by-reach:by+reach;
+    const t=timeFigure(big,small),fw=t.w,fh=t.h,sy=up?by-reach:by+reach;
     const open=([x,y])=>!type.some(b=>x>=b.x-2&&x<b.x+b.w+2&&y>=b.y-2&&y<b.y+b.h+2);
     if(aside){
       // Set aside in open map beside the track: the figure level with the
       // body, the shoulder ruled under it, and the leader run across to
       // the body from the shoulder's near end.
       const fx=aside.x,fy=Math.max(aside.top,Math.min(aside.bottom-fh-3,by-fh)),y=fy+fh+3,end={x:fx+fw+1,y},d=Math.hypot(end.x-bx,end.y-by)||1,line=[];
-      segment({x:bx+(end.x-bx)/d*9,y:by+(end.y-by)/d*9},end,(x,y)=>line.push([x,y]));segment({x:fx-1,y},end,(x,y)=>line.push([x,y]));
-      const mx0=fx+hw+colon,figure=[...figurePixels(hour,big,fx,fy),...figurePixels(':',small,mx0,fy+fh-sh),...figurePixels(parts.m,small,mx0+cw+colon,fy+fh-sh)];
-      letter(line.filter(open),ink('ink'));letter(figure,ink('ink'));
+      line.push(...circuitPath({x:bx,y:by},end,9));segment({x:fx-1,y},end,(x,y)=>line.push([x,y]));
+      letter(line.filter(open),ink('ink'));const figure=setTime(t,fx,fy);
       return {figure,box:bounds(figure)};
     }
     // Hang the time on whichever side keeps it on the face and its leader
     // clearest of lettering, toward the middle of the face if both do.
     const layout=side=>{
       const sx=bx+side*10,fx=Math.max(4,Math.min(W-4-fw,side>0?sx+2:sx-2-fw)),d=Math.hypot(sx-bx,sy-by),line=[];
-      segment({x:bx+(sx-bx)/d*9,y:by+(sy-by)/d*9},{x:sx,y:sy},(x,y)=>line.push([x,y]));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
+      line.push(...circuitPath({x:bx,y:by},{x:sx,y:sy},9));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
       const shown=line.filter(open),fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
       return {fx,shown,score:(fits?0:1000)+(line.length-shown.length)*10+(side===(bx<W/2?1:-1)?0:1)};
     };
     const {fx,shown}=[layout(1),layout(-1)].sort((a,b)=>a.score-b.score)[0];
-    const fy=up?sy-3-fh:sy+3,mx0=fx+hw+colon;
-    const figure=[...figurePixels(hour,big,fx,fy),...figurePixels(':',small,mx0,fy+fh-sh),...figurePixels(parts.m,small,mx0+cw+colon,fy+fh-sh)];
-    letter(shown,ink('ink'));letter(figure,ink('ink'));
+    const fy=up?sy-3-fh:sy+3;
+    letter(shown,ink('ink'));const figure=setTime(t,fx,fy);
     return {figure,box:bounds(figure)};
   };
   if(camera.world&&tape!=='fixed'){
@@ -484,7 +528,23 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     }else{hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);}
     letter(hourPixels,ink('ink'));letter(outline(nextSolid,2),ink('ink'));
     index={x:ix,y:c0.y};
-    if(readout){
+    if(readout==='flag'){
+      // Optional minute flag: a staff rising from the body into the space
+      // between the route and the hour figures, flying a small pennant with
+      // the minutes reversed out of the route's ink in the chart's
+      // lettering. It flies ahead, toward the next hour, and turns back as
+      // the next station comes near.
+      // On a slow orbit's steep route the staff leans out on the figures'
+      // side instead, and the flag flies away from the route.
+      const n=camera.normal||{x:0,y:-1},tw=textWidth(LABEL,parts.m)-1,fh2=11,fw=tw+6,point=6,ahead=forward?1:-1,room=forward?c1.x-mx:mx-c1.x;
+      const sx=Math.round(mx+n.x*20),top=Math.round(my+n.y*20)-(n.y<=0?4:0)-(n.y>0?fh2-4:0);
+      const d=Math.abs(n.x)>.5?Math.sign(n.x):room<fw+point+8?-ahead:ahead,staff=[],flag=[];
+      staff.push(...circuitPath({x:mx,y:my},{x:sx,y:n.y<=0?top:top+fh2-1},8));
+      for(let y=0;y<fh2;y++){const tip=Math.round(point*(1-Math.abs(2*y-(fh2-1))/(fh2-1)));for(let x=0;x<fw+tip;x++)flag.push([d>0?sx+1+x:sx-1-x,top+y]);}
+      const digits=textPixels(LABEL,parts.m,d>0?sx+4:sx-fw+2,top+10);
+      letter([...staff,...flag],ink('route'),1);for(const [a,b] of digits)clear(a,b);
+      minuteBox=bounds(flag);
+    }else if(readout){
       // Optional time callout, under the route, clear of the hour figures.
       minuteBox=callout({big:FIGURE.callout,small:FIGURE.calloutMinute,x:mx,y:my,up:false,reach:26}).box;
     }
@@ -522,10 +582,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const margin=(l,r,y,color,middle='')=>{
     const a=textPixels(LABEL,l,6,y),b=textPixels(LABEL,r,W-6-textWidth(LABEL,r),y),left=6+textWidth(LABEL,l),right=W-6-textWidth(LABEL,r);
     letter(a,color,1);letter(b,color,1);margins.push(...[a,b].filter(q=>q.length).map(bounds));
-    if(middle){const c=textPixels(LABEL,middle,Math.round((left+right-textWidth(LABEL,middle))/2),y);letter(c,color,1);zulu={text:middle,box:bounds(c)};}
+    if(middle){const mx0=Math.round((left+right-textWidth(LABEL,middle))/2);zuluAt={x:mx0,baseline:y};if(!baseOnly){const c=textPixels(LABEL,middle,mx0,y);letter(c,color,1);zulu={text:middle,box:bounds(c)};}}
   };
   // Zulu: the same moment in UTC, as pilots and mission control keep it.
-  const utc=new Date(epoch),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}Z`;let zulu=null;
+  // With zone 'body', the margin shows instead the time in the nautical
+  // time zone under the body, with the zone's letter: Z at Greenwich, R for
+  // US Eastern, I for Japan. The Sun's is always near noon.
+  const zoned=zone==='body'?nauticalZone(body.lon):{hours:0,letter:'Z'},utc=new Date(epoch+zoned.hours*3600000),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}${zoned.letter}`;let zulu=null,zuluAt=null;
   const MONTHS='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
   if(camera.world){
     // Satellites say where their numbers come from: the 2019 archive, or
@@ -543,10 +606,26 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'),Z);
     // Over the chart, home's next satellite pass, or the day's rise and
     // set of the Sun or Moon there, in local time.
-    if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
+    // A satellite's pass line can change within the hour, so a base layer
+    // leaves it to the native renderer, which sets it each minute.
+    const risen=camera.body==='sun'||camera.body==='moon';
+    if(home&&(risen||!baseOnly)){const [l,r]=risen?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
+  }
+  if(baseOnly){
+    const tintIndex=(table,v)=>table.findIndex(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit);
+    const baseClass=new Uint8Array(W*H);
+    for(let i=0;i<W*H;i++)baseClass[i]=mat[i]===SPACE?2:pal.tints&&land[i]?3+tintIndex(pal.tints,relief[i]):pal.depths&&!land[i]?8+tintIndex(pal.depths,relief[i]):land[i]?1:0;
+    return {buf,trace,overlay,baseClass,beforeRoute,marker:{x:p.x,y:p.y},zuluAt};
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
-    figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+    figure:{hour,minute:parts.m,next,time:camera.day||readout===true?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+  }
+}
+// Nautical time zones: 15° wide, centred on multiples of 15°, lettered A–M
+// east of Greenwich (no J), N–Y west, Z at Greenwich.
+export function nauticalZone(lon){
+  const hours=Math.max(-12,Math.min(12,Math.round((((lon+540)%360)-180)/15)));
+  return {hours,letter:hours===0?'Z':hours>0?'ABCDEFGHIKLM'[hours-1]:'NOPQRSTUVWXY'[-hours-1]};
 }
 // Local clock time in the chart's four figures, 24-hour, no colon.
 const hhmm=(t,timeZone)=>{const q=clockParts(t,timeZone);return `${String(q.h).padStart(2,'0')}${String(q.m).padStart(2,'0')}`;};
@@ -572,15 +651,15 @@ export function localDate(epoch,timeZone){
 export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',start=civilHour(epoch,timeZone);
-    const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
+    const {body,epoch,timeZone,clock24,plate}=state,readout=state.readout==='flag'?'flag':!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',numerals=NUMERALS.includes(state.numerals)?state.numerals:'colon',zone=state.zone==='body'?'body':'utc',start=civilHour(epoch,timeZone);
+    const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body)==='day'&&state.span==='hour'?'hour':viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${view}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
       this.camera=projection==='fuller'?(body==='sun'||body==='moon'||view==='day'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):view==='day'?chartCamera(body,start,{day:localDay(epoch,timeZone)}):chartCamera(body,start,{span:SPAN,center:slide?minute:null});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
-    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${tape}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
-    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events,tape});
+    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${tape}/${numerals}/${zone}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
+    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events,tape,numerals,zone});
     const zones=[0,0,0];for(const z of this.light)zones[z]++;
     this.sceneKey=sceneKey;this.stats.renders++;
     const rgba=new Uint8ClampedArray(W*H*4);for(let i=0;i<W*H;i++){rgba.set(out.buf.subarray(i*3,i*3+3),i*4);rgba[i*4+3]=255;}
