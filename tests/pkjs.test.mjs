@@ -33,7 +33,9 @@ test('the phone renders the hour and sends it to the watch',async()=>{
       }
     });
     vm.runInContext(`Date.now=()=>${now};`,context);
-    vm.runInContext(readFileSync(out,'utf8'),context);
+    // The SDK repackages the bundle with webpack 1, which indents every line
+    // with a tab; run it as the watch app will carry it.
+    vm.runInContext(readFileSync(out,'utf8').replace(/\n/g,'\n\t'),context);
     listeners.ready({});
     await sent;
 

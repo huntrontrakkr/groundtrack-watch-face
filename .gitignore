@@ -6,6 +6,7 @@ test-results/
 
 # Native builds
 native/build/
+native/.lock-waf*
 native/host/harness
 native/host/harness-float
 native/host/*.o
