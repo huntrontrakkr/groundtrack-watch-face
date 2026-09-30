@@ -21,9 +21,10 @@
 //   tape's index x, char height[8] ("412 KM", NUL-padded), u8 home's
 //   acquisition circle (255 for none)
 //   u16 circle count, then per circle u16 n and n (u8 x, u8 y)
-//   u16 track count, then per point i16 x, y (rounded), i32 seconds from the
-//   hour, u8 hour, u8 step from the point before (1 steep, 2 a jump across
-//   the band's seam)
+//   u16 track count, i32 the first point's seconds from the hour, i16 the
+//   seconds between points, then per point i16 x, y (rounded), u8 flags:
+//   the step from the point before (1 steep, 2 a jump across the band's
+//   seam), 4 within the hour
 //   u16 row offsets[H+1] into the runs, then the class plane as runs of
 //   (u8 count, u8 class) that never cross a row. Each class byte: low
 //   nibble ground class, high nibble layer (0 plain,
@@ -120,9 +121,11 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
     u8(circle);
   }
   u16(circles.length);for(const px of circles){u16(px.length);for(const [x,y] of px){u8(x);u8(y);}}
-  u16(cam.track.length);cam.track.forEach((p,k)=>{
+  const t0=Math.round((cam.track[0].epoch-start)/1000),dt=Math.round((cam.track[1].epoch-cam.track[0].epoch)/1000);
+  u16(cam.track.length);i32(t0);i16(dt);cam.track.forEach((p,k)=>{
+    if(Math.round((p.epoch-start)/1000)!==t0+k*dt)throw new Error('The track is not evenly spaced');
     const q=cam.track[k-1],step=!q?0:(Math.abs(p.y-q.y)>Math.abs(p.x-q.x)?1:0)|(Math.abs(p.x-q.x)>W/2?2:0);
-    i16(Math.round(p.x));i16(Math.round(p.y));i32(Math.round((p.epoch-start)/1000));u8(p.hour?1:0);u8(step);
+    i16(Math.round(p.x));i16(Math.round(p.y));u8(step|(p.hour?4:0));
   });
   // The class plane as row runs: charts are mostly flat, so this is a
   // quarter of the plane's size or less.

@@ -9,6 +9,7 @@ native/build/
 native/.lock-waf*
 native/host/harness
 native/host/harness-float
+native/host/harness-exact
 native/host/map_test
 native/host/segments_test
 native/host/fmath_test

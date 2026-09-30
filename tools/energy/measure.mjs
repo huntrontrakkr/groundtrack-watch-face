@@ -17,6 +17,8 @@ import {join,resolve} from 'node:path';
 import {connect} from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {HOMES} from '../../src/home.js';
+import {PLATES} from '../../src/enroute-render.js';
+import {catalogEntry,viewOf} from '../../src/satellites.js';
 
 const label=process.argv[2]||'build',repeats=Number(process.argv[3]||2);
 const dir=resolve(process.env.QEMU_TRACE_DIR),out=resolve('test-results/energy');mkdirSync(out,{recursive:true});
@@ -42,10 +44,19 @@ async function window(name,ms){
   await sleep(ms);
   await monitor('log in_asm,nochain');await monitor('logfile '+next('gap'));
 }
-// Settings as the phone packs them (native/pkjs/main.js): the Sun on Enroute,
-// 24-hour, home New York; the minute flag as given.
+// Settings as the phone packs them (native/pkjs/main.js): MEASURE_BODY (sun,
+// moon or sat:<catalog number>; the Sun by default) on MEASURE_PLATE
+// (Enroute), 24-hour, home New York; the minute flag as given. They must be
+// the phone's own, or the phone's next settings build the hour again.
 const KEY=JSON.parse(readFileSync(process.argv[4]||'native/build/js/message_keys.json','utf8'));
-const settings=flag=>{const h=HOMES['America/New_York'],b=Buffer.alloc(13);b.set([0,0,flag,1,1]);b.writeInt32LE(Math.round(h.lat*100),5);b.writeInt32LE(Math.round(h.lon*100),9);return b;};
+const BODY=process.env.MEASURE_BODY||'sun',PLATE=Object.keys(PLATES).indexOf(process.env.MEASURE_PLATE||'enroute');
+const settings=flag=>{
+  const h=HOMES['America/New_York'],b=Buffer.alloc(21),sat=BODY.startsWith('sat:'),c=sat?catalogEntry(BODY):null;
+  b.set([BODY==='sun'?0:BODY==='moon'?1:2,PLATE,flag,1,1]);b.writeInt32LE(Math.round(h.lat*100),5);b.writeInt32LE(Math.round(h.lon*100),9);
+  b.writeInt32LE(sat?Number(BODY.slice(4)):0,13);b[17]=(c?.symbol==='station'?1:0)|(sat?['hour','world','day'].indexOf(viewOf(BODY)):0)<<1;
+  if(c)b.write(c.code,18,'latin1');
+  return b;
+};
 let flag=1;
 const UUID=JSON.parse(readFileSync('native/package.json','utf8')).pebble.uuid;
 const send=()=>{flag^=1;const f=join(out,`${label}-settings.bin`);writeFileSync(f,settings(flag));pebble('send-app-message','--app-uuid',UUID,'--bytes-file',`${KEY.Settings}=${f}`);};

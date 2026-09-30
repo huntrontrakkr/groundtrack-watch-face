@@ -34,6 +34,28 @@ typedef struct {
   // Measuring: plots only widen this box (x0, y0, x1, y1), drawing nothing.
   bool measure;int box[4];
 } Ctx;
+
+// Night's thresholds are decided in 2^30 fixed point first: the Sun's height
+// at a pixel is within a few units of row_cos*P(x) + row_sin*u2, and only a
+// pixel within MARGIN of a threshold takes the double sums, whose bits the
+// browser's decide. The fast sums cost a few integer instructions; the
+// doubles, in software on the watch, a few hundred.
+#define Q30 1073741824.0
+// ENR_EXACT (for tests) takes the double sums everywhere.
+#ifdef ENR_EXACT
+#define MARGIN ((int64_t)1<<40)
+#else
+#define MARGIN 64
+#endif
+static int32_t q30(enr_real v){return (int32_t)(v*(enr_real)Q30);}
+static struct {const EnrScene *s;const EnrMinute *m;int32_t p[ENR_W],u2,sunrise,civil,zone[16],screen[16];} F;
+static void fast_ready(const EnrScene *s,const EnrMinute *m){
+  if(F.s==s&&F.m==m)return;
+  F.s=s;F.m=m;
+  for(int x=0;x<W;x++)F.p[x]=q30(s->col_cos[x]*m->sun[0]+s->col_sin[x]*m->sun[1]);
+  F.u2=q30(m->sun[2]);
+}
+static int64_t fast_h(const EnrScene *s,int x,int y){return ((int64_t)s->row_q[y][0]*F.p[x]+(int64_t)s->row_q[y][1]*F.u2)>>30;}
 static void touch(Ctx *c,int x,int y){
   if(x<c->box[0])c->box[0]=x;
   if(y<c->box[1])c->box[1]=y;
@@ -58,14 +80,28 @@ static enr_real sun_dot(const Ctx *c,int x,int y){
   const EnrScene *s=c->s;const enr_real *u=c->m->sun;
   return s->row_cos[y]*s->col_cos[x]*u[0]+s->row_cos[y]*s->col_sin[x]*u[1]+s->row_sin[y]*u[2];
 }
+// Whether the Sun's height at a pixel is at least a threshold (level, and
+// its fixed-point value q).
+static bool above(const Ctx *c,int x,int y,enr_real level,int32_t q){
+  const int64_t h=fast_h(c->s,x,y);
+  if(h>=(int64_t)q+MARGIN)return true;
+  if(h<(int64_t)q-MARGIN)return false;
+  return sun_dot(c,x,y)>=level;
+}
 // Day, dusk or night as flat zones, dithered through civil twilight.
 static int zone(const Ctx *c,int x,int y){
   if(!(c->s->flags&ENR_NIGHT_ZONES)||!has_dir(c,x,y))return 0;
+  const EnrScene *s=c->s;const int64_t h=fast_h(s,x,y);const int b=BAYER[(y&3)*4+(x&3)];
+  const int32_t *q=s->night_q;
+  // Clear of every threshold that matters here: decided by the fast sum.
+  if(h>=(int64_t)q[0]+MARGIN)return 0;
+  if(h<(int64_t)q[1]-MARGIN)return 2;
+  if(h<(int64_t)q[0]-MARGIN&&h>=(int64_t)q[1]+MARGIN&&(h<(int64_t)q[2+b]-MARGIN||h>=(int64_t)q[2+b]+MARGIN))return h<(int64_t)q[2+b]?2:1;
   const enr_real a=sun_dot(c,x,y);
   if(a>=SUNRISE_SINE)return 0;
   if(a<CIVIL_TWILIGHT_SINE)return 2;
   const enr_real t=(SUNRISE_SINE-a)/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE);
-  return t*16>BAYER[(y&3)*4+(x&3)]+(enr_real)0.5?2:1;
+  return t*16>b+(enr_real)0.5?2:1;
 }
 static int zone_at(const Ctx *c,int x,int y){
   x=x<0?0:x>W-1?W-1:x;y=y<0?0:y>H-1?H-1:y;
@@ -120,11 +156,11 @@ static int block_state(const EnrScene *s,int m,const enr_real *lo,const enr_real
 }
 
 // The hour's chart in the plate's colors, with night laid over the ground.
-static bool crosses(const Ctx *c,int x,int y,enr_real h,enr_real level){
-  const int nx[4]={x-1,x+1,x,x},ny[4]={y,y,y-1,y+1};
+static bool crosses(const Ctx *c,int x,int y,enr_real level,int32_t q){
+  const int nx[4]={x-1,x+1,x,x},ny[4]={y,y,y-1,y+1};const bool here=above(c,x,y,level,q);
   for(int k=0;k<4;k++){
     if(nx[k]<0||nx[k]>=W||ny[k]<0||ny[k]>=H||!has_dir(c,nx[k],ny[k]))continue;
-    if((sun_dot(c,nx[k],ny[k])>=level)!=(h>=level))return true;
+    if(above(c,nx[k],ny[k],level,q)!=here)return true;
   }
   return false;
 }
@@ -188,15 +224,17 @@ static int draw_base(Ctx *c,const uint16_t *mask){
       col=layer==L_CONTOUR?s->zoned[ENR_CONTOUR][z]:layer==L_COAST?s->zoned[ENR_COAST][z]:layer==L_SHELF?s->zoned[ENR_SHELF][z]:layer==L_WATERLINE?s->waterline:base_color(s,ground,z);
       if((s->flags&ENR_SCAN)&&z&&y%(z==2?2:4)==1)col=s->space;
       if((s->flags&ENR_TERMINATOR)&&has_dir(c,x,y)){
-        const enr_real h=sun_dot(c,x,y);
-        if(crosses(c,x,y,h,SUNRISE_SINE)&&((x+y)>>1)%3!=2)col=s->terminator;
-        else if(crosses(c,x,y,h,CIVIL_TWILIGHT_SINE)&&(x+y)%3==0)col=s->terminator;
+        if(((x+y)>>1)%3!=2&&crosses(c,x,y,SUNRISE_SINE,s->night_q[0]))col=s->terminator;
+        else if((x+y)%3==0&&crosses(c,x,y,CIVIL_TWILIGHT_SINE,s->night_q[1]))col=s->terminator;
         else if((s->flags&ENR_NIGHT_DOTS)&&z==2&&x%4==0&&y%4==((x>>2)&1)*2)col=s->night_dots;
       }
       if(!zones&&has_dir(c,x,y)){
-        enr_real t=(SUNRISE_SINE-sun_dot(c,x,y))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE);
-        t=t<0?0:t>1?1:t;
-        if(t>0&&BAYER[(y&3)*4+(x&3)]<t*4)col=s->screen;
+        // The screen's dot shows where t > 0 and t*4 > its Bayer value.
+        const int b=BAYER[(y&3)*4+(x&3)];const int64_t h=fast_h(s,x,y),q=s->night_q[18+b];
+        bool dot;
+        if(h<q-MARGIN)dot=true;else if(h>=q+MARGIN)dot=false;
+        else{enr_real t=(SUNRISE_SINE-sun_dot(c,x,y))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE);t=t<0?0:t>1?1:t;dot=t>0&&b<t*4;}
+        if(dot)col=s->screen;
       }
     }
     else if(layer==L_CLEARED||layer==L_EARLY_CLEARED||layer==L_LATE_CLEARED)col=base_color(s,ground,z);
@@ -232,8 +270,8 @@ static void draw_bold_route(Ctx *c,int minute){
   const EnrScene *s=c->s;const int32_t now=minute*60;
   for(int k=1;k<s->track_count;k++){
     const EnrPoint *a=&s->track[k-1],*b=&s->track[k];
-    if((b->step&ENR_JUMP)||!(a->hour&&b->hour)||b->seconds>now)continue;
-    bool steep=b->step&ENR_STEEP;
+    if((b->flags&ENR_JUMP)||!(a->flags&b->flags&ENR_HOUR)||s->track_t0+k*(int32_t)s->track_step>now)continue;
+    bool steep=b->flags&ENR_STEEP;
     segment(c,a->x,a->y,b->x,b->y,bold_pixel,&steep);
   }
 }
@@ -404,6 +442,7 @@ static void draw_moving(Ctx *c,int part){
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint16_t *mask){
   minute=minute<0?0:minute>59?59:minute;
   Ctx c={scene,&scene->minutes[minute],frame,row_stride,{0,0,0},0,false,{0,0,0,0}};
+  fast_ready(scene,c.m);
   const int drawn=draw_base(&c,mask);
   draw_circle(&c);
   draw_bold_route(&c,minute);
@@ -413,6 +452,13 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){render(scene,minute,frame,row_stride,NULL);}
 
 void enr_ready(EnrScene *s){
+  for(int y=0;y<H;y++){s->row_q[y][0]=q30(s->row_cos[y]);s->row_q[y][1]=q30(s->row_sin[y]);}
+  // Night's thresholds: sunrise, civil twilight, the zones' dither for each
+  // Bayer value (t*16 > b + 0.5) and the paper screen's (t*4 > b, and t > 0).
+  const enr_real S=SUNRISE_SINE,C=CIVIL_TWILIGHT_SINE;
+  s->night_q[0]=q30(S);s->night_q[1]=q30(C);
+  for(int b=0;b<16;b++){s->night_q[2+b]=q30(S-(b+(enr_real)0.5)/16*(S-C));s->night_q[18+b]=b>=4?INT32_MIN/2:q30(b?S-b/(enr_real)4*(S-C):S);}
+  F.s=NULL;
   memset(s->ground_rows,0,sizeof s->ground_rows);
   for(int y=0;y<H;y++)for(unsigned k=s->row_offset[y];k<s->row_offset[y+1];k+=2)if((s->runs[k+1]&15)!=G_SPACE){s->ground_rows[y>>3]|=(uint8_t)(1<<(y&7));break;}
 }
@@ -451,7 +497,7 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
   for(int k=0;k<2;k++)for(int part=PART_BODY;part<PARTS;part++){
     if(part==PART_CIRCLE&&!circle)continue;
     Ctx c={scene,&scene->minutes[k?minute:from],frame,row_stride,{0,0,0},0,true,{W,H,-1,-1}};
-    draw_moving(&c,part);box_blocks(c.box,mask);
+    fast_ready(scene,c.m);draw_moving(&c,part);box_blocks(c.box,mask);
   }
   return render(scene,minute,frame,row_stride,mask);
 }
@@ -494,10 +540,10 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
     s->circle_px[k]=alloc(n?2*n:1);if(!s->circle_px[k])return false;
     s->circle_count=(uint8_t)(k+1);s->circle_n[k]=(uint8_t)n;take(&r,s->circle_px[k],2*n);
   }
-  s->track_count=u16(&r);
+  s->track_count=u16(&r);s->track_t0=i32(&r);s->track_step=i16(&r);
   s->track=alloc(sizeof(EnrPoint)*(s->track_count?s->track_count:1));
   if(!s->track)return false;
-  for(int k=0;k<s->track_count;k++){EnrPoint *p=&s->track[k];p->x=i16(&r);p->y=i16(&r);p->seconds=i32(&r);p->hour=u8(&r);p->step=u8(&r);}
+  for(int k=0;k<s->track_count;k++){EnrPoint *p=&s->track[k];p->x=i16(&r);p->y=i16(&r);p->flags=u8(&r);}
   for(int y=0;y<=H;y++)s->row_offset[y]=u16(&r);
   const size_t runs=s->row_offset[H];
   if(!r.ok||(size_t)(r.end-r.p)!=runs||runs%2)return false;

@@ -46,12 +46,13 @@ typedef struct {
 } EnrMinute;
 
 // A point of the route, rounded to the pixel, with the step from the one
-// before: steep (more down than across) or a jump across the band's seam.
-enum {ENR_STEEP=1,ENR_JUMP=2};
+// before (steep: more down than across; a jump across the band's seam) and
+// whether it lies within the hour. Point k is at track_t0 + k*track_step
+// seconds from the hour.
+enum {ENR_STEEP=1,ENR_JUMP=2,ENR_HOUR=4};
 typedef struct {
   int16_t x,y;
-  int32_t seconds;
-  uint8_t hour,step;
+  uint8_t flags;
 } EnrPoint;
 
 enum {ENR_VIEW_HOUR,ENR_VIEW_WORLD};
@@ -76,6 +77,8 @@ typedef struct {
   uint8_t circle_count,circle_n[60];
   uint8_t *circle_px[60];
   uint16_t track_count;
+  int32_t track_t0;
+  int16_t track_step;
   EnrPoint *track;
   // The class plane as row runs of (count, class) byte pairs; row y's runs
   // are runs[row_offset[y]] up to runs[row_offset[y+1]].
@@ -85,6 +88,9 @@ typedef struct {
   // Rows with ground under them (bit y&7 of byte y>>3), where night can
   // change; set by enr_ready.
   uint8_t ground_rows[(ENR_H+7)/8];
+  // The rows' cosines and sines, and night's thresholds, in 2^30 fixed
+  // point, for the minute renderer's fast night.
+  int32_t row_q[ENR_H][2],night_q[34];
 } EnrScene;
 
 // Parse a scene blob as the phone sends it. Allocates the track and circles

@@ -86,8 +86,8 @@ int main(int argc,char **argv){
     fwrite(e->zulu,1,5,out);fwrite(e->minute,1,2,out);fwrite(e->top,1,24,out);u16((uint16_t)e->index);fwrite(e->height,1,8,out);u8(e->circle);}
   u16(s.circle_count);
   for(int k=0;k<s.circle_count;k++){u16(s.circle_n[k]);fwrite(s.circle_px[k],1,2*s.circle_n[k],out);}
-  u16(s.track_count);
-  for(int k=0;k<s.track_count;k++){u16((uint16_t)s.track[k].x);u16((uint16_t)s.track[k].y);i32(s.track[k].seconds);u8(s.track[k].hour);u8(s.track[k].step);}
+  u16(s.track_count);i32(s.track_t0);u16((uint16_t)s.track_step);
+  for(int k=0;k<s.track_count;k++){u16((uint16_t)s.track[k].x);u16((uint16_t)s.track[k].y);u8(s.track[k].flags);}
   for(int y=0;y<=228;y++)u16(s.row_offset[y]);
   fwrite(s.runs,1,s.row_offset[228],out);
   fclose(out);

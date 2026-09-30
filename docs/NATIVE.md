@@ -102,14 +102,17 @@ These are measurements of the code in the emulator and on the host, not of a wat
 | | |
 |---|---|
 | App code and static data | 56 KB of the 64 KB an app may have (doubles in software make every sum a call) |
-| Heap free at launch | 74 KB; about 66 KB used at a build's peak; 33–47 KB free with the hour's chart |
+| Heap free at launch | 72 KB; about 66 KB used at a build's peak; 33–47 KB free with the hour's chart |
 | Building the hour, in the emulator | 0.7–1.1 seconds of work, in slices |
 | Radio for the Sun and Moon | settings on launch; about 10 KB of segments every few weeks |
 | Radio for a satellite | GPS about 2.5 KB of segments and passes every day or two; a fast satellite (hour-long segments) about 13 KB every two to three days |
-| Instructions for a minute change, in the emulator | 5.8 million, down from 24.2 million with full repaints (−76%) |
-| Instructions for a day (1,440 minutes and 24 builds) | 11.1 billion, down from 37.7 billion (−70.5%), for the Sun; the world band is not yet measured |
+| Instructions for a minute change, in the emulator | the Sun 4.0 million (24.2 million with full repaints; 5.8 million before night's fixed-point filter); the ISS's world band 10 million |
+| Instructions for building the hour | the Sun 114 million; the ISS 105 million |
+| Instructions for a day (1,440 minutes and 24 builds) | the Sun 8.4 billion (37.7 billion at first); the ISS 16.9 billion |
 
-The instruction counts come from `tools/energy/` (after Dymaxion's), which traces QEMU's executed blocks in windows around a minute change, a build and an idle stretch; the *Measure watch work* workflow compares a change against its base. Details: [`docs/energy/minute-redraw.md`](energy/minute-redraw.md). They are instructions, not current: the display, flash and radio are not modelled.
+The instruction counts come from `tools/energy/` (after Dymaxion's), which traces QEMU's executed blocks in windows around a minute change, a build and an idle stretch (`MEASURE_BODY` and `MEASURE_PLATE` pick the chart); `tools/energy/profile.mjs` shares a window's instructions out among the app's functions. The *Measure watch work* workflow compares a change against its base.
+
+Night is the minute's largest cost: each pixel near the terminator compares the Sun's height there with a threshold, and the watch's doubles are software. The minute renderer first sums the height in 2^30 fixed point (a few integer instructions) and takes the double sums, whose bits the browser's decide, only within a hair of a threshold; `tests/native.test.mjs` checks every minute of eight hours against a build that always takes the doubles. On the world band, where the terminator crosses the whole map, this took a minute from about 44 to 10 million instructions. Details: [`docs/energy/minute-redraw.md`](energy/minute-redraw.md). They are instructions, not current: the display, flash and radio are not modelled.
 
 ## Building
 

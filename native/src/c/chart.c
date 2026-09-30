@@ -432,7 +432,8 @@ static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char
 // The drawing's pixel lists and placements.
 typedef struct {Px scratch[SCRATCH];Box taken[64];Px home_code[64];double sb[72],cb[72];} Draw;
 // The track: latitude and unwrapped longitude, then its screen position.
-typedef struct {double a,b;int32_t t;uint8_t hour;} TrackPoint;
+// Point i is at t0 + i*step seconds from the hour (see make_track).
+typedef struct {double a,b;} TrackPoint;
 // The figures of one size, loaded while they are drawn.
 static uint8_t *load_figures(const ChartSources *src,int size,int *base){
   int s=0;while(s<5&&FIGURE_SIZES[s]!=size)s++;
@@ -448,7 +449,7 @@ static uint8_t *load_figures(const ChartSources *src,int size,int *base){
 // rows at a time, then the drawing and the scene.
 struct ChartBuild {
   ChartInput in;ChartSources src;
-  TrackPoint *track;int count,h0,h1;Cam cam;
+  TrackPoint *track;int count,h0,h1,t0,step;Cam cam;
   uint8_t *classes;MapPack pack;MapWork *map_work;Ground *ground;Rows *rows;RunSink sink;
   // Then the scene, its minutes made a few at a time, with home's circle's
   // bearings.
@@ -461,6 +462,8 @@ static void sink_free(ChartBuild *b){
 // chartCamera()'s track: the hour and forty minutes either side a minute
 // apart, or for the world band twenty minutes either side every fifteen
 // seconds; latitude and unwrapped longitude. Returns the count, or -1.
+#define T_OF(b,i) ((b)->t0+(i)*(b)->step)
+#define HOUR_OF(b,i) (T_OF(b,i)>=0&&T_OF(b,i)<=3600)
 static int make_track(const ChartInput *in,const ChartSources *src,TrackPoint *track){
   const int step=in->view?15:60,lead=in->view?1200:2400;
   int count=0;double turn=0,prev=0;
@@ -468,7 +471,7 @@ static int make_track(const ChartInput *in,const ChartSources *src,TrackPoint *t
     double lat,lon;if(!body_position(src,in->body,t,&lat,&lon))return -1;
     if(count){const double d=lon-prev;if(d>180)turn-=360;else if(d<-180)turn+=360;}
     prev=lon;
-    track[count].a=lat;track[count].b=lon+turn;track[count].t=(int32_t)(t-in->start);track[count].hour=t>=in->start&&t<=in->start+3600;count++;
+    track[count].a=lat;track[count].b=lon+turn;count++;
   }
   return count;
 }
@@ -495,8 +498,9 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   // again for the drawing: the ground needs the memory.
   TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*(in->view?401:141));if(!track)FAIL;
   const int count=make_track(in,src,track);if(count<0)FAIL;
+  b->step=in->view?15:60;b->t0=-(in->view?1200:2400);
   double maxlat=-INFINITY,minlat=INFINITY,maxlon=-INFINITY,minlon=INFINITY;int h0=-1,h1=-1;
-  for(int i=0;i<count;i++)if(track[i].hour){
+  for(int i=0;i<count;i++)if(HOUR_OF(b,i)){
     if(h0<0)h0=i;
     h1=i;
     if(track[i].a>maxlat)maxlat=track[i].a;
@@ -601,6 +605,7 @@ static bool finish_draw(ChartBuild *b){
   if(y!=H)FAIL;}
   // The track again, on the screen.
   _Static_assert(sizeof(TrackPoint)*401+sizeof(Draw)+8<=RUN_ARENA,"the arena holds the track and the drawing");
+  _Static_assert(sizeof(TrackPoint)*401+sizeof(EnrPoint)*401+8<=RUN_ARENA,"the arena holds the track and the points");
   TrackPoint *const track=(TrackPoint *)b->sink.arena;
   if(make_track(in,src,track)!=count)FAIL;
   for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
@@ -657,20 +662,20 @@ static bool finish_draw(ChartBuild *b){
   // The route: cased in white on a one-ink plate; dashed outside the hour.
   #define JUMP(p,q) (fabs(track[q].a-track[p].a)>W/2)
   if(pal->flags&PLATE_MONO)for(int i=1;i<count;i++){
-    if(JUMP(i-1,i)||!(track[i-1].hour&&track[i].hour))continue;
+    if(JUMP(i-1,i)||!(HOUR_OF(b,i-1)&&HOUR_OF(b,i)))continue;
     segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,casing_pixel,0);
   }
   cv.early=false;cv.stage=2;
   for(int i=1;i<count;i++){
     if(JUMP(i-1,i))continue;
-    bool hour=track[i-1].hour&&track[i].hour;
+    bool hour=HOUR_OF(b,i-1)&&HOUR_OF(b,i);
     segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,route_pixel,&hour);
   }
   // The route as a scale: minute graduations, the quarters numbered; on the
   // world band five-minute ties only.
   for(int i=1;i<count-1;i++){
-    if(!track[i].hour)continue;
-    const int64_t since=(int64_t)track[i].t-track[h0].t;const int m=(int)js_round(since/60.0);
+    if(!HOUR_OF(b,i))continue;
+    const int64_t since=(int64_t)T_OF(b,i)-T_OF(b,h0);const int m=(int)js_round(since/60.0);
     if(since%60||m<=0||m>=60||(world&&m%5))continue;
     const double len0=f_sqrt((track[i+1].a-track[i-1].a)*(track[i+1].a-track[i-1].a)+(track[i+1].b-track[i-1].b)*(track[i+1].b-track[i-1].b)),len=len0?len0:1;
     double nx=-(track[i+1].b-track[i-1].b)/len,ny=(track[i+1].a-track[i-1].a)/len;
@@ -776,32 +781,44 @@ static bool finish_draw(ChartBuild *b){
   }
   draw=NULL;
 
-  // The route's points, to the pixel; then the track is done with.
-  points=alloc(sizeof(EnrPoint)*(count?count:1));if(!points)FAIL;
+  // The route's points, to the pixel, at the arena's end (the drawing's
+  // lists done with); then the track is done with.
+  const size_t tail=(RUN_ARENA-sizeof(EnrPoint)*(size_t)count)&~(size_t)3;
+  EnrPoint *const kept=(EnrPoint *)(b->sink.arena+tail);
   for(int i=0;i<count;i++){
-    EnrPoint *q=&points[i];q->x=(int16_t)js_round(track[i].a);q->y=(int16_t)js_round(track[i].b);q->seconds=track[i].t;q->hour=track[i].hour;
-    q->step=(uint8_t)((i&&fabs(track[i].b-track[i-1].b)>fabs(track[i].a-track[i-1].a)?ENR_STEEP:0)|(i&&fabs(track[i].a-track[i-1].a)>W/2?ENR_JUMP:0));
+    EnrPoint *q=&kept[i];q->x=(int16_t)js_round(track[i].a);q->y=(int16_t)js_round(track[i].b);
+    q->flags=(uint8_t)((i&&fabs(track[i].b-track[i-1].b)>fabs(track[i].a-track[i-1].a)?ENR_STEEP:0)|(i&&fabs(track[i].a-track[i-1].a)>W/2?ENR_JUMP:0)|(HOUR_OF(b,i)?ENR_HOUR:0));
   }
   const double c1x_=track[h1].a;
-  // The class plane as row runs, into the arena (the track done with); the
-  // plane freed leaves one free stretch for the scene, and the runs move
-  // there at their own size. Runs too long for the arena are made over the
-  // plane itself.
+  // The class plane as row runs, into the arena before the points; the
+  // plane freed leaves one free stretch for the scene, and the points and
+  // runs move there at their own sizes. Runs too long for the arena are made
+  // over the plane itself.
   const uint8_t *runs;
   {unsigned n=0;for(int y=0;y<H;y++)n+=(unsigned)row_runs(b->classes+y*W,NULL);
-  if(n<=RUN_ARENA){
-    uint8_t *arena=b->sink.arena;b->sink.arena=NULL;n=0;b->sink.row_offset[0]=0;
+  uint8_t *arena=b->sink.arena;
+  if(n<=tail){
+    n=0;b->sink.row_offset[0]=0;
     for(int y=0;y<H;y++){n+=(unsigned)row_runs(b->classes+y*W,arena+n);b->sink.row_offset[y+1]=(uint16_t)n;}
     release(b->classes);b->classes=NULL;
+    points=alloc(sizeof(EnrPoint)*(count?count:1));if(!points)FAIL;
+    memcpy(points,kept,sizeof(EnrPoint)*count);
+    b->sink.arena=NULL;
     uint8_t *moved=src->resize?src->resize(arena,n?n:1):NULL;
     runs=moved?moved:arena;
-  }else{runs=chart_plane_runs(b->classes,b->sink.row_offset,src);b->classes=NULL;}}
+  }else{
+    runs=chart_plane_runs(b->classes,b->sink.row_offset,src);b->classes=NULL;
+    if(!runs)FAIL;
+    points=alloc(sizeof(EnrPoint)*(count?count:1));if(!points){release((void *)runs);FAIL;}
+    memcpy(points,kept,sizeof(EnrPoint)*count);
+    release(arena);b->sink.arena=NULL;
+  }}
   if(!runs)FAIL;
   // The scene: the plate, the night's tables, the minutes and the track.
   out=alloc(sizeof(EnrScene));if(!out){release((void *)runs);FAIL;}
   memset(out,0,sizeof *out);
   out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->sink.row_offset,sizeof out->row_offset);
-  out->track=points;out->track_count=(uint16_t)count;points=NULL;
+  out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->flag?16:0));
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);

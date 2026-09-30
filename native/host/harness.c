@@ -28,6 +28,8 @@ int main(int argc,char **argv){
     printf("{\"ms_per_minute\":%.3f}\n",((b.tv_sec-a.tv_sec)*1e3+(b.tv_nsec-a.tv_nsec)/1e6)/600);
     return 0;
   }
+  // -a: every minute's frame, whole, to stdout (for comparing builds).
+  if(!strcmp(argv[3],"-a")){for(int m=0;m<60;m++){enr_render(scene,m,frame,ENR_W);fwrite(frame,1,ENR_W*ENR_H,stdout);}return 0;}
   // -u: each minute drawn over the previous one (enr_render_update) must be
   // the minute drawn whole; also a jump of five. Prints the pixels that
   // differ and the base pixels drawn, per update, on average.

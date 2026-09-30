@@ -22,6 +22,10 @@ segments_test: segments_test.c ../src/c/segments.c ../src/c/segments.h ../src/c/
 map_test: map_test.c ../src/c/map_pack.c ../src/c/map_pack.h
 	$(CC) $(CFLAGS) -o $@ map_test.c ../src/c/map_pack.c
 
+# The same deciding night by the double sums alone (no fixed-point filter).
+harness-exact: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
+	$(CC) $(CFLAGS) -DENR_EXACT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
+
 # The same with single-precision night arithmetic, as the watch would run it.
 harness-float: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
 	$(CC) $(CFLAGS) -DENR_FLOAT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
@@ -41,5 +45,5 @@ shim-check: ../src/c/main.c
 	arm-none-eabi-gcc -std=gnu11 -Wall -Wno-unused-parameter -Istub -I../src/c -DENR_FLOAT -mcpu=cortex-m4 -mthumb -fsyntax-only ../src/c/main.c
 
 clean:
-	rm -f harness harness-float map_test segments_test fmath_test chart_test *.o
+	rm -f harness harness-exact harness-float map_test segments_test fmath_test chart_test *.o
 .PHONY: arm shim-check clean

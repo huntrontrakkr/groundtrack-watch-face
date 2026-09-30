@@ -66,6 +66,25 @@ test('a minute drawn over the last draws only what changed, and the same pixels'
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
+test('night decided by fixed point first is night decided by the double sums, every minute',{skip:!cc&&'no C compiler'},()=>{
+  execFileSync('make',['-s','-C','native/host','harness-exact'],{stdio:'pipe'});
+  const dir=mkdtempSync(join(tmpdir(),'groundtrack-fast-'));
+  try{
+    // Every plate's kind of night: zones, the dot screen, scan lines, the
+    // drawn terminator; the terminator across the world band.
+    for(const [name,args] of [
+      ['moon-crt',['moon','2026-09-19T09:00:00Z','crt','flag']],['moon-sunlight',['moon','2026-09-19T09:00:00Z','sunlight','flag']],
+      ['moon-sectional',['moon','2026-09-19T09:00:00Z','sectional','flag']],['moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','flag']],
+      ['sun-red',['sun','2026-06-21T13:00:00Z','red','noflag']],['iss-enroute',['sat:25544','2026-09-30T02:00:00Z','enroute','noflag']],
+      ['n20-crt',['sat:43013','2026-09-30T17:00:00Z','crt','noflag']],['ls9-sunlight',['sat:49260','2026-10-01T09:00:00Z','sunlight','flag']]
+    ]){
+      execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,'0'],{stdio:'pipe',env});
+      const scene=join(dir,`${name}.scene`),a=execFileSync('native/host/harness',[scene,'-','-a'],{maxBuffer:1<<24}),b=execFileSync('native/host/harness-exact',[scene,'-','-a'],{maxBuffer:1<<24});
+      assert.ok(a.equals(b),`${name}: the fast night differs`);
+    }
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
 test('the watch app type-checks against the SDK signatures',{skip:!cc&&'no C compiler'},()=>{
   // A stand-in pebble.h (native/host/stub) declares what main.c uses; the
   // real check is the Pebble SDK build.
