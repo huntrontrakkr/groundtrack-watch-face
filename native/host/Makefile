@@ -5,6 +5,10 @@ CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 harness: harness.c $(CORE) ../src/c/enroute_core.h ../src/c/departure_font.h
 	$(CC) $(CFLAGS) -o $@ harness.c $(CORE) -lm
 
+# Host check of the shared sine and cosine.
+fmath_test: fmath_test.c ../src/c/fmath.c ../src/c/fmath.h
+	$(CC) $(CFLAGS) -o $@ fmath_test.c ../src/c/fmath.c -lm
+
 # Host check of the Sun and Moon segments.
 segments_test: segments_test.c ../src/c/segments.c ../src/c/segments.h
 	$(CC) $(CFLAGS) -o $@ segments_test.c ../src/c/segments.c -lm
@@ -32,5 +36,5 @@ shim-check: ../src/c/main.c
 	arm-none-eabi-gcc -std=gnu11 -Wall -Wno-unused-parameter -Istub -I../src/c -DENR_FLOAT -mcpu=cortex-m4 -mthumb -fsyntax-only ../src/c/main.c
 
 clean:
-	rm -f harness harness-float map_test segments_test *.o
+	rm -f harness harness-float map_test segments_test fmath_test *.o
 .PHONY: arm shim-check clean

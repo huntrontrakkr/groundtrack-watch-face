@@ -3,6 +3,7 @@
 // plain buffer: no canvas smoothing, no spatial color mixing and no
 // supersampled scene. A native port could keep one material code and one
 // light code per pixel and look each color up in a small table.
+import {sin,cos,hypot} from './fmath.js';
 import {position,sampleTrack,moonLight,MINUTE} from './ephemeris.js';
 import {direction,dot,wrap,RAD} from './geometry.js';
 import {clockParts} from './render.js';
@@ -58,7 +59,7 @@ export function chartCamera(body,start,{span=SPAN,center=null,day=null}={}){
   if(day){
     // The whole local day on one chart, north up, the day's shape fitted
     // and centred (QZSS draws its figure-8 in a day).
-    const all=track.map(p=>p.lon),alat=track.map(p=>p.lat);lat0=(Math.max(...alat)+Math.min(...alat))/2;k=Math.cos(lat0*RAD);
+    const all=track.map(p=>p.lon),alat=track.map(p=>p.lat);lat0=(Math.max(...alat)+Math.min(...alat))/2;k=cos(lat0*RAD);
     lonMid=(Math.max(...all)+Math.min(...all))/2;scale=Math.min((W*.5)/Math.max(1,(Math.max(...all)-Math.min(...all))*k),(H-70)/Math.max(1,Math.max(...alat)-Math.min(...alat)));y0=(14+H-16)/2;
     x0=W-16-(Math.max(...all)-Math.min(...all))*k*scale/2;
   }
@@ -67,7 +68,7 @@ export function chartCamera(body,start,{span=SPAN,center=null,day=null}={}){
     scale=(W-16)/Math.max(180,Math.max(...lons)-Math.min(...lons));k=1;lat0=WORLD.south;y0=WORLD.bottom;
   }
   else if(body==='sun'||body==='moon'){
-    lat0=(Math.max(...lats)+Math.min(...lats))/2;k=Math.cos(lat0*RAD);
+    lat0=(Math.max(...lats)+Math.min(...lats))/2;k=cos(lat0*RAD);
     scale=span/Math.max(1,(Math.max(...lons)-Math.min(...lons))*k);y0=TRACK_Y;
   }
   else{
@@ -75,8 +76,8 @@ export function chartCamera(body,start,{span=SPAN,center=null,day=null}={}){
     // hour's two stations are SPAN pixels apart along the route, north
     // stays up, and the route is set off-centre away from the side its
     // figures take (above, or beside a route that runs north-south).
-    const a=hour[0],b=hour.at(-1);lat0=(a.lat+b.lat)/2;k=Math.cos(lat0*RAD);lonMid=(a.lon+b.lon)/2;
-    const sx=(b.lon-a.lon)*k,sy=-(b.lat-a.lat),len=Math.hypot(sx,sy)||1;scale=span/len;
+    const a=hour[0],b=hour.at(-1);lat0=(a.lat+b.lat)/2;k=cos(lat0*RAD);lonMid=(a.lon+b.lon)/2;
+    const sx=(b.lon-a.lon)*k,sy=-(b.lat-a.lat),len=hypot(sx,sy)||1;scale=span/len;
     normal={x:sy/len,y:-sx/len};if(normal.y>0)normal={x:-normal.x,y:-normal.y};
     if(Math.abs(normal.y)<.3&&normal.x>0)normal={x:-normal.x,y:-normal.y};
     x0=W/2-normal.x*30;y0=(14+H-16)/2+8-normal.y*30;
@@ -274,7 +275,7 @@ export function renderChart({camera,ground,light,labels,theme,epoch,timeZone}){
   // Five-minute ticks on one side; quarter hours are longer.
   for(let i=1;i<track.length-1;i++){
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);if(m%5||m===0||m===60)continue;
-    const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;
+    const a=track[i-1],b=track[i+1],len=hypot(b.x-a.x,b.y-a.y)||1;
     let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0||(Math.abs(ny)<1e-6&&nx<0)){nx=-nx;ny=-ny;}
     const size=m%15===0?6:4;for(let s=2;s<=size;s++){const x=Math.round(p.x+nx*s),y=Math.round(p.y+ny*s);plot(buf,x,y,route(p.x,p.y));mark(x,y);}
   }

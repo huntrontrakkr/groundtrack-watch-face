@@ -3,6 +3,7 @@
 // between two reporting points, a compass rose on this hour's station, the
 // time set like a chart's maximum elevation figure, and the tracking
 // stations of NASA's early networks. Whole RGB222 pixels in a plain buffer.
+import {sin,cos,hypot} from './fmath.js';
 import {position,moonLight,MINUTE} from './ephemeris.js';
 import {dot,RAD,direction} from './geometry.js';
 import {clockParts} from './render.js';
@@ -130,7 +131,7 @@ export function circuitPath(a,b,clearance=0){
   let x=ax,y=ay;out.push([x,y]);
   for(let k=0;k<diag;k++){x+=sx;y+=sy;out.push([x,y]);}
   while(x!==bx||y!==by){if(x!==bx)x+=sx;else y+=sy;out.push([x,y]);}
-  return out.filter(([px,py])=>Math.hypot(px-ax,py-ay)>=clearance);
+  return out.filter(([px,py])=>hypot(px-ax,py-ay)>=clearance);
 }
 const bounds=pixels=>{
   if(!pixels.length)return null;
@@ -332,7 +333,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // longer and numbered every three, longest at the two midnights.
   const dayLabels=[];
   if(camera.day)for(const p of camera.day.hours){
-    const i=track.indexOf(p),a=track[Math.max(0,i-1)],b=track[Math.min(track.length-1,i+1)],len=Math.hypot(b.x-a.x,b.y-a.y)||1;
+    const i=track.indexOf(p),a=track[Math.max(0,i-1)],b=track[Math.min(track.length-1,i+1)],len=hypot(b.x-a.x,b.y-a.y)||1;
     let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const hr=Math.round((p.epoch-camera.day.start)/3600000),size=hr%24===0?7:hr%3===0?5:3;
     for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
@@ -346,7 +347,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   for(let i=1;i<track.length-1&&!camera.day;i++){
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);
     if((p.epoch-s0.epoch)%MINUTE||m<=0||m>=60||(camera.world&&m%5))continue;
-    const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(camera.normal?nx*camera.normal.x+ny*camera.normal.y>0:ny<0){nx=-nx;ny=-ny;}
+    const a=track[i-1],b=track[i+1],len=hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(camera.normal?nx*camera.normal.x+ny*camera.normal.y>0:ny<0){nx=-nx;ny=-ny;}
     const size=camera.world?(m%15===0?4:2):m%15===0?6:m%5===0?4:2;for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
     if(!camera.world&&m%15===0){const label=String(m),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*8-lw/2)+1,Math.round(p.y+ny*8+9));type.push(bounds(q));letter(q,ink('route'),pal.mono?1:0);}
   }
@@ -356,11 +357,11 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   if(!camera.world&&!camera.day){
     // The rose turns to true north at the station; north is up on the
     // cylindrical charts, and anywhere on a rolled Fuller sheet.
-    const R=16,g=s0,q0=camera.project(g.lat,g.lon),q1=camera.project(Math.min(89.9,g.lat+.5),g.lon),nl=Math.hypot(q1.x-q0.x,q1.y-q0.y)||1;
-    const north=camera.fuller?Math.atan2((q1.x-q0.x)/nl,-(q1.y-q0.y)/nl):0,at=(t,r)=>[c0.x+Math.round(Math.sin(t+north)*r),c0.y-Math.round(Math.cos(t+north)*r)];
+    const R=16,g=s0,q0=camera.project(g.lat,g.lon),q1=camera.project(Math.min(89.9,g.lat+.5),g.lon),nl=hypot(q1.x-q0.x,q1.y-q0.y)||1;
+    const north=camera.fuller?Math.atan2((q1.x-q0.x)/nl,-(q1.y-q0.y)/nl):0,at=(t,r)=>[c0.x+Math.round(sin(t+north)*r),c0.y-Math.round(cos(t+north)*r)];
     for(let a=0;a<720;a++){const [x,y]=at(a*Math.PI/360,R);plot(buf,x,y,col(c0.x,c0.y));}
     for(let a=0;a<360;a+=30){const len=a%90===0?5:3;for(let r=R-len;r<R;r++){const [x,y]=at(a*RAD,r);plot(buf,x,y,col(c0.x,c0.y));}}
-    for(let k=0;k<3;k++)for(let d=-k;d<=k;d++){const r=R+4-k,x=c0.x+Math.round(Math.sin(north)*r+Math.cos(north)*d),y=c0.y-Math.round(Math.cos(north)*r-Math.sin(north)*d);plot(buf,x,y,col(c0.x,c0.y));}
+    for(let k=0;k<3;k++)for(let d=-k;d<=k;d++){const r=R+4-k,x=c0.x+Math.round(sin(north)*r+cos(north)*d),y=c0.y-Math.round(cos(north)*r-sin(north)*d);plot(buf,x,y,col(c0.x,c0.y));}
   }
   const symbol=(rows,cx,cy)=>rows.forEach((row,dy)=>[...row].forEach((v,dx)=>{
     const x=cx-(row.length>>1)+dx,y=cy-(rows.length>>1)+dy;
@@ -432,7 +433,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
       // Set aside in open map beside the track: the figure level with the
       // body, the shoulder ruled under it, and the leader run across to
       // the body from the shoulder's near end.
-      const fx=aside.x,fy=Math.max(aside.top,Math.min(aside.bottom-fh-3,by-fh)),y=fy+fh+3,end={x:fx+fw+1,y},d=Math.hypot(end.x-bx,end.y-by)||1,line=[];
+      const fx=aside.x,fy=Math.max(aside.top,Math.min(aside.bottom-fh-3,by-fh)),y=fy+fh+3,end={x:fx+fw+1,y},d=hypot(end.x-bx,end.y-by)||1,line=[];
       line.push(...circuitPath({x:bx,y:by},end,9));segment({x:fx-1,y},end,(x,y)=>line.push([x,y]));
       letter(line.filter(open),ink('ink'));const figure=setTime(t,fx,fy);
       return {figure,box:bounds(figure)};
@@ -440,7 +441,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // Hang the time on whichever side keeps it on the face and its leader
     // clearest of lettering, toward the middle of the face if both do.
     const layout=side=>{
-      const sx=bx+side*10,fx=Math.max(4,Math.min(W-4-fw,side>0?sx+2:sx-2-fw)),d=Math.hypot(sx-bx,sy-by),line=[];
+      const sx=bx+side*10,fx=Math.max(4,Math.min(W-4-fw,side>0?sx+2:sx-2-fw)),d=hypot(sx-bx,sy-by),line=[];
       line.push(...circuitPath({x:bx,y:by},{x:sx,y:sy},9));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
       const shown=line.filter(open),fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
       return {fx,shown,score:(fits?0:1000)+(line.length-shown.length)*10+(side===(bx<W/2?1:-1)?0:1)};

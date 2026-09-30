@@ -21,6 +21,7 @@
 //   1 contour, 2 coast, 3 shelf, 4 waterline, 5 knockout, 6 grid, 7 route,
 //   8 ink, 9 mark, 10 ink over space, 11 space, 12 knockout and 13 ink
 //   drawn before the route)
+import {sin,cos} from './fmath.js';
 import {EnrouteRenderer,renderEnroute,PLATES,passText,W,H} from './enroute-render.js';
 import {position,moonLight,MINUTE} from './ephemeris.js';
 import {catalogEntry} from './satellites.js';
@@ -73,8 +74,8 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   for(let k=0;k<5;k++)u8(g8(pal.tints?.[k]?.[1]));for(let k=0;k<2;k++)u8(g8(pal.depths?.[k]?.[1]));
   // The chart is equidistant cylindrical: latitude by row, longitude by column.
   const rows=[],cols=[];
-  for(let y=0;y<H;y++){const lat=cam.toGround(0.5,y+.5).lat*RAD;rows.push([Math.cos(lat),Math.sin(lat)]);}
-  for(let x=0;x<W;x++){const lon=cam.toGround(x+.5,0.5).lon*RAD;cols.push([Math.cos(lon),Math.sin(lon)]);}
+  for(let y=0;y<H;y++){const lat=cam.toGround(0.5,y+.5).lat*RAD;rows.push([cos(lat),sin(lat)]);}
+  for(let x=0;x<W;x++){const lon=cam.toGround(x+.5,0.5).lon*RAD;cols.push([cos(lon),sin(lon)]);}
   for(const [c] of rows)f64(c);for(const [,s] of rows)f64(s);for(const [c] of cols)f64(c);for(const [,s] of cols)f64(s);
   f64(s1.x);f64(cam.normal?.x??0);f64(cam.normal?.y??-1);i16(base.zuluAt.x);i16(base.zuluAt.baseline);
   for(let m=0;m<60;m++){
