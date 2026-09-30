@@ -39,5 +39,5 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
 test('the watch app type-checks against the SDK signatures',{skip:!cc&&'no C compiler'},()=>{
   // A stand-in pebble.h (native/host/stub) declares what main.c uses; the
   // real check is the Pebble SDK build.
-  execFileSync('cc',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Inative/host/stub','-Inative/src/c','-DENR_FLOAT','-fsyntax-only','native/src/c/main.c'],{stdio:'pipe'});
+  for(const f of ['main.c','watch_data.c'])execFileSync('cc',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Inative/host/stub','-Inative/src/c','-DENR_FLOAT','-fsyntax-only','native/src/c/'+f],{stdio:'pipe'});
 });

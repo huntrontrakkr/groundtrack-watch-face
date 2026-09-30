@@ -16,6 +16,11 @@ typedef struct {
 } Segment;
 
 bool seg_decode(const uint8_t *bytes,Segment *seg);
+// The watch keeps the positions and phase only, not the distances: 228
+// bytes, under persistent storage's 256 a value.
+#define SEG_WATCH_COEFFICIENTS 56
+#define SEG_WATCH_BYTES (4+4*SEG_WATCH_COEFFICIENTS)
+bool seg_decode_watch(const uint8_t *bytes,Segment *seg);
 // A series at a time in whole Unix seconds within the segment's day.
 double seg_value(const Segment *seg,int series,int64_t seconds);
 // Longitude wrapped to -180..180, as the JavaScript's wrap().

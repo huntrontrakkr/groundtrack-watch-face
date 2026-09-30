@@ -31,7 +31,7 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null;
       const {scene}=buildScene({body,start,plate,flag,timeZone,home});
       const out=join(dir,'c.scene');
-      execFileSync('native/host/chart_test',['native/resources/map.pack',out],{input:chartInput({body,start,plate,flag,zone:timeZone,home}),stdio:['pipe','pipe','pipe']});
+      execFileSync('native/host/chart_test',['native/resources/map.pack','native/resources/figures.bin',out],{input:chartInput({body,start,plate,flag,zone:timeZone,home}),stdio:['pipe','pipe','pipe']});
       const c=readFileSync(out);
       let first=-1;for(let i=0;i<Math.max(c.length,scene.length);i++)if(c[i]!==scene[i]){first=i;break;}
       assert.equal(first,-1,`${body} ${iso} ${plate}: first difference at byte ${first} of ${scene.length}`);

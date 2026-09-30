@@ -20,7 +20,7 @@ static uint8_t next_byte(MapCursor *c){
 }
 static bool read_at(const MapPack *p,uint32_t at,uint8_t *out,size_t n){return p->read(p->source,at,out,n)==n;}
 
-bool map_pack_open(MapPack *p,MapReadFn read,void *source){
+bool map_pack_open(MapPack *p,MapReadFn read,void *source,void *(*alloc)(size_t)){
   memset(p,0,sizeof *p);p->read=read;p->source=source;
   uint8_t h[16];
   if(!read_at(p,0,h,16)||memcmp(h,"GTM1",4))return false;
@@ -34,16 +34,19 @@ bool map_pack_open(MapPack *p,MapReadFn read,void *source){
   uint8_t b[2*MAP_MAX_ALPHABET];
   for(int c=0;c<2;c++){if(!read_at(p,at,b,12))return false;for(int i=0;i<6;i++)p->weights[c][i]=(int16_t)le16(b+2*i);at+=12;}
   for(int i=0;i<64;i+=16){if(!read_at(p,at,b,32))return false;for(int k=0;k<16;k++)p->land_freq[i+k]=le16(b+2*k);at+=32;}
+  p->cum=alloc(sizeof(uint16_t)*contexts*(alphabet+1));if(!p->cum)return false;
   for(unsigned c=0;c<contexts;c++){
+    uint16_t *cum=p->cum+c*(alphabet+1);
     if(!read_at(p,at,b,2*alphabet))return false;
-    p->cum[c][0]=0;for(unsigned s=0;s<alphabet;s++)p->cum[c][s+1]=(uint16_t)(p->cum[c][s]+le16(b+2*s));
-    if(p->cum[c][alphabet]!=TOTAL)return false;
+    cum[0]=0;for(unsigned s=0;s<alphabet;s++)cum[s+1]=(uint16_t)(cum[s]+le16(b+2*s));
+    if(cum[alphabet]!=TOTAL)return false;
     at+=2*alphabet;
   }
   p->strips=(uint16_t)((p->rows+p->strip-1)/p->strip);
   p->offsets_at=at;p->data=at+4u*(p->strips+1u);
   return true;
 }
+void map_pack_close(MapPack *p,void (*release)(void *)){release(p->cum);p->cum=0;}
 
 // The causal neighbourhood, as neighbours() in the encoder. r0, r1, r2 are
 // the current row and the one and two above; dy_max how many are in the strip.
@@ -88,7 +91,7 @@ int map_cursor_next(MapCursor *c,const uint8_t **relief_out,const uint8_t **land
   uint32_t x=c->state;
   for(int col=0;col<MAP_WIDTH;col++){
     // Land, from six neighbouring land bits.
-    #define LB(row,xx,dy) ((dy)>dy_max||(xx)<0||(xx)>=MAP_WIDTH?0:(row)[xx])
+    #define LB(row,xx,dy) ((dy)>dy_max||(xx)<0||(xx)>=MAP_WIDTH?0:((row)[(xx)>>3]>>((xx)&7))&1)
     const int lctx=LB(l0,col-1,0)|LB(l1,col,1)<<1|LB(l1,col-1,1)<<2|LB(l1,col+1,1)<<3|LB(l0,col-2,0)<<4|LB(l2,col,2)<<5;
     #undef LB
     const uint32_t f=p->land_freq[lctx];
@@ -96,7 +99,7 @@ int map_cursor_next(MapCursor *c,const uint8_t **relief_out,const uint8_t **land
     int cls;uint32_t start,freq;
     if(slot<TOTAL-f){cls=0;start=0;freq=TOTAL-f;}else{cls=1;start=TOTAL-f;freq=f;}
     x=freq*(x>>SCALE_BITS)+slot-start;while(x<RANS_L)x=(x<<8)|next_byte(c);
-    l0[col]=(uint8_t)cls;
+    if(cls)l0[col>>3]|=(uint8_t)(1<<(col&7));else l0[col>>3]&=(uint8_t)~(1<<(col&7));
     // Relief, predicted, its difference coded by land and error energy.
     int nb[6];neighbours(r0,r1,r2,col,dy_max,nb);
     #define EB(row,xx,dy) ((dy)>dy_max||(xx)<0||(xx)>=MAP_WIDTH?0:(row)[xx])
@@ -104,7 +107,7 @@ int map_cursor_next(MapCursor *c,const uint8_t **relief_out,const uint8_t **land
     #undef EB
     const int act=2*sum+(nb[0]>nb[2]?nb[0]-nb[2]:nb[2]-nb[0])+(nb[1]>nb[2]?nb[1]-nb[2]:nb[2]-nb[1])+(nb[3]>nb[1]?nb[3]-nb[1]:nb[1]-nb[3]);
     int lv=0;while(lv<p->levels-1&&act>=p->thresholds[lv])lv++;
-    const uint16_t *cum=p->cum[cls*p->levels+lv];
+    const uint16_t *cum=p->cum+(cls*p->levels+lv)*(esc+2);
     slot=x&(TOTAL-1);
     // The symbol whose range holds the slot: binary search.
     int lo=0,hi=esc;

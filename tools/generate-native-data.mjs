@@ -66,9 +66,12 @@ ${stations.join(',\n')}
 static const uint32_t RELIEF_METERS_BITS[256]={${Array.from(meters,hexFloat).join(',')}};
 
 // Jost figures at ${sizes.join(', ')} px: per size ten digits, each {width, height,
-// first byte}; rows are packed MSB first, (width+7)/8 bytes a row.
+// first byte in native/resources/figures.bin}; rows are packed MSB first,
+// (width+7)/8 bytes a row. The bits are a resource, loaded a size at a time.
 static const uint8_t FIGURE_SIZES[${sizes.length}]={${sizes.join(',')}};
 static const FigureGlyph FIGURE_GLYPHS[${glyphs.length}]={${glyphs.join(',')}};
-static const uint8_t FIGURE_BITS[${bits.length}]={${bits.join(',')}};
+#define FIGURE_BYTES ${bits.length}
 `);
-console.log(`native/src/c/generated/chart_data.h: ${plates.length} plates, ${stations.length} stations, ${bits.length} bytes of figures`);
+mkdirSync('native/resources',{recursive:true});
+writeFileSync('native/resources/figures.bin',Uint8Array.from(bits));
+console.log(`native/src/c/generated/chart_data.h: ${plates.length} plates, ${stations.length} stations; native/resources/figures.bin: ${bits.length} bytes`);

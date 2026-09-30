@@ -1,6 +1,5 @@
 // The native app's settings page, as the phone opens it: shows the current
-// settings, returns the new ones, and the phone then draws this hour again
-// in them, byte for byte as the tools do.
+// settings, returns the new ones, and the phone then sends them to the watch.
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
@@ -8,8 +7,6 @@ import {mkdirSync,mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import vm from 'node:vm';
-import {buildScene} from '../tools/export-scene.mjs';
-import {civilHour} from '../src/chart-render.js';
 
 const dir=mkdtempSync(join(tmpdir(),'groundtrack-config-'));
 let browser;
@@ -68,13 +65,14 @@ try{
   assert.ok(closes[0]?.startsWith('pebblejs://close#'),`the page closed with ${closes[0]}`);
   const response=closes[0].slice('pebblejs://close#'.length);
 
-  // The phone keeps the settings and draws this hour again in them.
+  // The phone keeps the settings and sends them to the watch, which draws
+  // again in them, with home's rise and set for the new home.
   listeners.webviewclosed({response});
-  for(let i=0;i<200&&!(messages.length&&messages.slice(1).reduce((n,m)=>n+m.SceneChunk.length,0)===messages[0].SceneTotal);i++)await new Promise(r=>setTimeout(r,20));
+  for(let i=0;i<200&&!messages.some(m=>m.RiseSets);i++)await new Promise(r=>setTimeout(r,20));
   assert.deepEqual({body:stored.body,plate:stored.plate,flag:stored.flag,home:JSON.parse(stored.home)},{body:'moon',plate:'sectional',flag:'0',home:{lat:48.86,lon:2.35}});
-  const scene=new Uint8Array(messages[0].SceneTotal);for(const m of messages.slice(1))scene.set(m.SceneChunk,m.SceneOffset);
-  const expected=buildScene({body:'moon',start:civilHour(now,zone),plate:'sectional',flag:false,timeZone:zone,home:{code:'HOM',name:'Home',lat:48.86,lon:2.35}}).scene;
-  assert.ok(Buffer.from(scene).equals(expected),'the scene after saving differs from the exported one');
+  const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,0,1,1,...i32(4886),...i32(235)]));
+  assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
 
   // Cancel changes nothing.
   const before=JSON.stringify(stored);listeners.webviewclosed({response:'CANCELLED'});

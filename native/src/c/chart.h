@@ -37,19 +37,33 @@ typedef struct {
 // The Sun and Moon segment for a UTC day, or NULL.
 typedef const Segment *(*SegmentFn)(void *context,int32_t day);
 
-// Working memory for a build, the caller's (about 30 KB; the watch
-// allocates it for the build and frees it after): nothing is static.
-typedef struct ChartWork ChartWork;
-unsigned chart_work_size(void);
+// Where a build reads from and how it takes memory: the map pack, the
+// figures' bits (native/resources/figures.bin), the Sun and Moon segments,
+// and an allocator. A build holds about 80 KB at its peak, freed as it goes.
+typedef struct {
+  MapReadFn map;void *map_source;
+  MapReadFn figures;void *figure_source;
+  SegmentFn segment;void *segment_context;
+  void *(*alloc)(size_t);void (*release)(void *);
+} ChartSources;
 
-// Builds the hour's scene into `scene` (the minute renderer's own, with
-// enr_real values: floats on the watch, doubles on the host, computed in
-// double either way) and its class plane into `classes` (200x228 bytes);
-// `track` holds CHART_TRACK_MAX points and becomes scene->track. Needs the
-// map pack and its work rows, segments covering 40 minutes either side of
-// the hour, and the work memory. Returns false if a segment or the map is
-// missing. chart_runs then packs the class plane into the scene's runs.
-bool chart_build(const ChartInput *in,const MapPack *pack,MapWork *map_work,SegmentFn segment,void *context,ChartWork *work,EnrScene *scene,uint8_t *classes,EnrPoint *track);
-// The class plane as row runs of (count, class), as the phone packs them;
-// allocated with alloc and owned by the scene. Returns false without memory.
+// Builds the hour's scene: the minute renderer's own (enr_real values:
+// floats on the watch, doubles on the host, computed in double either way),
+// its track and its class plane as runs allocated with src->alloc. Free it
+// with enr_free(scene, release) and release(scene). Returns NULL if a
+// segment, the map or memory is missing.
+EnrScene *chart_build(const ChartInput *in,const ChartSources *src);
+// The same in steps, so the watch keeps answering its events: chart_begin
+// (the track and camera), chart_step until it returns 0 (the ground, a slice
+// of CHART_STEP_ROWS rows each; -1 on failure), then chart_finish (the
+// drawing and the scene; frees the build). chart_abort frees an unfinished
+// build.
+#define CHART_STEP_ROWS 12
+typedef struct ChartBuild ChartBuild;
+ChartBuild *chart_begin(const ChartInput *in,const ChartSources *src);
+int chart_step(ChartBuild *build);
+EnrScene *chart_finish(ChartBuild *build);
+void chart_abort(ChartBuild *build);
+// The class plane (200x228 bytes) as row runs of (count, class), as the
+// phone packs them; allocated with alloc and owned by the scene.
 bool chart_runs(const uint8_t *classes,EnrScene *scene,void *(*alloc)(size_t));

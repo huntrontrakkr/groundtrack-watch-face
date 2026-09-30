@@ -47,14 +47,15 @@ test('the watch evaluates segments to the same bits',{skip:!cc&&'no C compiler'}
 
 // Sine and cosine: the watch's C computes the JavaScript's bits.
 let fm=true;try{execFileSync('make',['-s','-C','native/host','fmath_test'],{stdio:'pipe'});}catch{fm=false;}
-test('the watch computes sine and cosine to the same bits',{skip:!fm&&'no C compiler'},async()=>{
+test('the watch computes sine, cosine, square roots and remainders to the same bits',{skip:!fm&&'no C compiler'},async()=>{
   const {sin,cos}=await import('../src/fmath.js');
   const bits=v=>{const d=new DataView(new ArrayBuffer(8));d.setFloat64(0,v);return d.getBigUint64(0).toString(16).padStart(16,'0');};
   const xs=[0,-0,1e-300,Math.PI/4,Math.PI/2,Math.PI,2*Math.PI,-Math.PI];let s=20260930;const r=()=>{s=(s*1103515245+12345)%2147483648;return s/2147483648;};
   for(let i=0;i<60000;i++)xs.push(i%3?(r()*2-1)*Math.PI:(r()*2-1)*720);
+  for(let v=-400;v<=400;v++)xs.push(v,v+.5);
   const text=xs.map(x=>x.toPrecision(17)).join('\n'),parsed=text.split('\n').map(Number);
   const got=execFileSync('native/host/fmath_test',{input:text,maxBuffer:1<<26}).toString().split('\n');
-  let differ=0;parsed.forEach((x,i)=>{if(got[i]!==`${bits(sin(x))} ${bits(cos(x))} `)differ++;});
+  let differ=0;parsed.forEach((x,i)=>{if(got[i]!==`${bits(sin(x))} ${bits(cos(x))} ${bits(Math.sqrt(Math.abs(x)))} ${bits(x%7.25)} ${bits((x*97)%5)} `)differ++;});
   assert.equal(differ,0);
   // And within an ulp of the engine's own.
   for(const x of parsed.slice(0,2000))for(const [f,g] of [[sin,Math.sin],[cos,Math.cos]])assert.ok(Math.abs(f(x)-g(x))<=Math.abs(g(x))*2.3e-16+1e-300,String(x));

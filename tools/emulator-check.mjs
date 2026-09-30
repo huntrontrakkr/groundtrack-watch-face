@@ -42,15 +42,15 @@ const {renderer,state}=buildScene({body,start,plate,flag:flagArg==='flag',timeZo
 const ref=Buffer.from(renderer.render({...state,epoch:start+minute*MINUTE}).buf);
 
 // Side by side: watch, browser, differences in red over a faded browser frame.
-const gap=10,wide=W*3+gap*2,sheet=Buffer.alloc(wide*H*3,255);let differ=0,first=null;
+const gap=10,wide=W*3+gap*2,sheet=Buffer.alloc(wide*H*3,255);let differ=0,first=null;const where=[];
 for(let y=0;y<H;y++)for(let x=0;x<W;x++){
   const i=(y*W+x)*3,a=shot.rgb.subarray(i,i+3),b=ref.subarray(i,i+3),same=a.equals(b);
-  if(!same){differ++;first??=[x,y];}
+  if(!same){differ++;first??=[x,y];if(where.length<40)where.push(`${x},${y} watch ${[...a].join('/')} browser ${[...b].join('/')}`);}
   const put=(dx,c)=>c.forEach((v,k)=>{sheet[(y*wide+dx+x)*3+k]=v;});
   put(0,a);put(W+gap,b);put((W+gap)*2,same?[...b].map(v=>170+v/3):[255,0,0]);
 }
 const name=`${body.replace(/\W/g,'-')}-${plate}-${String(minute).padStart(2,'0')}`;
 writeFileSync(join(out,name+'.png'),encodePNG(sheet,wide,H,2));
-const result={body,plate,flag:flagArg==='flag',zone,hour:new Date(start).toISOString(),minute,differ,first};
+const result={body,plate,flag:flagArg==='flag',zone,hour:new Date(start).toISOString(),minute,differ,first,...(differ?{where}:{})};
 console.log(JSON.stringify(result));
 process.exitCode=differ?1:0;

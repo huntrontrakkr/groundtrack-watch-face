@@ -1,7 +1,10 @@
-// Groundtrack Enroute, phone side. Renders an hour's scene on the phone and
-// sends it to the watch in chunks: this hour's on launch, and whichever hour
-// the watch asks for (this hour's if it has none, the next one's shortly
-// before the hour). Never on a timer of its own.
+// Groundtrack Enroute, phone side. The watch draws the Sun and Moon charts
+// itself; the phone sends it what it needs for that: its settings, the Sun
+// and Moon as daily segments some weeks ahead, and home's rise and set, when
+// the watch asks and when settings change. For a satellite the phone renders
+// the hour's scene and sends it in chunks: whichever hour the watch asks
+// for (this hour's if it has none, the next one's shortly before the hour).
+// Never on a timer of its own.
 //
 // This is the source; tools/build-pkjs.mjs bundles it, with the renderer
 // and the coastline and relief data, into native/src/pkjs/index.js.
@@ -22,6 +25,10 @@ import {civilHour} from '../../src/chart-render.js';
 import {HOMES} from '../../src/home.js';
 import {PLATES} from '../../src/enroute-render.js';
 import {registerElements,viewOf,FRESH} from '../../src/satellites.js';
+import {segmentFor,encodeSegment,DAY} from '../../src/segments.js';
+import {riseSet} from '../../src/home.js';
+import {localDay,localDate} from '../../src/enroute-render.js';
+import {clockParts} from '../../src/render.js';
 import CONFIG_PAGE from './config.html';
 import {LAND,RELIEF} from 'groundtrack:data';
 
@@ -85,22 +92,80 @@ function fetchScene(server,start,done,failed){
   request.send();
 }
 
-// One scene in flight at a time, one message at a time: the total, then each
-// chunk with its offset. A message the watch doesn't take is tried again a
-// few times; after that the scene is abandoned and the watch asks again.
-var sending=false,waiting=null,last=null;
+// Every message to the watch goes through one queue, one at a time. A
+// message the watch doesn't take is tried again a few times; after that it
+// is dropped with the rest of its group (a scene's chunks), and the watch
+// asks again.
+var queue=[],pumping=false;
+function enqueue(message,group,done){queue.push({message:message,group:group,done:done,failures:0});pump();}
+function pump(){
+  if(pumping||!queue.length)return;
+  pumping=true;var item=queue[0];
+  Pebble.sendAppMessage(item.message,function(){
+    queue.shift();pumping=false;if(item.done)item.done(true);pump();
+  },function(){
+    pumping=false;
+    if(++item.failures>5){
+      console.log('The watch is not taking the scene');
+      queue=queue.filter(function(q){return q!==item&&!(item.group&&q.group===item.group);});
+      if(item.done)item.done(false);pump();
+    }else setTimeout(pump,500*item.failures);
+  });
+}
+
+// A scene: its total, then each chunk with its offset.
+var sending=false,waiting=null,last=null,scenes=0;
 function sendScene(bytes,finished){
-  var offset=-1,failures=0;
-  function next(){
-    if(offset>=bytes.length){console.log('Scene sent: '+bytes.length+' bytes');finished(true);return;}
-    var n=offset<0?0:Math.min(CHUNK,bytes.length-offset);
-    var message=offset<0?{SceneTotal:bytes.length}:{SceneOffset:offset,SceneChunk:Array.prototype.slice.call(bytes.subarray(offset,offset+n))};
-    Pebble.sendAppMessage(message,function(){offset=offset<0?0:offset+n;failures=0;next();},function(){
-      if(++failures>5){console.log('The watch is not taking the scene');finished(false);}
-      else setTimeout(next,500*failures);
-    });
+  var group='scene'+(++scenes),ended=false;
+  function end(ok){if(!ended){ended=true;if(ok)console.log('Scene sent: '+bytes.length+' bytes');finished(ok);}}
+  enqueue({SceneTotal:bytes.length},group,function(ok){if(!ok)end(false);});
+  for(var offset=0;offset<bytes.length;offset+=CHUNK)(function(offset){
+    var n=Math.min(CHUNK,bytes.length-offset),final=offset+n>=bytes.length;
+    enqueue({SceneOffset:offset,SceneChunk:Array.prototype.slice.call(bytes.subarray(offset,offset+n))},group,function(ok){if(!ok||final)end(ok);});
+  })(offset);
+}
+
+// What the watch needs to draw the Sun and Moon itself. Settings: body (0
+// Sun, 1 Moon, 2 a satellite), plate, flag, 24-hour, home, then home's
+// latitude and longitude in hundredths of a degree (i32 each).
+function watchSettings(){
+  var body=setting('body','sun'),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
+  var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,setting('flag','1')==='1'?1:0,1,h?1:0];
+  function i32(v){bytes.push(v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255);}
+  i32(h?Math.round(h.lat*100):0);i32(h?Math.round(h.lon*100):0);
+  return bytes;
+}
+function sendSettings(){enqueue({Settings:watchSettings()});}
+// The Sun and Moon segments from a UTC day to SEGMENT_DAYS ahead: positions
+// and phase only (228 bytes a day), eight to a message.
+var SEGMENT_DAYS=45,WATCH_SEGMENT=228;
+function sendSegments(fromDay){
+  var today=Math.floor(Date.now()/DAY),end=today+SEGMENT_DAYS;
+  if(!(fromDay>=today-1&&fromDay<end))fromDay=today;
+  for(var day=fromDay;day<end;day+=8){
+    var bytes=[];
+    for(var d=day;d<Math.min(day+8,end);d++){var seg=encodeSegment(segmentFor(d*DAY));for(var k=0;k<WATCH_SEGMENT;k++)bytes.push(seg[k]);}
+    enqueue({Segments:bytes});
   }
-  next();
+  console.log('Segments sent from day '+fromDay+' to '+(end-1));
+}
+// Home's rise and set by local date, 12 bytes a date: the date (days since
+// 1970), then the Sun's rise and set and the Moon's, in minutes of the local
+// day (65535 for none), as renderEnroute's riseText gives them.
+function sendRiseSets(){
+  var timeZone=zone(),h=home(timeZone);if(!h)return;
+  var bytes=[],t=Date.now();
+  function u16(v){bytes.push(v&255,(v>>8)&255);}
+  for(var n=0;n<SEGMENT_DAYS;n++){
+    var day=localDay(t,timeZone),d=localDate(day.start,timeZone),number=Date.UTC(d.year,d.month-1,d.day)/DAY;
+    bytes.push(number&255,(number>>8)&255,(number>>16)&255,(number>>>24)&255);
+    ['sun','moon'].forEach(function(body){
+      var r=riseSet(body,h,day.start);
+      [r.rise,r.set].forEach(function(e){if(e===null||e===undefined)u16(65535);else{var q=clockParts(e,timeZone);u16(Number(q.h)*60+Number(q.m));}});
+    });
+    t=day.end;
+  }
+  enqueue({RiseSets:bytes});
 }
 
 // A satellite's elements: kept ones if younger than two hours, otherwise
@@ -139,7 +204,7 @@ function elements(body,done){
 // When the phone can't draw the hour, the watch says why instead of waiting.
 function status(text){
   console.log('Status to the watch: '+text);
-  Pebble.sendAppMessage({SceneStatus:text},function(){},function(){});
+  enqueue({SceneStatus:text});
 }
 
 // The scene for the civil hour holding `when` (milliseconds). The last
@@ -191,14 +256,18 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
   if(chosen.flag==='1'||chosen.flag==='0')localStorage.setItem('flag',chosen.flag);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
-  // This hour again, in the new settings; the watch drops any next hour it
-  // was keeping and asks for it again.
-  refresh(Date.now());
+  // The watch draws again in the new settings (a satellite's hour it asks
+  // for again), with home's rise and set for the new home.
+  sendSettings();sendRiseSets();
 });
 
-Pebble.addEventListener('ready',function(){refresh(Date.now());});
-// The watch asks with a Unix time in the hour it wants.
+// On launch, the settings: the watch asks for anything else it lacks.
+Pebble.addEventListener('ready',function(){sendSettings();});
 Pebble.addEventListener('appmessage',function(e){
+  // A satellite's scene for the hour holding a Unix time.
   var at=e.payload.SceneRequest;
   if(at!==undefined)refresh(at>0?at*1000:Date.now());
+  // Segments from a UTC day (days since 1970), and home's rise and set.
+  var from=e.payload.DataRequest;
+  if(from!==undefined){sendSegments(from);sendRiseSets();}
 });

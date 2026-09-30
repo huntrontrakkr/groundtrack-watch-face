@@ -27,6 +27,7 @@ test('the phone renders the hour and sends it to the watch',async()=>{
         addEventListener:(name,f)=>{listeners[name]=f;},
         // The watch takes every message; the last chunk ends the scene.
         sendAppMessage:(message,ok)=>{
+          if(message.SceneTotal===undefined&&message.SceneChunk===undefined){setTimeout(ok,0);return;}
           messages.push(message);
           const total=messages[0].SceneTotal,got=messages.slice(1).reduce((n,m)=>n+m.SceneChunk.length,0);
           if(got===total)finished();else setTimeout(ok,0);
@@ -37,7 +38,7 @@ test('the phone renders the hour and sends it to the watch',async()=>{
     // The SDK repackages the bundle with webpack 1, which indents every line
     // with a tab; run it as the watch app will carry it.
     vm.runInContext(readFileSync(out,'utf8').replace(/\n/g,'\n\t'),context);
-    listeners.ready({});
+    listeners.ready({});listeners.appmessage({payload:{SceneRequest:now/1000}});
     await sent;
 
     const total=messages[0].SceneTotal,scene=new Uint8Array(total);
@@ -73,7 +74,7 @@ function phone(bundle,now,stored,take=()=>true){
 }
 const scenes=messages=>{
   const out=[];let scene=null;
-  for(const m of messages){
+  for(const m of messages.filter(m=>m.SceneTotal!==undefined||m.SceneChunk!==undefined)){
     if(m.SceneTotal!==undefined){scene=new Uint8Array(m.SceneTotal);out.push(scene);}
     else scene.set(m.SceneChunk,m.SceneOffset);
   }
@@ -87,10 +88,10 @@ test('the phone sends the hour the watch asks for, once, and gives up on a watch
     execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});
     const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-27T13:56:00Z'),zone='UTC',stored={timeZone:zone};
 
-    // Launch: the phone sends this hour; the watch's own request for it,
-    // arriving meanwhile, is already answered.
+    // The watch asks for this hour twice in a row (as it starts, say): the
+    // second request, arriving meanwhile, is already answered.
     let p=phone(bundle,now,stored);
-    p.listeners.ready({});p.listeners.appmessage({payload:{SceneRequest:now/1000}});
+    p.listeners.appmessage({payload:{SceneRequest:now/1000}});p.listeners.appmessage({payload:{SceneRequest:now/1000}});
     await p.quiet();
     assert.deepEqual(scenes(p.messages).map(s=>s.hour),[Date.parse('2026-09-27T13:00:00Z')]);
 
@@ -106,7 +107,7 @@ test('the phone sends the hour the watch asks for, once, and gives up on a watch
 
     // A watch that stops taking messages: a few tries, then silence.
     let taken=0;p=phone(bundle,now,stored,()=>++taken<=3);
-    p.listeners.ready({});await p.quiet();
+    p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.ok(p.messages.length<=3+6,`${p.messages.length} messages`);
     assert.ok(p.logs.includes('The watch is not taking the scene'));
   }finally{rmSync(dir,{recursive:true,force:true});}
@@ -140,24 +141,53 @@ test('the phone fetches live elements, keeps them two hours, and falls back to t
     // fifteen minutes.
     const nominal=buildScene(options).scene;
     const stored={body:'sat:36585',timeZone:zone};
-    let p=run(stored,()=>null);p.listeners.ready({});await p.quiet();
+    let p=run(stored,()=>null);p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.equal(p.requests.length,1);
     assert.ok(Buffer.from(scenes(p.messages)[0].bytes).equals(nominal),'offline, the phone should draw the nominal orbit');
-    p=run(stored,()=>({status:200,text:GPS_LIVE}));p.listeners.ready({});await p.quiet();
+    p=run(stored,()=>({status:200,text:GPS_LIVE}));p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.equal(p.requests.length,0,'a failed request was repeated within fifteen minutes');
     // Online: CelesTrak's elements, kept for two hours.
     delete stored['tle-tried-36585'];
-    p=run(stored,()=>({status:200,text:GPS_LIVE}));p.listeners.ready({});await p.quiet();
+    p=run(stored,()=>({status:200,text:GPS_LIVE}));p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.deepEqual(p.requests,['https://celestrak.org/NORAD/elements/gp.php?CATNR=36585&FORMAT=TLE']);
     const {registerElements}=await import('../src/satellites.js');registerElements(GPS_LIVE,'celestrak');
     const live=buildScene(options).scene;
     assert.ok(!live.equals(nominal));
     assert.ok(Buffer.from(scenes(p.messages)[0].bytes).equals(live),'the phone scene should use the live elements');
     assert.equal(JSON.parse(stored['tle-36585']).fetched,now);
-    p=run(stored,()=>{throw new Error('no request expected');});p.listeners.ready({});await p.quiet();
+    p=run(stored,()=>{throw new Error('no request expected');});p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.equal(p.requests.length,0);assert.ok(Buffer.from(scenes(p.messages)[0].bytes).equals(live));
     // A satellite the watch can't draw yet: the watch is told, not left waiting.
-    p=run({body:'sat:25544',timeZone:zone},()=>null);p.listeners.ready({});await p.quiet();
+    p=run({body:'sat:25544',timeZone:zone},()=>null);p.listeners.appmessage({payload:{SceneRequest:now/1000}});await p.quiet();
     assert.equal(JSON.stringify(p.messages),JSON.stringify([{SceneStatus:'VIEW NOT YET ON WATCH'}]));
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'s rise and set',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
+  try{
+    const out=join(dir,'index.js');
+    execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});
+    const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-29T22:30:00Z'),zone='America/New_York';
+    const p=phone(bundle,now,{body:'moon',plate:'crt',flag:'0',timeZone:zone});
+    // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York.
+    p.listeners.ready({});await p.quiet();
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255]}]));
+    // Asked from a day, the Sun and Moon to 45 days ahead, and home's rise
+    // and set for 45 local dates.
+    const today=Math.floor(now/86400000);p.messages.length=0;
+    p.listeners.appmessage({payload:{DataRequest:today+2}});await p.quiet();
+    const segs=p.messages.filter(m=>m.Segments).flatMap(m=>m.Segments),rise=p.messages.find(m=>m.RiseSets).RiseSets;
+    assert.equal(segs.length,43*228);
+    const {segmentFor,encodeSegment}=await import('../src/segments.js');
+    assert.deepEqual(segs.slice(0,228),[...encodeSegment(segmentFor((today+2)*86400000)).slice(0,228)]);
+    assert.equal(rise.length,45*12);
+    // The first local date: 29 September, with New York's rise and set as
+    // the chart's margin gives them.
+    const {riseText}=await import('../src/enroute-render.js');
+    const u16=k=>rise[4+2*k]|rise[5+2*k]<<8,hhmm=v=>v===65535?'----':String(Math.floor(v/60)).padStart(2,'0')+String(v%60).padStart(2,'0');
+    assert.equal(rise[0]|rise[1]<<8|rise[2]<<16,Date.UTC(2026,8,29)/86400000);
+    assert.deepEqual([`HOM SR ${hhmm(u16(0))}`,`SS ${hhmm(u16(1))}`],riseText('sun',HOMES[zone],Date.parse('2026-09-29T22:00:00Z'),zone));
+    assert.deepEqual([`HOM MR ${hhmm(u16(2))}`,`MS ${hhmm(u16(3))}`],riseText('moon',HOMES[zone],Date.parse('2026-09-29T22:00:00Z'),zone));
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

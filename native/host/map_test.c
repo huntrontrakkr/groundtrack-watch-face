@@ -17,7 +17,7 @@ static void row(void *ctx,int y,const uint8_t *relief,const uint8_t *land){
   Check *c=ctx;c->rows++;
   for(int x=0;x<MAP_WIDTH;x++){
     const long i=(long)y*MAP_WIDTH+x;const int bit=(c->land[i>>3]>>(i&7))&1;
-    if(relief[x]!=c->relief[i]||land[x]!=bit){c->differ++;if(c->first_bad<0)c->first_bad=y;}
+    if(relief[x]!=c->relief[i]||((land[x>>3]>>(x&7))&1)!=bit){c->differ++;if(c->first_bad<0)c->first_bad=y;}
   }
 }
 int main(int argc,char **argv){
@@ -25,7 +25,7 @@ int main(int argc,char **argv){
   size_t n,rn,ln;Mem m;m.data=slurp(argv[1],&n);m.length=n;
   const uint8_t *relief=slurp(argv[2],&rn),*land=slurp(argv[3],&ln);
   if(!m.data||!relief||!land){fprintf(stderr,"cannot read inputs\n");return 2;}
-  MapPack p;if(!map_pack_open(&p,mem_read,&m)){fprintf(stderr,"bad pack\n");return 2;}
+  MapPack p;if(!map_pack_open(&p,mem_read,&m,malloc)){fprintf(stderr,"bad pack\n");return 2;}
   const int r0=argc>5?atoi(argv[4]):p.first,r1=argc>5?atoi(argv[5]):p.first+p.rows;
   static MapWork work;Check c={relief,land,0,0,-1};
   if(!map_pack_rows(&p,&work,r0,r1,row,&c)){fprintf(stderr,"decode failed\n");return 2;}

@@ -12,7 +12,9 @@
 
 #define W CHART_W
 #define H CHART_H
-static const double RAD=M_PI/180;
+// Math.PI: this literal rounds to the same double.
+#define PI 3.14159265358979323846
+static const double RAD=PI/180;
 enum {G_WATER,G_LAND,G_SPACE,G_TINT0,G_DEPTH0=8};
 enum {L_PLAIN,L_CONTOUR,L_COAST,L_SHELF,L_WATERLINE,L_CLEARED,L_GRID,L_ROUTE,L_INK,L_MARK,L_SPACE_INK,L_SPACE,L_EARLY_CLEARED,L_EARLY_INK};
 enum {M_SEA,M_LAND,M_COAST,M_WAVE};
@@ -20,7 +22,7 @@ enum {M_SEA,M_LAND,M_COAST,M_WAVE};
 // JavaScript's Math.round: the nearest integer, halves up.
 static double js_round(double v){const double r=floor(v);return v-r>=0.5?r+1:r;}
 // geometry.js wrap(): longitude into -180..180.
-static double wrap(double lon){return fmod(fmod(lon+180,360)+360,360)-180;}
+static double wrap(double lon){return f_fmod(f_fmod(lon+180,360)+360,360)-180;}
 
 // ---------------------------------------------------------------- camera
 // chartCamera(body, start, {span: SPAN}) for the Sun and Moon.
@@ -49,7 +51,8 @@ static bool body_position(const Segs *s,bool moon,int64_t t,double *lat,double *
 #define ROW_SLOTS 6
 typedef struct {
   MapCursor cursor;bool started;int last;       // last row decoded
-  int row[ROW_SLOTS];uint8_t relief[ROW_SLOTS][MAP_WIDTH],land[ROW_SLOTS][MAP_WIDTH/8];
+  int row[ROW_SLOTS];uint8_t land[ROW_SLOTS][MAP_WIDTH/8];
+  uint8_t *relief;int c0,n;                     // the columns under the chart: ROW_SLOTS rows of n from c0
   const MapPack *pack;MapWork *work;
 } Rows;
 static int slot_of(Rows *r,int row){for(int i=0;i<ROW_SLOTS;i++)if(r->row[i]==row)return i;return -1;}
@@ -67,8 +70,8 @@ static bool need_rows(Rows *r,int lo,int hi){
       if(got==want){
         int s=-1;for(int i=0;i<ROW_SLOTS;i++)if(r->row[i]<0){s=i;break;}
         if(s<0)return false;
-        r->row[s]=got;memcpy(r->relief[s],relief,MAP_WIDTH);memset(r->land[s],0,MAP_WIDTH/8);
-        for(int x=0;x<MAP_WIDTH;x++)if(land[x])r->land[s][x>>3]|=(uint8_t)(1<<(x&7));
+        r->row[s]=got;memcpy(r->land[s],land,MAP_WIDTH/8);
+        for(int k=0;k<r->n;k++)r->relief[s*r->n+k]=relief[(r->c0+k)%MAP_WIDTH];
         break;
       }
     }
@@ -90,7 +93,7 @@ static double coverage(Rows *r,double lat,double lon){
 static double relief_at(Rows *r,double lat,double lon){
   const double u=(wrap(lon)+180)*4-.5,v=(90-lat)*4-.5,i=floor(u),j=floor(v),fu=u-i,fv=v-j;
   const int s0=map_row(r,(int)j),s1=map_row(r,(int)j+1);
-  #define AT(s,xx) ((s)<0?0.0:(double)meters(r->relief[s][(((int)(xx)%1440)+1440)%1440]))
+  #define AT(s,xx) ((s)<0?0.0:(double)meters(r->relief[(s)*r->n+((((int)(xx)%1440)+1440)%1440-r->c0+1440)%1440]))
   return (AT(s0,i)*(1-fu)+AT(s0,i+1)*fu)*(1-fv)+(AT(s1,i)*(1-fu)+AT(s1,i+1)*fu)*fv;
   #undef AT
 }
@@ -100,18 +103,21 @@ static int map_row_of(double lat){return (int)floor((90-lat)*4-.5);}
 // reliefLayer(): three passes of a three-tap box, across then down, each
 // stored as float. Rows flow through three stages as they are sampled.
 typedef void (*EmitFn)(void *ctx,int row,const float *values);
-typedef struct {float t[3][W];int rows;EmitFn emit;void *ctx;} Smooth;
+// Every stage writes its output into one shared row (the stages run one
+// inside another, each taking its input before writing): nothing large is
+// kept on the stack.
+typedef struct {float t[3][W];int rows;EmitFn emit;void *ctx;float *out;} Smooth;
 static void smooth_push(Smooth *s,const float *in){
   const int r=s->rows++;float *t=s->t[r%3];
   for(int x=0;x<W;x++){double sum=0;int n=0;for(int d=-1;d<=1;d++){const int xx=x+d;if(xx>=0&&xx<W){sum+=(double)in[xx];n++;}}t[x]=(float)(sum/n);}
   if(r>=1){
-    float out[W];const int y=r-1;
+    float *out=s->out;const int y=r-1;
     for(int x=0;x<W;x++){double sum=0;int n=0;for(int d=-1;d<=1;d++){const int yy=y+d;if(yy>=0&&yy<H&&yy<=r){sum+=(double)s->t[yy%3][x];n++;}}out[x]=(float)(sum/n);}
     s->emit(s->ctx,y,out);
   }
 }
 static void smooth_finish(Smooth *s){
-  float out[W];const int y=s->rows-1;
+  float *out=s->out;const int y=s->rows-1;
   for(int x=0;x<W;x++){double sum=0;int n=0;for(int d=-1;d<=1;d++){const int yy=y+d;if(yy>=0&&yy<H&&yy<=y){sum+=(double)s->t[yy%3][x];n++;}}out[x]=(float)(sum/n);}
   s->emit(s->ctx,y,out);
 }
@@ -122,14 +128,15 @@ static void smooth_finish(Smooth *s){
 typedef struct {
   const Cam *cam;const Plate *pal;uint8_t *classes;
   Smooth s1,s2,s3;
-  uint8_t land[LAND_RING][W];int land_rows;    // land bits of pixel rows computed
+  uint8_t land[LAND_RING][W/8+1];int land_rows; // land bits of pixel rows computed
   float e3[E3_RING][W];int e3_rows;           // smoothed relief rows emitted
+  float row[W];                               // the sampled row, then each stage's output
   int done;                                   // rows finalised
 } Ground;
 static void emit2(void *ctx,int row,const float *v){Ground *g=ctx;(void)row;smooth_push(&g->s3,v);}
 static void emit1(void *ctx,int row,const float *v){Ground *g=ctx;(void)row;smooth_push(&g->s2,v);}
 static void emit3(void *ctx,int row,const float *v){Ground *g=ctx;memcpy(g->e3[row%E3_RING],v,sizeof(float)*W);g->e3_rows=row+1;}
-static bool is_land(const Ground *g,int x,int y){return g->land[y%LAND_RING][x];}
+static bool is_land(const Ground *g,int x,int y){return (g->land[y%LAND_RING][x>>3]>>(x&7))&1;}
 // seaDistance(): chessboard distance to the nearest land pixel, capped at 6.
 static int sea_distance(const Ground *g,int x,int y){
   int best=6;
@@ -188,31 +195,37 @@ static void finalise_row(Ground *g,int y){
     g->classes[i]=(uint8_t)(overlay<<4|ground);
   }
 }
-static bool build_ground(Ground *gp,const Cam *cam,const Plate *pal,Rows *rows,uint8_t *classes){
-  Ground *const g_=gp;memset(g_,0,sizeof *g_);
-  #define g (*g_)
-  g.cam=cam;g.pal=pal;g.classes=classes;
-  g.s1.emit=emit1;g.s1.ctx=&g;g.s2.emit=emit2;g.s2.ctx=&g;g.s3.emit=emit3;g.s3.ctx=&g;
+static void ground_begin(Ground *g,const Cam *cam,const Plate *pal,uint8_t *classes){
+  memset(g,0,sizeof *g);
+  g->cam=cam;g->pal=pal;g->classes=classes;
+  g->s1.emit=emit1;g->s1.ctx=g;g->s2.emit=emit2;g->s2.ctx=g;g->s3.emit=emit3;g->s3.ctx=g;
+  g->s1.out=g->s2.out=g->s3.out=g->row;
+}
+// Up to `budget` pixel rows of the ground: 1 while rows remain, 0 when the
+// ground is done, -1 if the map fails.
+static int ground_step(Ground *g,Rows *rows,int budget){
   static const double SAMPLES[4][2]={{.25,.25},{.75,.25},{.25,.75},{.75,.75}};
-  for(int y=0;y<H;y++){
+  const Cam *cam=g->cam;
+  for(;budget>0&&g->land_rows<H;budget--){
+    const int y=g->land_rows;
     // The map rows under this pixel row's samples.
     const int a=map_row_of(glat(cam,y+.25)),b=map_row_of(glat(cam,y+.75));
-    if(!need_rows(rows,a,b+1))return false;
-    float e0[W];uint8_t *land=g.land[y%LAND_RING];
+    if(!need_rows(rows,a,b+1))return -1;
+    float *e0=g->row;uint8_t *land=g->land[y%LAND_RING];memset(land,0,W/8+1);
     for(int x=0;x<W;x++){
       double c=0;for(int s=0;s<4;s++)c+=coverage(rows,glat(cam,y+SAMPLES[s][1]),glon(cam,x+SAMPLES[s][0]));
-      land[x]=c>=2;
+      if(c>=2)land[x>>3]|=(uint8_t)(1<<(x&7));
       const double lat=glat(cam,y+.5);
       e0[x]=(float)(fabs(lat)<=90?relief_at(rows,lat,glon(cam,x+.5)):0);
     }
-    g.land_rows=y+1;
-    smooth_push(&g.s1,e0);
-    while(g.done<H&&g.done+6<g.land_rows&&(g.done+1<g.e3_rows||g.e3_rows==H))finalise_row(&g,g.done++);
+    g->land_rows=y+1;
+    smooth_push(&g->s1,e0);
+    while(g->done<H&&g->done+6<g->land_rows&&(g->done+1<g->e3_rows||g->e3_rows==H))finalise_row(g,g->done++);
   }
-  smooth_finish(&g.s1);smooth_finish(&g.s2);smooth_finish(&g.s3);
-  while(g.done<H)finalise_row(&g,g.done++);
-  #undef g
-  return true;
+  if(g->land_rows<H)return 1;
+  smooth_finish(&g->s1);smooth_finish(&g->s2);smooth_finish(&g->s3);
+  while(g->done<H)finalise_row(g,g->done++);
+  return 0;
 }
 
 // ---------------------------------------------------------------- drawing
@@ -232,6 +245,7 @@ static void clear(Canvas *cv,double fx,double fy){
   cv->c[i]=(uint8_t)((cv->c[i]&15)|(cv->early?L_EARLY_CLEARED:L_CLEARED)<<4);
 }
 typedef struct {int16_t x,y;} Px;
+typedef struct {int x,y,w,h;} Box;
 // letter(): a halo of knockout round every pixel, then the ink; over space
 // the ink is the space ink.
 static void letter(Canvas *cv,const Px *px,int n,int layer,int halo){
@@ -268,7 +282,7 @@ static const FigureGlyph *figure(int size,char c){for(int s=0;s<5;s++)if(FIGURE_
 static int gap_for(int size){return (int)js_round(size/16.0);}
 static int run_width(const char *t,int size){int w=0,n=0;for(;*t;t++,n++)w+=figure(size,*t)->width;return w+gap_for(size)*(n-1);}
 // A run of figures laid out as figurePixels() does: glyph i at (x[i], y[i]).
-typedef struct {const FigureGlyph *g[3];int x[3],y[3],n,x0,y0,x1,y1;} FigureRun;
+typedef struct {const FigureGlyph *g[3];int x[3],y[3],n,x0,y0,x1,y1;const uint8_t *bits;int base;} FigureRun;
 static void figure_run(const char *t,int size,int x,int y,FigureRun *r){
   int h=0;for(const char *p=t;*p;p++){const int gh=figure(size,*p)->height;if(gh>h)h=gh;}
   r->n=0;int cx=x;r->x0=x;r->y0=y;r->x1=x;r->y1=y;
@@ -283,7 +297,7 @@ static bool figure_solid(const FigureRun *r,int x,int y){
   for(int i=0;i<r->n;i++){
     const FigureGlyph *g=r->g[i];const int gx=x-r->x[i],gy=y-r->y[i];
     if(gx<0||gy<0||gx>=g->width||gy>=g->height)continue;
-    if(FIGURE_BITS[g->first+gy*((g->width+7)/8)+(gx>>3)]&(128>>(gx&7)))return true;
+    if(r->bits[g->first-r->base+gy*((g->width+7)/8)+(gx>>3)]&(128>>(gx&7)))return true;
   }
   return false;
 }
@@ -301,7 +315,6 @@ static void letter_figure(Canvas *cv,const FigureRun *r,int ring,int layer){
     plot(cv,x,y,(cv->c[cy*W+cx]&15)==G_SPACE?L_SPACE_INK:layer);
   }
 }
-typedef struct {int x,y,w,h;} Box;
 static bool overlaps(const Box *taken,int n,Box b){for(int i=0;i<n;i++)if(taken[i].x<b.x+b.w&&b.x<taken[i].x+taken[i].w&&taken[i].y<b.y+b.h&&b.y<taken[i].y+taken[i].h)return true;return false;}
 
 static const char *const HEXAGON[5]={"..###..",".#...#.","#.....#",".#...#.","..###.."};
@@ -324,43 +337,100 @@ static const char *const MONTHS[12]={"JAN","FEB","MAR","APR","MAY","JUN","JUL","
 static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char)('0'+v%10);v/=10;}while(v);while(n<width)d[n++]='0';while(n)*p++=d[--n];*p=0;return p;}
 
 #define SCRATCH 512
-typedef struct {double lat,lon,x,y;int64_t t;bool hour;} TrackPoint;
-struct ChartWork {Ground ground;Rows rows;Px scratch[SCRATCH];TrackPoint track[CHART_TRACK_MAX];};
-unsigned chart_work_size(void){return sizeof(ChartWork);}
+// The drawing's pixel lists and placements.
+typedef struct {Px scratch[SCRATCH];Box taken[64];Px home_code[64];} Draw;
+// The track: latitude and unwrapped longitude, then its screen position.
+typedef struct {double a,b;int32_t t;uint8_t hour;} TrackPoint;
+// The figures of one size, loaded while they are drawn.
+static uint8_t *load_figures(const ChartSources *src,int size,int *base){
+  int s=0;while(s<5&&FIGURE_SIZES[s]!=size)s++;
+  if(s==5)return NULL;
+  const int from=FIGURE_GLYPHS[s*10].first,to=s<4?FIGURE_GLYPHS[(s+1)*10].first:FIGURE_BYTES;
+  uint8_t *bits=src->alloc(to-from);
+  if(bits&&src->figures(src->figure_source,from,bits,to-from)!=(size_t)(to-from)){src->release(bits);return NULL;}
+  *base=from;return bits;
+}
 
 // ---------------------------------------------------------------- the hour
-bool chart_build(const ChartInput *in,const MapPack *pack,MapWork *work,SegmentFn fn,void *ctx,ChartWork *wk,EnrScene *out,uint8_t *classes,EnrPoint *points){
-  const Plate *pal=&PLATES[in->plate];const Segs segs={fn,ctx};const bool moon=in->body==1;
-  Px *const scratch=wk->scratch;
+// A build in progress: the track and camera, then the ground a slice of
+// rows at a time, then the drawing and the scene.
+struct ChartBuild {
+  ChartInput in;ChartSources src;
+  TrackPoint *track;int count,h0,h1;Cam cam;
+  uint8_t *classes;MapPack pack;MapWork *map_work;Ground *ground;Rows *rows;
+};
+static void ground_free(ChartBuild *b){
+  const ChartSources *src=&b->src;
+  if(b->rows)src->release(b->rows->relief);
+  src->release(b->rows);b->rows=NULL;src->release(b->ground);b->ground=NULL;src->release(b->map_work);b->map_work=NULL;
+  if(b->pack.cum)map_pack_close(&b->pack,src->release);
+}
+void chart_abort(ChartBuild *b){
+  if(!b)return;
+  ground_free(b);b->src.release(b->classes);b->src.release(b->track);b->src.release(b);
+}
+ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
+  ChartBuild *b=src_->alloc(sizeof(ChartBuild));if(!b)return NULL;
+  memset(b,0,sizeof *b);b->in=*in_;b->src=*src_;
+  const ChartInput *in=&b->in;const ChartSources *src=&b->src;
+  const Plate *pal=&PLATES[in->plate];const Segs segs={src->segment,src->segment_context};const bool moon=in->body==1;
+  void *(*const alloc)(size_t)=src->alloc;
   // chartCamera(): the hour and forty minutes either side, a minute apart.
-  TrackPoint *const track=wk->track;
+  TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*CHART_TRACK_MAX);if(!track)goto fail;
   int count=0;double turn=0,prev=0;
   for(int64_t t=in->start-2400;t<=in->start+6000;t+=60){
-    double lat,lon;if(!body_position(&segs,moon,t,&lat,&lon))return false;
+    double lat,lon;if(!body_position(&segs,moon,t,&lat,&lon))goto fail;
     if(count){const double d=lon-prev;if(d>180)turn-=360;else if(d<-180)turn+=360;}
     prev=lon;
-    track[count].lat=lat;track[count].lon=lon+turn;track[count].t=t;track[count].hour=t>=in->start&&t<=in->start+3600;count++;
+    track[count].a=lat;track[count].b=lon+turn;track[count].t=(int32_t)(t-in->start);track[count].hour=t>=in->start&&t<=in->start+3600;count++;
   }
   double maxlat=-INFINITY,minlat=INFINITY,maxlon=-INFINITY,minlon=INFINITY;int h0=-1,h1=-1;
   for(int i=0;i<count;i++)if(track[i].hour){
     if(h0<0)h0=i;
     h1=i;
-    if(track[i].lat>maxlat)maxlat=track[i].lat;
-    if(track[i].lat<minlat)minlat=track[i].lat;
-    if(track[i].lon>maxlon)maxlon=track[i].lon;
-    if(track[i].lon<minlon)minlon=track[i].lon;
+    if(track[i].a>maxlat)maxlat=track[i].a;
+    if(track[i].a<minlat)minlat=track[i].a;
+    if(track[i].b>maxlon)maxlon=track[i].b;
+    if(track[i].b<minlon)minlon=track[i].b;
   }
   Cam cam;
   cam.lat0=(maxlat+minlat)/2;cam.k=f_cos(cam.lat0*RAD);
   {const double spread=(maxlon-minlon)*cam.k;cam.scale=CHART_SPAN/(spread>1?spread:1);}
   cam.y0=CHART_TRACK_Y;cam.lonMid=(maxlon+minlon)/2;cam.x0=W/2;
-  for(int i=0;i<count;i++){track[i].x=sx(&cam,track[i].lon);track[i].y=sy(&cam,track[i].lat);}
-  const int top=0,bottom=H;
+  for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
+  b->count=count;b->h0=h0;b->h1=h1;b->cam=cam;
 
-  // The ground.
-  Rows *const rows=&wk->rows;memset(rows,0,sizeof *rows);rows->pack=pack;rows->work=work;for(int i=0;i<ROW_SLOTS;i++)rows->row[i]=-1;
-  memset(out,0,sizeof *out);
-  if(!build_ground(&wk->ground,&cam,pal,rows,classes))return false;
+  // The ground, with the map's decoder and the relief's rings, freed after.
+  b->classes=alloc(W*H);b->map_work=alloc(sizeof(MapWork));b->ground=alloc(sizeof(Ground));b->rows=alloc(sizeof(Rows));
+  if(!b->classes||!b->map_work||!b->ground||!b->rows||!map_pack_open(&b->pack,src->map,src->map_source,alloc))goto fail;
+  {Rows *const rows=b->rows;memset(rows,0,sizeof *rows);rows->pack=&b->pack;rows->work=b->map_work;for(int i=0;i<ROW_SLOTS;i++)rows->row[i]=-1;
+  // Only the map's columns under the chart are kept.
+  const double lonL=glon(&b->cam,0),lonR=glon(&b->cam,W),span=(lonR-lonL)*4+4;
+  if(span>=MAP_WIDTH){rows->c0=0;rows->n=MAP_WIDTH;}
+  else{rows->c0=((int)floor((wrap(lonL)+180)*4-.5)-1+2*MAP_WIDTH)%MAP_WIDTH;rows->n=(int)ceil(span)+2;}
+  rows->relief=alloc(ROW_SLOTS*rows->n);if(!rows->relief)goto fail;}
+  ground_begin(b->ground,&b->cam,pal,b->classes);
+  return b;
+fail:
+  chart_abort(b);
+  return NULL;
+}
+int chart_step(ChartBuild *b){
+  if(!b->ground)return 0;
+  const int r=ground_step(b->ground,b->rows,CHART_STEP_ROWS);
+  if(r<=0)ground_free(b);
+  return r;
+}
+EnrScene *chart_finish(ChartBuild *b){
+  if(b->ground){chart_abort(b);return NULL;}
+  const ChartInput *in=&b->in;const ChartSources *src=&b->src;
+  const Plate *pal=&PLATES[in->plate];const Segs segs={src->segment,src->segment_context};const bool moon=in->body==1;
+  void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
+  TrackPoint *const track=b->track;const int count=b->count,h0=b->h0,h1=b->h1;const Cam cam=b->cam;
+  uint8_t *const classes=b->classes;const int top=0,bottom=H;
+  Draw *draw=NULL;Px *scratch=NULL;EnrScene *out=NULL;EnrPoint *points=NULL;int16_t zulu_x=0,zulu_baseline=0;
+  draw=alloc(sizeof(Draw));if(!draw)goto fail;
+  scratch=draw->scratch;
   Canvas cv={classes,true};
 
   // Graticule: crosses every 5 degrees, a degree tick along each edge.
@@ -371,18 +441,18 @@ bool chart_build(const ChartInput *in,const MapPack *pack,MapWork *work,SegmentF
     for(int d=-2;d<=2;d++){plot(&cv,x+d,y,L_GRID);plot(&cv,x,y+d,L_GRID);}
   }
   for(double lon=ceil(g0lon/minor)*minor;lon<=g1lon;lon+=minor){
-    const double x=js_round(sx(&cam,lon));const int len=fmod(lon,step)==0?4:2;
+    const double x=js_round(sx(&cam,lon));const int len=f_fmod(lon,step)==0?4:2;
     for(int d=0;d<len;d++){plot(&cv,x,top+d,L_GRID);plot(&cv,x,bottom-d,L_GRID);}
   }
   for(double lat=ceil(g0lat/minor)*minor;lat<=g1lat;lat+=minor){
-    const double y=js_round(sy(&cam,lat));const int len=fmod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
+    const double y=js_round(sy(&cam,lat));const int len=f_fmod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
     for(int d=0;d<len;d++){plot(&cv,d,y,L_GRID);plot(&cv,W-1-d,y,L_GRID);}
   }}
 
   // Home, placed first so the network gives way; drawn last.
-  Box taken[64];int taken_n=0;
+  Box *const taken=draw->taken;int taken_n=0;
   taken[taken_n++]=(Box){0,H-16,W,16};if(in->home)taken[taken_n++]=(Box){0,0,W,14};
-  bool home_mark=false;int hx=0,hy=0;Px home_code[64];int home_code_n=0;
+  bool home_mark=false;int hx=0,hy=0;Px *const home_code=draw->home_code;int home_code_n=0;
   if(in->home){
     double qx,qy;project(&cam,in->home_lat,in->home_lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
@@ -402,37 +472,37 @@ bool chart_build(const ChartInput *in,const MapPack *pack,MapWork *work,SegmentF
     const int n=text_pixels(STATIONS[s].code,right?x+5:x-5-w,y+4,scratch);letter(&cv,scratch,n,L_INK,1);
   }
   // The route: cased in white on a one-ink plate; dashed outside the hour.
-  #define JUMP(a,b) (fabs(track[b].x-track[a].x)>W/2)
+  #define JUMP(p,q) (fabs(track[q].a-track[p].a)>W/2)
   if(pal->flags&PLATE_MONO)for(int i=1;i<count;i++){
     if(JUMP(i-1,i)||!(track[i-1].hour&&track[i].hour))continue;
-    segment(&cv,track[i-1].x,track[i-1].y,track[i].x,track[i].y,casing_pixel,0);
+    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,casing_pixel,0);
   }
   cv.early=false;
   for(int i=1;i<count;i++){
     if(JUMP(i-1,i))continue;
     bool hour=track[i-1].hour&&track[i].hour;
-    segment(&cv,track[i-1].x,track[i-1].y,track[i].x,track[i].y,route_pixel,&hour);
+    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,route_pixel,&hour);
   }
   // The route as a scale: minute graduations, the quarters numbered.
   for(int i=1;i<count-1;i++){
     if(!track[i].hour)continue;
-    const int64_t since=track[i].t-track[h0].t;const int m=(int)js_round(since/60.0);
+    const int64_t since=(int64_t)track[i].t-track[h0].t;const int m=(int)js_round(since/60.0);
     if(since%60||m<=0||m>=60)continue;
-    const double len0=sqrt((track[i+1].x-track[i-1].x)*(track[i+1].x-track[i-1].x)+(track[i+1].y-track[i-1].y)*(track[i+1].y-track[i-1].y)),len=len0?len0:1;
-    double nx=-(track[i+1].y-track[i-1].y)/len,ny=(track[i+1].x-track[i-1].x)/len;if(ny<0){nx=-nx;ny=-ny;}
+    const double len0=f_sqrt((track[i+1].a-track[i-1].a)*(track[i+1].a-track[i-1].a)+(track[i+1].b-track[i-1].b)*(track[i+1].b-track[i-1].b)),len=len0?len0:1;
+    double nx=-(track[i+1].b-track[i-1].b)/len,ny=(track[i+1].a-track[i-1].a)/len;if(ny<0){nx=-nx;ny=-ny;}
     const int size=m%15==0?6:m%5==0?4:2;
-    for(int s=1;s<=size;s++)plot(&cv,track[i].x+nx*s,track[i].y+ny*s,L_ROUTE);
+    for(int s=1;s<=size;s++)plot(&cv,track[i].a+nx*s,track[i].b+ny*s,L_ROUTE);
     if(m%15==0){
       char label[4];label[0]=(char)('0'+m/10);label[1]=(char)('0'+m%10);label[2]=0;
       const int lw=text_width(label);
-      const int n=text_pixels(label,(int)js_round(track[i].x+nx*8-lw/2.0)+1,(int)js_round(track[i].y+ny*8+9),scratch);
+      const int n=text_pixels(label,(int)js_round(track[i].a+nx*8-lw/2.0)+1,(int)js_round(track[i].b+ny*8+9),scratch);
       letter(&cv,scratch,n,L_ROUTE,(pal->flags&PLATE_MONO)?1:0);
     }
   }
   // This hour's VOR rose and hexagon; the next hour's reporting point.
-  const int c0x=(int)js_round(track[h0].x),c0y=(int)js_round(track[h0].y),c1x=(int)js_round(track[h1].x),c1y=(int)js_round(track[h1].y);
+  const int c0x=(int)js_round(track[h0].a),c0y=(int)js_round(track[h0].b),c1x=(int)js_round(track[h1].a),c1y=(int)js_round(track[h1].b);
   {const int R=16;
-  for(int a=0;a<720;a++){const double t=a*M_PI/360;plot(&cv,c0x+js_round(f_sin(t)*R),c0y-js_round(f_cos(t)*R),L_INK);}
+  for(int a=0;a<720;a++){const double t=a*PI/360;plot(&cv,c0x+js_round(f_sin(t)*R),c0y-js_round(f_cos(t)*R),L_INK);}
   for(int a=0;a<360;a+=30){const int len=a%90==0?5:3;for(int r=R-len;r<R;r++){const double t=a*RAD;plot(&cv,c0x+js_round(f_sin(t)*r),c0y-js_round(f_cos(t)*r),L_INK);}}
   for(int k=0;k<3;k++)for(int d=-k;d<=k;d++){const int r=R+4-k;plot(&cv,c0x+js_round(f_sin(0)*r+f_cos(0)*d),c0y-js_round(f_cos(0)*r-f_sin(0)*d),L_INK);}}
   symbol(&cv,HEXAGON,5,c0x,c0y);plot(&cv,c0x,c0y,L_INK);symbol(&cv,TRIANGLE,7,c1x,c1y-1);
@@ -442,8 +512,10 @@ bool chart_build(const ChartInput *in,const MapPack *pack,MapWork *work,SegmentF
   put_int(hour,hh,1);put_int(next,nh,1);}
   {const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
   #define PLACE(end,w) ({int v=(int)js_round((end)-(w)/2.0);v=v<W-4-(w)?v:W-4-(w);v>4?v:4;})
-  FigureRun run;figure_run(hour,size,PLACE(c0x,hw),gy,&run);letter_figure(&cv,&run,0,L_INK);
-  figure_run(next,size,PLACE(c1x,nw),gy,&run);letter_figure(&cv,&run,2,L_INK);
+  int base;uint8_t *bits=load_figures(src,size,&base);if(!bits)goto fail;
+  FigureRun run;figure_run(hour,size,PLACE(c0x,hw),gy,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,0,L_INK);
+  figure_run(next,size,PLACE(c1x,nw),gy,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,2,L_INK);
+  release(bits);
   #undef PLACE
   }
   // Home, over the route and figures, on its own knockout.
@@ -460,7 +532,7 @@ bool chart_build(const ChartInput *in,const MapPack *pack,MapWork *work,SegmentF
   {const int y=H-5,lw=text_width(left),rw=text_width(right_);
   int n=text_pixels(left,6,y,scratch);letter(&cv,scratch,n,L_INK,1);
   n=text_pixels(right_,W-6-rw,y,scratch);letter(&cv,scratch,n,L_INK,1);
-  const int l=6+lw,r=W-6-rw;out->zulu_x=(int16_t)js_round((l+r-text_width("0000Z"))/2.0);out->zulu_baseline=(int16_t)y;}
+  const int l=6+lw,r=W-6-rw;zulu_x=(int16_t)js_round((l+r-text_width("0000Z"))/2.0);zulu_baseline=(int16_t)y;}
   if(in->home&&in->rise_left[0]){
     const int y=11,rw=text_width(in->rise_right);
     int n=text_pixels(in->rise_left,6,y,scratch);letter(&cv,scratch,n,L_INK,1);
@@ -468,29 +540,45 @@ bool chart_build(const ChartInput *in,const MapPack *pack,MapWork *work,SegmentF
   }
 
   // The scene: the plate, the night's tables, the minutes and the track.
+  out=alloc(sizeof(EnrScene));if(out)memset(out,0,sizeof *out);
+  points=alloc(sizeof(EnrPoint)*count);
+  if(!out||!points)goto fail;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->flag?16:0));
-  out->body=(uint8_t)in->body;out->forward=(int8_t)(track[h1].x>track[h0].x?1:-1);out->hour_start=(int32_t)in->start;
+  out->body=(uint8_t)in->body;out->forward=(int8_t)(track[h1].a>track[h0].a?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
   for(int k=0;k<5;k++)out->tints[k]=k<pal->tint_count?pal->tints[k]:0;
   for(int k=0;k<2;k++)out->depths[k]=k<pal->depth_count?pal->depths[k]:0;
   for(int y=0;y<H;y++){const double lat=glat(&cam,y+.5)*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
   for(int x=0;x<W;x++){const double lon=glon(&cam,x+.5)*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}
-  out->c1x=(enr_real)track[h1].x;out->normal_x=0;out->normal_y=-1;
+  out->c1x=(enr_real)track[h1].a;out->normal_x=0;out->normal_y=-1;out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;
   for(int m=0;m<60;m++){
     const int64_t t=in->start+m*60;EnrMinute *e=&out->minutes[m];
-    double lat,lon;if(!body_position(&segs,false,t,&lat,&lon))return false;
+    double lat,lon;if(!body_position(&segs,false,t,&lat,&lon))goto fail;
     e->sun[0]=(enr_real)(f_cos(lat*RAD)*f_cos(lon*RAD));e->sun[1]=(enr_real)(f_cos(lat*RAD)*f_sin(lon*RAD));e->sun[2]=(enr_real)f_sin(lat*RAD);
-    if(!body_position(&segs,moon,t,&lat,&lon))return false;
+    if(!body_position(&segs,moon,t,&lat,&lon))goto fail;
     double mx,my;project(&cam,lat,lon,&mx,&my);e->mx=(enr_real)mx;e->my=(enr_real)my;
-    const Segment *seg=fn(ctx,(int32_t)(t/86400));bool waxing;double fraction;seg_moon_light(seg,t,&fraction,&waxing);e->moon_fraction=(enr_real)fraction;e->waxing=waxing;
+    const Segment *seg=src->segment(src->segment_context,(int32_t)(t/86400));bool waxing;double fraction;seg_moon_light(seg,t,&fraction,&waxing);e->moon_fraction=(enr_real)fraction;e->waxing=waxing;
     const int64_t day=t%86400;const int hh=(int)(day/3600),mm=(int)(day%3600/60);
     e->zulu[0]=(char)('0'+hh/10);e->zulu[1]=(char)('0'+hh%10);e->zulu[2]=(char)('0'+mm/10);e->zulu[3]=(char)('0'+mm%10);e->zulu[4]='Z';
     e->minute[0]=(char)('0'+mm/10);e->minute[1]=(char)('0'+mm%10);memset(e->top,0,sizeof e->top);
   }
-  out->track_count=(uint16_t)count;out->track=points;
-  for(int i=0;i<count;i++){points[i].x=(enr_real)track[i].x;points[i].y=(enr_real)track[i].y;points[i].seconds=(int32_t)(track[i].t-in->start);points[i].hour=track[i].hour;}
-  return true;
+  out->track_count=(uint16_t)count;out->track=points;points=NULL;
+  for(int i=0;i<count;i++){out->track[i].x=(enr_real)track[i].a;out->track[i].y=(enr_real)track[i].b;out->track[i].seconds=track[i].t;out->track[i].hour=track[i].hour;}
+  if(!chart_runs(classes,out,alloc))goto fail;
+  release(draw);release(classes);release(track);release(b);
+  return out;
+fail:
+  if(out){release(out->track);release(out);}
+  release(points);release(draw);
+  chart_abort(b);
+  return NULL;
+}
+EnrScene *chart_build(const ChartInput *in,const ChartSources *src){
+  ChartBuild *b=chart_begin(in,src);if(!b)return NULL;
+  int r;while((r=chart_step(b))>0){}
+  if(r<0){chart_abort(b);return NULL;}
+  return chart_finish(b);
 }
 
 bool chart_runs(const uint8_t *classes,EnrScene *s,void *(*alloc)(size_t)){

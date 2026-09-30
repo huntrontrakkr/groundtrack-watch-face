@@ -2,12 +2,12 @@
 CORE=../src/c/enroute_core.c
 CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 
-harness: harness.c $(CORE) ../src/c/enroute_core.h ../src/c/departure_font.h
-	$(CC) $(CFLAGS) -o $@ harness.c $(CORE) -lm
+harness: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
+	$(CC) $(CFLAGS) -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The watch's own chart builder, writing the phone's scene format.
 CHART_SRC=../src/c/chart.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/fmath.c
-chart_test: chart_test.c $(CHART_SRC) ../src/c/chart.h ../src/c/generated/chart_data.h ../src/c/departure_font.h ../src/c/enroute_core.h
+chart_test: chart_test.c $(CHART_SRC) ../src/c/chart.h ../src/c/fmath.h ../src/c/generated/chart_data.h ../src/c/departure_font.h ../src/c/enroute_core.h
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ chart_test.c $(CHART_SRC) -lm
 
 # Host check of the shared sine and cosine.
@@ -15,16 +15,16 @@ fmath_test: fmath_test.c ../src/c/fmath.c ../src/c/fmath.h
 	$(CC) $(CFLAGS) -o $@ fmath_test.c ../src/c/fmath.c -lm
 
 # Host check of the Sun and Moon segments.
-segments_test: segments_test.c ../src/c/segments.c ../src/c/segments.h
-	$(CC) $(CFLAGS) -o $@ segments_test.c ../src/c/segments.c -lm
+segments_test: segments_test.c ../src/c/segments.c ../src/c/segments.h ../src/c/fmath.c
+	$(CC) $(CFLAGS) -o $@ segments_test.c ../src/c/segments.c ../src/c/fmath.c -lm
 
 # Host check of the map pack decoder.
 map_test: map_test.c ../src/c/map_pack.c ../src/c/map_pack.h
 	$(CC) $(CFLAGS) -o $@ map_test.c ../src/c/map_pack.c
 
 # The same with single-precision night arithmetic, as the watch would run it.
-harness-float: harness.c $(CORE) ../src/c/enroute_core.h ../src/c/departure_font.h
-	$(CC) $(CFLAGS) -DENR_FLOAT -o $@ harness.c $(CORE) -lm
+harness-float: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
+	$(CC) $(CFLAGS) -DENR_FLOAT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The core compiled for the watch's Cortex-M4 (single-precision FPU), with
 # single-precision arithmetic, to measure its code and static data.

@@ -1,6 +1,6 @@
 // Builds an hour's scene with the watch's chart builder and writes it in the
 // phone's scene format (src/native-scene.js), for byte-for-byte comparison.
-//   chart_test <map.pack> <out.scene>   with the input on stdin:
+//   chart_test <map.pack> <figures.bin> <out.scene>   with the input on stdin:
 //   key value lines (body, plate, flag, clock24, start, hour, day, month,
 //   year, yday, home, lat, lon, rise, set) and "segment <hex>" lines.
 #define _POSIX_C_SOURCE 200809L
@@ -25,9 +25,8 @@ static void i32(int32_t v){uint32_t u=(uint32_t)v;u16(u&65535);u16(u>>16);}
 static void f64(double v){uint8_t b[8];memcpy(b,&v,8);fwrite(b,1,8,out);}
 
 int main(int argc,char **argv){
-  if(argc<3){fprintf(stderr,"usage: chart_test map.pack out.scene < input\n");return 2;}
-  size_t n;Mem m;m.data=slurp(argv[1],&n);m.length=n;if(!m.data){fprintf(stderr,"no pack\n");return 2;}
-  MapPack pack;if(!map_pack_open(&pack,mem_read,&m)){fprintf(stderr,"bad pack\n");return 2;}
+  if(argc<4){fprintf(stderr,"usage: chart_test map.pack figures.bin out.scene < input\n");return 2;}
+  size_t n;Mem m,f;m.data=slurp(argv[1],&n);m.length=n;f.data=slurp(argv[2],&n);f.length=n;if(!m.data||!f.data){fprintf(stderr,"no pack or figures\n");return 2;}
   ChartInput in;memset(&in,0,sizeof in);
   char line[4096],key[32],value[2048];
   while(fgets(line,sizeof line,stdin)){
@@ -44,10 +43,11 @@ int main(int argc,char **argv){
     else if(!strcmp(key,"rise"))snprintf(in.rise_left,sizeof in.rise_left,"%s",value);
     else if(!strcmp(key,"set"))snprintf(in.rise_right,sizeof in.rise_right,"%s",value);
   }
-  static MapWork work;ChartWork *wk=malloc(chart_work_size());
-  static EnrScene s;static uint8_t classes[200*228];static EnrPoint points[CHART_TRACK_MAX];
-  if(!chart_build(&in,&pack,&work,seg_for,0,wk,&s,classes,points)||!chart_runs(classes,&s,malloc)){fprintf(stderr,"build failed\n");return 1;}
-  out=fopen(argv[2],"wb");
+  const ChartSources src={mem_read,&m,mem_read,&f,seg_for,0,malloc,free};
+  EnrScene *scene=chart_build(&in,&src);
+  if(!scene){fprintf(stderr,"build failed\n");return 1;}
+  const EnrScene s=*scene;
+  out=fopen(argv[3],"wb");
   fputs("GTS2",out);u16(200);u16(228);u8(s.flags);u8(s.body);u8((uint8_t)s.forward);u8(0);i32(s.hour_start);
   for(int k=0;k<9;k++)for(int z=0;z<3;z++)u8(s.zoned[k][z]);
   u8(s.space);u8(s.space_ink);u8(s.screen);u8(s.waterline);u8(s.terminator);u8(s.night_dots);
@@ -65,6 +65,6 @@ int main(int argc,char **argv){
   for(int y=0;y<=228;y++)u16(s.row_offset[y]);
   fwrite(s.runs,1,s.row_offset[228],out);
   fclose(out);
-  fprintf(stderr,"chart work %u bytes, scene %u bytes, runs %u bytes\n",chart_work_size(),(unsigned)sizeof s,(unsigned)s.row_offset[228]);
+  fprintf(stderr,"scene %u bytes, runs %u bytes\n",(unsigned)sizeof s,(unsigned)s.row_offset[228]);
   return 0;
 }

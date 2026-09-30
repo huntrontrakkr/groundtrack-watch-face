@@ -2,6 +2,7 @@
 // src/enroute-render.js closely enough to match it pixel for pixel.
 #include "enroute_core.h"
 #include "departure_font.h"
+#include "fmath.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -165,7 +166,7 @@ static void draw_body(Ctx *c){
     const enr_real r=5.2,f=m->moon_fraction;
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++){
       if(dx*dx+dy*dy>r*r)continue;
-      const enr_real rest=r*r-dy*dy,edge=sqrt(rest>0?rest:0),side=m->waxing?dx:-dx;
+      const enr_real rest=r*r-dy*dy,edge=(enr_real)f_sqrt(rest>0?rest:0),side=m->waxing?dx:-dx;
       if(side>=(1-2*f)*edge||dx*dx+dy*dy>(r-1.2)*(r-1.2))plot(c,mx+dx,my+dy,mk);
     }
   }else if(s->body==ENR_SATELLITE){
@@ -208,7 +209,7 @@ static void letter(Ctx *c,const Px *px,int n,int ink_key,int halo){
 static int circuit(int ax,int ay,int bx,int by,enr_real clearance,Px *out){
   const int dx=bx-ax,dy=by-ay,diag=abs(dx)<abs(dy)?abs(dx):abs(dy),sx=sign(dx),sy=sign(dy);
   int x=ax,y=ay,n=0;
-  #define KEEP(px,py) do{if(sqrt((px-ax)*(px-ax)+(py-ay)*(py-ay))>=clearance)out[n++]=(Px){px,py};}while(0)
+  #define KEEP(px,py) do{if(f_sqrt((double)((px-ax)*(px-ax)+(py-ay)*(py-ay)))>=clearance)out[n++]=(Px){px,py};}while(0)
   KEEP(x,y);
   for(int k=0;k<diag;k++){x+=sx;y+=sy;KEEP(x,y);}
   while(x!=bx||y!=by){if(x!=bx)x+=sx;else y+=sy;KEEP(x,y);}
