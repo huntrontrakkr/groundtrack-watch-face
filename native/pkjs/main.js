@@ -30,6 +30,7 @@ import {riseSet} from '../../src/home.js';
 import {localDay,localDate} from '../../src/enroute-render.js';
 import {clockParts} from '../../src/render.js';
 import CONFIG_PAGE from './config.html';
+import {devicePosition} from './device-position.js';
 import {LAND,RELIEF} from 'groundtrack:data';
 
 var CHUNK=2000;
@@ -240,13 +241,21 @@ function settingsKey(){return [setting('body','sun'),setting('plate','enroute'),
 
 // The settings page, offline: a data URL holding the page and the settings.
 var BODIES=['sun','moon','sat:36585'];
+// A data-URL page can't reliably ask for the phone's location itself (as
+// Dymaxion found), so the phone takes a coarse fix first, waiting at most
+// five seconds, and passes it in, rounded to 0.01°.
 Pebble.addEventListener('showConfiguration',function(){
-  var timeZone=zone(),preset=HOMES[timeZone];
-  var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),flag:setting('flag','1'),home:setting('home',''),timeZone:timeZone},
-    plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null};
-  // The settings go inside a script element: no '<' may close it.
-  var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');});
-  Pebble.openURL('data:text/html;charset=utf-8,'+encodeURIComponent(page));
+  var timeZone=zone(),preset=HOMES[timeZone],opened=false;
+  function open(position){
+    if(opened)return;opened=true;
+    var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),flag:setting('flag','1'),home:setting('home',''),timeZone:timeZone},
+      plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
+    // The settings go inside a script element: no '<' may close it.
+    var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');});
+    Pebble.openURL('data:text/html;charset=utf-8,'+encodeURIComponent(page));
+  }
+  setTimeout(function(){open(null);},5000);
+  devicePosition().then(function(p){open({lat:Math.round(p.coords.latitude*100)/100,lon:Math.round(p.coords.longitude*100)/100});},function(){open(null);});
 });
 Pebble.addEventListener('webviewclosed',function(e){
   if(!e||!e.response||e.response==='CANCELLED')return;

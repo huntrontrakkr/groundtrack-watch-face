@@ -62,7 +62,8 @@
 <div class="actions"><button type="button" id="cancel">Cancel</button><button type="button" id="save">Save</button></div>
 <script>
 (function(){
-  // Filled in by the phone app: {settings, plates:[[key,name,note]], preset}
+  // Filled in by the phone app: {settings, plates:[[key,name,note]], preset,
+  // position: the phone's fix {lat, lon} or null}
   var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
   var plates=document.getElementById('plates');
   config.plates.forEach(function(p){
@@ -85,6 +86,11 @@
   form.addEventListener('change',coords);coords();
   var status=document.getElementById('status');
   document.getElementById('locate').addEventListener('click',function(){
+    // The phone's own fix, when it had one as the page opened.
+    if(config.position){
+      form.elements.lat.value=config.position.lat.toFixed(2);form.elements.lon.value=config.position.lon.toFixed(2);
+      status.textContent='Found, rounded to 0.01°.';return;
+    }
     if(!navigator.geolocation){status.textContent='This phone offers no location here.';return;}
     status.textContent='Finding this phone…';
     navigator.geolocation.getCurrentPosition(function(p){

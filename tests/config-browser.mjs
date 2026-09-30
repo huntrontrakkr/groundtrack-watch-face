@@ -17,6 +17,8 @@ try{
   const stored={plate:'crt',flag:'1',timeZone:zone},listeners={},messages=[];let opened=null;
   const context=vm.createContext({
     console:{log:()=>{}},setTimeout,
+    // The phone's coarse fix, which it passes to the page.
+    navigator:{geolocation:{getCurrentPosition:ok=>setTimeout(()=>ok({coords:{latitude:48.85661,longitude:2.35222}}),5)}},
     localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:(k,v)=>{stored[k]=String(v);}},
     Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{opened=u;},sendAppMessage:(m,ok)=>{messages.push(m);setTimeout(ok,0);}}
   });
@@ -24,6 +26,7 @@ try{
   vm.runInContext(readFileSync(out,'utf8').replace(/\n/g,'\n\t'),context);
 
   listeners.showConfiguration({});
+  for(let i=0;i<100&&!opened;i++)await new Promise(r=>setTimeout(r,20));
   assert.ok(opened?.startsWith('data:text/html;charset=utf-8,'),'the phone opens the page as a data URL');
   const html=decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length));
 
@@ -58,7 +61,9 @@ try{
   await page.fill('input[name=lat]','91');await page.fill('input[name=lon]','2.35');
   await page.click('#save');await page.waitForTimeout(200);
   assert.equal(closes.length,0,'an impossible latitude closed the page');
-  await page.fill('input[name=lat]','48.8566');
+  // The phone's own fix, rounded to 0.01°.
+  await page.click('#locate');
+  assert.deepEqual([await page.inputValue('input[name=lat]'),await page.inputValue('input[name=lon]')],['48.86','2.35']);
   await page.click('#save');
   for(let i=0;i<50&&!closes.length;i++)await page.waitForTimeout(50);
   assert.equal(errors.length,0,errors.join('\n'));
