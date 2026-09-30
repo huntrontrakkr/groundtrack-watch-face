@@ -42,6 +42,13 @@ static int32_t s_asked_for;        // the time whose hour it asked for
 static time_t s_data_asked_at;     // when segments were last asked for
 static char s_status[32];          // why there is no chart, if known
 static ChartBuild *s_build;        // a Sun or Moon chart being built
+// What the screen holds, so a minute tick can draw only what changed (as
+// Dymaxion's minute_redraw): the chart and minute last drawn, and whether
+// this redraw is the tick's. Any other redraw paints the whole face: after a
+// notification, say, the screen holds something else.
+static const EnrScene *s_drawn_scene;
+static int s_drawn_minute=-1;
+static bool s_tick_redraw;
 static uint32_t s_build_ms;        // time spent building it
 static time_t s_quiet_until;       // no requests before this, after a status
 
@@ -142,19 +149,26 @@ static void update(Layer *layer,GContext *ctx){
     graphics_context_set_text_color(ctx,GColorWhite);
     graphics_draw_text(ctx,s_build?"DRAWING CHART":s_incoming?"RECEIVING CHART":s_status[0]?s_status:"AWAITING CHART",fonts_get_system_font(FONT_KEY_GOTHIC_14),
       GRect(0,100,ENR_W,20),GTextOverflowModeTrailingEllipsis,GTextAlignmentCenter,NULL);
+    s_drawn_scene=NULL;s_drawn_minute=-1;s_tick_redraw=false;
     return;
   }
   GBitmap *frame=graphics_capture_frame_buffer(ctx);
   if(!frame)return;
   // emery is rectangular: every row is a full row of GColor8 bytes.
-  enr_render(s_now.scene,(int)((now-s_now.scene->hour_start)/60),gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
+  const int minute=(int)((now-s_now.scene->hour_start)/60);
+  const bool partial=s_tick_redraw&&s_drawn_scene==s_now.scene&&s_drawn_minute>=0&&s_drawn_minute<=minute;
+  enr_render_update(s_now.scene,partial?s_drawn_minute:-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
   graphics_release_frame_buffer(ctx,frame);
+  s_drawn_scene=s_now.scene;s_drawn_minute=minute;s_tick_redraw=false;
 }
 
 static void tick(struct tm *when,TimeUnits changed){
   check(time(NULL));
+  s_tick_redraw=true;
   layer_mark_dirty(s_layer);
 }
+// Back from a notification or a menu: the screen holds something else.
+static void focus_changed(bool focused){if(focused){s_drawn_minute=-1;layer_mark_dirty(s_layer);}}
 
 // A received satellite scene becomes this hour's chart or the next; one for
 // any other hour is dropped. A new chart for this hour also drops the next
@@ -250,16 +264,20 @@ static void window_unload(Window *window){layer_destroy(s_layer);}
 static void init(void){
   settings_load(&s_settings);
   s_window=window_create();
+  // The window keeps what was drawn: a minute tick draws only what changed.
+  window_set_background_color(s_window,GColorClear);
   window_set_window_handlers(s_window,(WindowHandlers){.load=window_load,.unload=window_unload});
   window_stack_push(s_window,false);
   app_message_register_inbox_received(inbox);
   app_message_register_outbox_failed(outbox_failed);
   app_message_open(INBOX_SIZE,64);
   tick_timer_service_subscribe(MINUTE_UNIT,tick);
+  app_focus_service_subscribe(focus_changed);
   check(time(NULL));
 }
 static void deinit(void){
   tick_timer_service_unsubscribe();
+  app_focus_service_unsubscribe();
   build_abort();
   chart_free(&s_now);chart_free(&s_next);
   free(s_incoming);

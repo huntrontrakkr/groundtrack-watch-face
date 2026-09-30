@@ -36,6 +36,26 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
+test('a minute drawn over the last draws only what changed, and the same pixels',{skip:!cc&&'no C compiler'},()=>{
+  const dir=mkdtempSync(join(tmpdir(),'groundtrack-update-'));
+  try{
+    // Every plate, the Sun at noon and the Moon at nightfall, a satellite:
+    // each minute over the one before (and over a jump of five) must be the
+    // minute drawn whole.
+    for(const [name,args] of [
+      ['sun-enroute',['sun','2026-09-27T08:00:00Z','enroute','flag']],['sun-sectional',['sun','2026-06-21T13:00:00Z','sectional','flag']],
+      ['moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','flag']],['moon-hypsometric',['moon','2026-09-19T09:00:00Z','hypsometric','noflag']],
+      ['moon-red',['moon','2026-09-19T09:00:00Z','red','noflag']],['moon-crt',['moon','2026-09-19T09:00:00Z','crt','flag']],
+      ['moon-sunlight',['moon','2026-09-19T09:00:00Z','sunlight','flag']],['gps-crt',['sat:36585','2026-09-27T13:00:00Z','crt','flag']]
+    ]){
+      execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,'0'],{stdio:'pipe'});
+      const r=JSON.parse(execFileSync('native/host/harness',[join(dir,`${name}.scene`),join(dir,name),'-u']).toString());
+      assert.equal(r.differ,0,`${name}: ${r.differ} pixels differ`);
+      assert.ok(r.drawn<200*228,`${name}: every pixel drawn again`);
+    }
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
 test('the watch app type-checks against the SDK signatures',{skip:!cc&&'no C compiler'},()=>{
   // A stand-in pebble.h (native/host/stub) declares what main.c uses; the
   // real check is the Pebble SDK build.

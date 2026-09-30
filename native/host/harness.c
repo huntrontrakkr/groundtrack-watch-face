@@ -28,6 +28,20 @@ int main(int argc,char **argv){
     printf("{\"ms_per_minute\":%.3f}\n",((b.tv_sec-a.tv_sec)*1e3+(b.tv_nsec-a.tv_nsec)/1e6)/600);
     return 0;
   }
+  // -u: each minute drawn over the previous one (enr_render_update) must be
+  // the minute drawn whole; also a jump of five. Prints the pixels that
+  // differ and the base pixels drawn, per update, on average.
+  if(!strcmp(argv[3],"-u")){
+    uint8_t *whole=malloc(ENR_W*ENR_H);long differ=0,drawn=0,updates=0;
+    for(int m=1;m<60;m++)for(int step=1;step<=5;step+=4){
+      if(m-step<0)continue;
+      enr_render(scene,m-step,frame,ENR_W);drawn+=enr_render_update(scene,m-step,m,frame,ENR_W);updates++;
+      enr_render(scene,m,whole,ENR_W);
+      for(int i=0;i<ENR_W*ENR_H;i++)if(frame[i]!=whole[i])differ++;
+    }
+    printf("{\"differ\":%ld,\"drawn\":%ld}\n",differ,drawn/updates);
+    return 0;
+  }
   for(int a=3;a<argc;a++){
     if(!strcmp(argv[a],"-o")&&a+1<argc){ppm=argv[++a];continue;}
     const int minute=atoi(argv[a]);

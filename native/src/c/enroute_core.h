@@ -14,8 +14,9 @@
 #define ENR_W 200
 #define ENR_H 228
 
-// Arithmetic for night. Doubles match the browser renderer exactly; the
-// watch can build with ENR_FLOAT to use its single-precision FPU instead.
+// Arithmetic for night and the body. Doubles match the browser renderer
+// exactly, and the watch uses them; ENR_FLOAT (single precision) remains
+// for comparison, and moves a pixel now and then.
 #ifdef ENR_FLOAT
 typedef float enr_real;
 #else
@@ -76,3 +77,7 @@ void enr_free(EnrScene *scene,void (*release)(void *));
 // Draw minute 0-59 of the scene's hour into a 200x228 GColor8 frame buffer.
 // row_stride is the frame buffer's bytes per row.
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride);
+// The same minute, drawn over the frame as minute `from` of the same scene
+// left it: only what can have changed is drawn again. With from outside
+// 0-59, the whole frame. Returns the pixels of the base drawn.
+int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);

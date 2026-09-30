@@ -89,6 +89,11 @@ typedef void (*AppTimerCallback)(void *data);
 AppTimer *app_timer_register(uint32_t timeout_ms,AppTimerCallback callback,void *callback_data);
 struct tm *localtime(const time_t *timep);
 typedef void *ResHandle;
+#define GColorClear ((GColor8){.argb=0x00})
+void window_set_background_color(Window *window,GColor background_color);
+typedef void (*AppFocusHandler)(bool in_focus);
+void app_focus_service_subscribe(AppFocusHandler handler);
+void app_focus_service_unsubscribe(void);
 ResHandle resource_get_handle(uint32_t resource_id);
 size_t resource_size(ResHandle h);
 size_t resource_load_byte_range(ResHandle h,uint32_t start_offset,uint8_t *buffer,size_t num_bytes);

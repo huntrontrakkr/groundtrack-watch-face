@@ -1,0 +1,87 @@
+name: Measure watch work
+
+# Counts the instructions the emulated watch executes around a minute change,
+# the hour's chart build and an idle stretch, for the base and the proposed
+# build, so a change meant to save energy shows what it actually saves
+# (tools/energy/, after Dymaxion's).
+on:
+  pull_request:
+    paths:
+      - 'native/src/c/**'
+      - 'native/resources/**'
+      - 'native/package.json'
+      - 'native/wscript'
+      - 'tools/energy/**'
+      - '.github/workflows/energy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: energy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Both builds run in one emulator in turn (before, after, before, after):
+  # the firmware spins while it waits on emulated devices for as long as the
+  # host takes, so counts are only comparable on one machine.
+  measure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      TZ: UTC
+      QEMU_TRACE_DIR: /tmp/qemu-trace
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned build tools
+        run: |
+          npm ci
+          pip install pebble-tool==5.0.40
+          pebble sdk install 4.33.1
+          sudo apt-get install -y --no-install-recommends libsdl2-2.0-0 libpixman-1-0 libfdt1
+      # The measurement tools always come from this checkout; only the watch
+      # build differs.
+      - name: Build both watch apps
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        run: |
+          git worktree add /tmp/base "$BASE"
+          ln -s "$PWD/node_modules" /tmp/base/node_modules
+          for src in /tmp/base .; do (cd $src && npm run build:native); done
+          mkdir -p /tmp/builds
+          cp /tmp/base/native/build/native.pbw /tmp/builds/before.pbw
+          cp native/build/native.pbw /tmp/builds/after.pbw
+          (cd /tmp/base && git log -1 --format='before: %H %s'); git log -1 --format='after: %H %s'
+      - name: Count instructions in the emulator
+        run: |
+          # pebble-tool puts the SDK's toolchain on PATH only for itself.
+          export QEMU_REAL="$(command -v qemu-pebble || ls "$HOME"/.local/share/pebble-sdk/SDKs/4.33.1/toolchain/bin/qemu-pebble 2>/dev/null)"
+          test -n "$QEMU_REAL" || { echo "::error::qemu-pebble not found"; exit 1; }
+          export PEBBLE_QEMU_PATH="$GITHUB_WORKSPACE/tools/energy/qemu-trace.sh"
+          mkdir -p "$QEMU_TRACE_DIR" test-results/energy
+          for round in 1 2; do
+            for build in before after; do
+              tools/emulator.sh install --emulator emery /tmp/builds/$build.pbw
+              sleep 25
+              node tools/energy/measure.mjs $build-$round 2 native/build/js/message_keys.json
+            done
+          done
+          du -sh "$QEMU_TRACE_DIR"
+          node tools/energy/count.mjs "$QEMU_TRACE_DIR" test-results/energy/counts.json
+          node tools/energy/report.mjs test-results/energy/counts.json "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: energy-counts
+          path: test-results/energy/counts.json
+          retention-days: 30
