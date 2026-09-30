@@ -39,7 +39,22 @@ typedef struct {
   uint8_t buffer[256];
 } MapWork;
 
+// A position in the pack, decoding forward one row at a time.
+typedef struct {
+  const MapPack *pack;
+  MapWork *work;
+  uint32_t at,filled_from,filled;   // the read buffer's window
+  uint32_t state;                   // rANS state
+  int y,y0,end;                     // next row (pack-relative), its strip's first row and end
+} MapCursor;
+
 bool map_pack_open(MapPack *pack,MapReadFn read,void *source);
+// Starts decoding at the strip holding world row `row`; map_cursor_next then
+// returns rows from the strip's first row onward.
+bool map_cursor_start(MapCursor *cursor,const MapPack *pack,MapWork *work,int row);
+// Decodes the next row: its world row, and its relief codes and land bits
+// (valid until the next call). Returns -1 past the pack's last row.
+int map_cursor_next(MapCursor *cursor,const uint8_t **relief,const uint8_t **land);
 // Decodes world rows row0 up to row1 (clamped to the pack's rows), calling
 // fn for each. Starts at the beginning of the strip holding row0.
 bool map_pack_rows(const MapPack *pack,MapWork *work,int row0,int row1,MapRowFn fn,void *context);

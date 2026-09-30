@@ -10,14 +10,13 @@
 static uint16_t le16(const uint8_t *p){return (uint16_t)(p[0]|p[1]<<8);}
 static uint32_t le32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 
-// Sequential reads through a small buffer.
-typedef struct {const MapPack *pack;uint8_t *buffer;uint32_t at,filled_from,filled;} Stream;
-static uint8_t next_byte(Stream *s){
-  if(s->at<s->filled_from||s->at>=s->filled_from+s->filled){
-    s->filled_from=s->at;s->filled=(uint32_t)s->pack->read(s->pack->source,s->at,s->buffer,256);
-    if(!s->filled)return 0;
+// Sequential reads through the work's small buffer.
+static uint8_t next_byte(MapCursor *c){
+  if(c->at<c->filled_from||c->at>=c->filled_from+c->filled){
+    c->filled_from=c->at;c->filled=(uint32_t)c->pack->read(c->pack->source,c->at,c->work->buffer,sizeof c->work->buffer);
+    if(!c->filled)return 0;
   }
-  return s->buffer[s->at++ - s->filled_from];
+  return c->work->buffer[c->at++ - c->filled_from];
 }
 static bool read_at(const MapPack *p,uint32_t at,uint8_t *out,size_t n){return p->read(p->source,at,out,n)==n;}
 
@@ -63,59 +62,72 @@ static int predict(const int16_t *w,const int nb[6]){
   s>>=8;return s<0?0:s>255?255:s;
 }
 
-bool map_pack_rows(const MapPack *p,MapWork *wk,int row0,int row1,MapRowFn fn,void *context){
-  if(row0<p->first)row0=p->first;
-  if(row1>p->first+p->rows)row1=p->first+p->rows;
-  if(row0>=row1)return true;
-  const int esc=2*p->radius+1;
-  int k=(row0-p->first)/p->strip;
-  Stream s={p,wk->buffer,0,0,0};
-  for(int y=k*p->strip;y<row1-p->first;k++){
-    uint8_t o[4];
-    if(!read_at(p,p->offsets_at+4u*k,o,4))return false;
-    s.at=p->data+le32(o);
-    uint32_t x=0;for(int i=0;i<4;i++)x|=(uint32_t)next_byte(&s)<<(8*i);
-    const int y0=y,end=y0+p->strip<p->rows?y0+p->strip:p->rows;
-    for(;y<end&&y<row1-p->first;y++){
-      const int dy_max=y-y0<2?y-y0:2,cur=(y-y0)%3;
-      uint8_t *r0=wk->relief[cur],*r1=wk->relief[(cur+2)%3],*r2=wk->relief[(cur+1)%3];
-      uint8_t *l0=wk->land[cur],*l1=wk->land[(cur+2)%3],*l2=wk->land[(cur+1)%3];
-      uint8_t *e0=wk->err[(y-y0)&1],*e1=wk->err[(y-y0+1)&1];
-      for(int c=0;c<MAP_WIDTH;c++){
-        // Land, from six neighbouring land bits.
-        #define LB(row,xx,dy) ((dy)>dy_max||(xx)<0||(xx)>=MAP_WIDTH?0:(row)[xx])
-        const int lctx=LB(l0,c-1,0)|LB(l1,c,1)<<1|LB(l1,c-1,1)<<2|LB(l1,c+1,1)<<3|LB(l0,c-2,0)<<4|LB(l2,c,2)<<5;
-        #undef LB
-        const uint32_t f=p->land_freq[lctx];
-        uint32_t slot=x&(TOTAL-1);
-        int cls;uint32_t start,freq;
-        if(slot<TOTAL-f){cls=0;start=0;freq=TOTAL-f;}else{cls=1;start=TOTAL-f;freq=f;}
-        x=freq*(x>>SCALE_BITS)+slot-start;while(x<RANS_L)x=(x<<8)|next_byte(&s);
-        l0[c]=(uint8_t)cls;
-        // Relief, predicted, its difference coded by land and error energy.
-        int nb[6];neighbours(r0,r1,r2,c,dy_max,nb);
-        #define EB(row,xx,dy) ((dy)>dy_max||(xx)<0||(xx)>=MAP_WIDTH?0:(row)[xx])
-        const int sum=EB(e0,c-1,0)+EB(e1,c,1)+EB(e1,c-1,1)+EB(e1,c+1,1)+(EB(e0,c-2,0)>>1);
-        #undef EB
-        const int act=2*sum+(nb[0]>nb[2]?nb[0]-nb[2]:nb[2]-nb[0])+(nb[1]>nb[2]?nb[1]-nb[2]:nb[2]-nb[1])+(nb[3]>nb[1]?nb[3]-nb[1]:nb[1]-nb[3]);
-        int lv=0;while(lv<p->levels-1&&act>=p->thresholds[lv])lv++;
-        const uint16_t *cum=p->cum[cls*p->levels+lv];
-        slot=x&(TOTAL-1);
-        // The symbol whose range holds the slot: binary search.
-        int lo=0,hi=esc;
-        while(lo<hi){const int mid=(lo+hi+1)>>1;if(cum[mid]<=slot)lo=mid;else hi=mid-1;}
-        x=(uint32_t)(cum[lo+1]-cum[lo])*(x>>SCALE_BITS)+slot-cum[lo];while(x<RANS_L)x=(x<<8)|next_byte(&s);
-        const int pr=predict(p->weights[cls],nb);int v;
-        if(lo==esc){
-          int nib[2];
-          for(int i=0;i<2;i++){slot=x&(TOTAL-1);nib[i]=(int)(slot>>8);x=256u*(x>>SCALE_BITS)+slot-((uint32_t)nib[i]<<8);while(x<RANS_L)x=(x<<8)|next_byte(&s);}
-          v=nib[0]|nib[1]<<4;
-        }else v=pr+lo-p->radius;
-        r0[c]=(uint8_t)v;
-        const int e=v-pr<0?pr-v:v-pr;e0[c]=(uint8_t)(e>255?255:e);
-      }
-      if(y+p->first>=row0)fn(context,y+p->first,r0,l0);
-    }
+static bool start_strip(MapCursor *c,int k){
+  const MapPack *p=c->pack;uint8_t o[4];
+  if(!read_at(p,p->offsets_at+4u*k,o,4))return false;
+  c->at=p->data+le32(o);c->filled=0;
+  c->state=0;for(int i=0;i<4;i++)c->state|=(uint32_t)next_byte(c)<<(8*i);
+  c->y0=c->y=k*p->strip;c->end=c->y0+p->strip<p->rows?c->y0+p->strip:p->rows;
+  return true;
+}
+bool map_cursor_start(MapCursor *c,const MapPack *p,MapWork *wk,int row){
+  memset(c,0,sizeof *c);c->pack=p;c->work=wk;
+  if(row<p->first)row=p->first;
+  if(row>=p->first+p->rows){c->y=c->end=p->rows;return true;}
+  return start_strip(c,(row-p->first)/p->strip);
+}
+int map_cursor_next(MapCursor *c,const uint8_t **relief_out,const uint8_t **land_out){
+  const MapPack *p=c->pack;MapWork *wk=c->work;
+  if(c->y>=p->rows)return -1;
+  if(c->y>=c->end&&!start_strip(c,c->y/p->strip))return -1;
+  const int esc=2*p->radius+1,y=c->y,y0=c->y0;
+  const int dy_max=y-y0<2?y-y0:2,cur=(y-y0)%3;
+  uint8_t *r0=wk->relief[cur],*r1=wk->relief[(cur+2)%3],*r2=wk->relief[(cur+1)%3];
+  uint8_t *l0=wk->land[cur],*l1=wk->land[(cur+2)%3],*l2=wk->land[(cur+1)%3];
+  uint8_t *e0=wk->err[(y-y0)&1],*e1=wk->err[(y-y0+1)&1];
+  uint32_t x=c->state;
+  for(int col=0;col<MAP_WIDTH;col++){
+    // Land, from six neighbouring land bits.
+    #define LB(row,xx,dy) ((dy)>dy_max||(xx)<0||(xx)>=MAP_WIDTH?0:(row)[xx])
+    const int lctx=LB(l0,col-1,0)|LB(l1,col,1)<<1|LB(l1,col-1,1)<<2|LB(l1,col+1,1)<<3|LB(l0,col-2,0)<<4|LB(l2,col,2)<<5;
+    #undef LB
+    const uint32_t f=p->land_freq[lctx];
+    uint32_t slot=x&(TOTAL-1);
+    int cls;uint32_t start,freq;
+    if(slot<TOTAL-f){cls=0;start=0;freq=TOTAL-f;}else{cls=1;start=TOTAL-f;freq=f;}
+    x=freq*(x>>SCALE_BITS)+slot-start;while(x<RANS_L)x=(x<<8)|next_byte(c);
+    l0[col]=(uint8_t)cls;
+    // Relief, predicted, its difference coded by land and error energy.
+    int nb[6];neighbours(r0,r1,r2,col,dy_max,nb);
+    #define EB(row,xx,dy) ((dy)>dy_max||(xx)<0||(xx)>=MAP_WIDTH?0:(row)[xx])
+    const int sum=EB(e0,col-1,0)+EB(e1,col,1)+EB(e1,col-1,1)+EB(e1,col+1,1)+(EB(e0,col-2,0)>>1);
+    #undef EB
+    const int act=2*sum+(nb[0]>nb[2]?nb[0]-nb[2]:nb[2]-nb[0])+(nb[1]>nb[2]?nb[1]-nb[2]:nb[2]-nb[1])+(nb[3]>nb[1]?nb[3]-nb[1]:nb[1]-nb[3]);
+    int lv=0;while(lv<p->levels-1&&act>=p->thresholds[lv])lv++;
+    const uint16_t *cum=p->cum[cls*p->levels+lv];
+    slot=x&(TOTAL-1);
+    // The symbol whose range holds the slot: binary search.
+    int lo=0,hi=esc;
+    while(lo<hi){const int mid=(lo+hi+1)>>1;if(cum[mid]<=slot)lo=mid;else hi=mid-1;}
+    x=(uint32_t)(cum[lo+1]-cum[lo])*(x>>SCALE_BITS)+slot-cum[lo];while(x<RANS_L)x=(x<<8)|next_byte(c);
+    const int pr=predict(p->weights[cls],nb);int v;
+    if(lo==esc){
+      int nib[2];
+      for(int i=0;i<2;i++){slot=x&(TOTAL-1);nib[i]=(int)(slot>>8);x=256u*(x>>SCALE_BITS)+slot-((uint32_t)nib[i]<<8);while(x<RANS_L)x=(x<<8)|next_byte(c);}
+      v=nib[0]|nib[1]<<4;
+    }else v=pr+lo-p->radius;
+    r0[col]=(uint8_t)v;
+    const int e=v-pr<0?pr-v:v-pr;e0[col]=(uint8_t)(e>255?255:e);
   }
+  c->state=x;c->y++;
+  *relief_out=r0;*land_out=l0;
+  return y+p->first;
+}
+
+bool map_pack_rows(const MapPack *p,MapWork *wk,int row0,int row1,MapRowFn fn,void *context){
+  MapCursor c;
+  if(!map_cursor_start(&c,p,wk,row0))return false;
+  const uint8_t *relief,*land;int row;
+  while((row=map_cursor_next(&c,&relief,&land))>=0&&row<row1)if(row>=row0)fn(context,row,relief,land);
   return true;
 }
