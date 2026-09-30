@@ -228,7 +228,9 @@ static void take_settings(const uint8_t *b,size_t n){
   WatchSettings s;memset(&s,0,sizeof s);
   s.version=2;s.body=b[0];s.plate=b[1];s.flag=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
   s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);
-  if(!memcmp(&s,&s_settings,sizeof s))return;
+  // The phone sends its settings as it starts: the moment to ask for what
+  // is missing (a request made before it was listening is lost).
+  if(!memcmp(&s,&s_settings,sizeof s)){s_data_ok_until=0;s_data_asked_at=0;check(time(NULL));return;}
   s_settings=s;settings_save(&s);s_data_ok_until=0;
   // Drawn again in the new settings.
   build_abort();chart_free(&s_now);chart_free(&s_next);s_asked_at=0;s_quiet_until=0;s_status[0]=0;

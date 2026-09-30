@@ -63,10 +63,14 @@ jobs:
       - name: Run it in the emulator against the browser renderer
         run: |
           tools/emulator.sh install --emulator emery native/build/native.pbw
-          # The phone side renders and sends the hour; retry once if the
-          # scene had not arrived.
-          sleep 20
-          node tools/emulator-check.mjs test-results/emulator || { sleep 30; node tools/emulator-check.mjs test-results/emulator; }
+          # A fresh watch first asks the phone for the Sun and Moon ahead
+          # (the phone fits 45 days of them), then builds the hour: allow a
+          # few minutes before comparing.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            sleep 30
+            node tools/emulator-check.mjs test-results/emulator && exit 0
+          done
+          exit 1
       - name: Keep the comparison
         if: always()
         uses: actions/upload-artifact@v4
