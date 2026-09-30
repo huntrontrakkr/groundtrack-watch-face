@@ -595,9 +595,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     FIX.forEach((row,dy)=>[...row].forEach((v,dx)=>{const px=x+dx-4,py=y+dy-4;if(v==='#')plot(buf,px,py,col(x,y));else if(row.indexOf('#')<dx&&dx<row.lastIndexOf('#'))clear(px,py);}));
     const name=e.label,lw=textWidth(LABEL,name),lx=Math.max(4,Math.min(W-4-lw,x-Math.floor(lw/2))),text=textPixels(LABEL,name,lx,y-7),box=bounds(text);
     const clearOf=[...taken,...type,...fixes.map(q=>q.box).filter(Boolean),hourPixels.length?bounds(hourPixels):null,nextSolid.length?bounds(nextSolid):null,minuteBox].filter(Boolean);
-    const free=box.y>=(home?14:2)&&!clearOf.some(o=>!(o.x+o.w+1<=box.x||box.x+box.w+1<=o.x||o.y+o.h+1<=box.y||box.y+box.h+1<=o.y));
-    if(free)letter(text,col);
-    fixes.push({label:name,epoch:e.epoch,x,y,box:free?box:null});
+    const clear=list=>box.y>=(home?14:2)&&!list.some(o=>!(o.x+o.w+1<=box.x||box.x+box.w+1<=o.x||o.y+o.h+1<=box.y||box.y+box.h+1<=o.y));
+    const free=clear(clearOf);
+    // The name is the minute's (it gives way to the minute's flag, callout
+    // or tape): a base layer leaves it to the native renderer, with whether
+    // it is clear of what stays all hour.
+    if(free&&!baseOnly)letter(text,col);
+    fixes.push({label:name,epoch:e.epoch,x,y,box:free?box:null,text:{x:lx,box,clear:clear([...taken,...type,hourPixels.length?bounds(hourPixels):null,nextSolid.length?bounds(nextSolid):null].filter(Boolean))}});
   }
   // Home on top of the route and figures, on its own knockout.
   if(homeMark){
@@ -652,7 +656,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const tintIndex=(table,v)=>table.findIndex(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit);
     const baseClass=new Uint8Array(W*H);
     for(let i=0;i<W*H;i++)baseClass[i]=mat[i]===SPACE?2:pal.tints&&land[i]?3+tintIndex(pal.tints,relief[i]):pal.depths&&!land[i]?8+tintIndex(pal.depths,relief[i]):land[i]?1:0;
-    return {buf,trace,overlay,baseClass,beforeRoute,stages,marker:{x:p.x,y:p.y},zuluAt,altAt,topAt,tapeAt,calloutAt,anchors:{c0,c1,stations:stations.map(s=>({x:s.x,y:s.y}))},hour,home:homeMark?{x:homeMark.x,y:homeMark.y,box:homeMark.box}:null};
+    return {buf,trace,overlay,baseClass,beforeRoute,stages,marker:{x:p.x,y:p.y},zuluAt,altAt,topAt,tapeAt,calloutAt,anchors:{c0,c1,stations:stations.map(s=>({x:s.x,y:s.y}))},fixes:fixes.map(f=>({x:f.x,y:f.y,label:f.label,lx:f.text.x,box:f.text.box,clear:f.text.clear})),hour,home:homeMark?{x:homeMark.x,y:homeMark.y,box:homeMark.box}:null};
   }
   return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
     figure:{hour,minute:parts.m,next,time:camera.day||readout===true?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};

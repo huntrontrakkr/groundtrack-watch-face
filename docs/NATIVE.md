@@ -78,10 +78,11 @@ Messages, all through one queue on the phone:
 | `Settings` (phone → watch) | body, plate, flag, 24-hour, home and its position in hundredths of a degree, and a satellite's catalog number, symbol, view and code: on launch and when settings change |
 | `DataRequest`, `DataBody` (watch → phone) | the first UTC day the watch lacks, and the satellite it needs, if any; asked on its minute ticks at most every few minutes until the data arrives |
 | `Segments`, `RiseSets` (phone → watch) | 45 days of segments from that day, eight to a message; home's rise and set for 45 local dates |
+| `Events` (phone → watch) | events from two hours ago to four days ahead: each its time and five-letter name (9 bytes) |
 | `SatSegments`, `Passes` (phone → watch) | three days of a satellite's segments (160 bytes each, with its elements' epoch), twelve to a message; home's pass blocks for them |
 | `Status` (phone → watch) | why the phone can't give what was asked (no elements for a satellite) |
 
-Satellites' element sets are fetched from CelesTrak at most once every two hours each and used within three days of their epoch; GPS falls back to its nominal orbit. The app's settings page (`native/pkjs/config.html`, opened offline as a data URL) sets the body (the Sun, the Moon or one of seven satellites), plate, home, and the browser's clock options: 24-hour figures, the minute readout (none, the minute flag or a time callout), the callout's figures (four figures with the minutes outlined, the browser's default; the minutes in route ink; in Departure Mono; smaller without or with a colon), the margin's time (Zulu or the nautical zone under the body), QZSS's chart (its whole day or this hour) and the world band's time scale (fixed; a sliding tape; the tape with the world sliding under it, for which the watch builds the chart again each minute, at some cost in battery).
+Satellites' element sets are fetched from CelesTrak at most once every two hours each and used within three days of their epoch; GPS falls back to its nominal orbit. The app's settings page (`native/pkjs/config.html`, opened offline as a data URL) sets the body (the Sun, the Moon or one of seven satellites), plate, home, events (a title and a time, set on the route as compulsory reporting points named with five letters, as the study names them), and the browser's clock options: 24-hour figures, the minute readout (none, the minute flag or a time callout), the callout's figures (four figures with the minutes outlined, the browser's default; the minutes in route ink; in Departure Mono; smaller without or with a colon), the margin's time (Zulu or the nautical zone under the body), QZSS's chart (its whole day or this hour) and the world band's time scale (fixed; a sliding tape; the tape with the world sliding under it, for which the watch builds the chart again each minute, at some cost in battery).
 
 ## What is verified
 
@@ -102,8 +103,8 @@ These are measurements of the code in the emulator and on the host, not of a wat
 
 | | |
 |---|---|
-| App code and static data | 60 KB of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call) |
-| Heap free at launch | 71 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
+| App code and static data | 60.8 KB of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call). The minute renderer's 4.6 KB of working memory is taken from the heap for each drawing, not kept |
+| Heap free at launch | 70 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
 | Building the hour, in the emulator | 0.7–1.1 seconds of work, in slices |
 | Radio for the Sun and Moon | settings on launch; about 10 KB of segments every few weeks |
 | Radio for a satellite | GPS about 2.5 KB of segments and passes every day or two; a fast satellite (hour-long segments) about 13 KB every two to three days |
@@ -135,7 +136,7 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 
 ## Open questions and next steps
 
-1. **The other views and options:** events, and Rolling Fuller.
+1. **Rolling Fuller.** The one view of the study the watch doesn't draw: its map is an icosahedron rolled along the route, and night on it needs each pixel's own direction every minute, which neither the watch's memory nor its 64 KB of code (PebbleOS's cap; a fix, #2174, would raise it) has room for as things stand.
 2. **Code space.** 60 of 64 KB (the plates, stations and relief heights are a resource, `native/resources/tables.bin`, read while a chart is built), and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
 3. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the `.pbw`, are unchecked.
 4. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.

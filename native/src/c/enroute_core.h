@@ -98,6 +98,12 @@ typedef struct {
   char tape_hour[3],tape_next[3];
   // With the world sliding, the one minute the scene is for (255 otherwise).
   uint8_t slide_minute;
+  // Events: each fix, its name's x (baseline the fix's y - 7) and box, and
+  // whether the name is clear of what stays all hour; each minute it also
+  // gives way to that minute's flag, callout or tape, and to the names
+  // before it.
+  uint8_t event_count;
+  struct {int16_t x,y,lx,box[4];uint8_t clear;char name[5];} events[16];
   EnrMinute minutes[60];
   // Home's acquisition circles, each allocated on its own: circle k has
   // circle_n[k] points, (x, y) bytes at circle_px[k].

@@ -105,12 +105,17 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
     // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0]},{Events:[0]}]));
     // The browser's other options, as set: a time callout in Departure Mono,
     // the 12-hour clock, the nautical zone; QZSS on the hour chart.
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
     const set=r.messages[0].Settings;
     assert.equal(JSON.stringify([set[2],set[3],set[17]>>1,set[21],set[22]]),JSON.stringify([2,0,0,3,1]));
+    // Events: from two hours ago to four days ahead, each its time and name.
+    const events=JSON.stringify([{epoch:now-3*3600000,title:'Old',label:'OLDDD'},{epoch:now+3600000,title:'Run',label:'RUNNN'},{epoch:now+5*86400000,title:'Far',label:'FARRR'}]);
+    const pe=phone(bundle,now,{body:'sun',timeZone:zone,events});pe.listeners.ready({});await pe.quiet();
+    const ebytes=pe.messages.find(m=>m.Events).Events,et=(now+3600000)/1000;
+    assert.equal(JSON.stringify(ebytes),JSON.stringify([et&255,(et>>8)&255,(et>>16)&255,(et>>>24)&255,...'RUNNN'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
     // A satellite: its catalog number, kind (a station, on the world band)
     // and code.
     const q=phone(bundle,now,{body:'sat:25544',plate:'crt',flag:'0',timeZone:zone});q.listeners.ready({});await q.quiet();

@@ -15,6 +15,7 @@
 #define SAT_KEY 300            // + (start / span) % 96
 #define SAT_RING 96
 #define PASS_KEY 400           // + (block / 12 h) % 8
+#define EVENTS_KEY 500         // the events, as the phone sends them
 
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
@@ -37,6 +38,11 @@ void sat_segments_store(const uint8_t *b,size_t n){
     const int32_t start=le32(b+at+4),span=le32(b+at+8);
     if(span>0)persist_write_data(SAT_KEY+(uint32_t)(((start/span)%SAT_RING+SAT_RING)%SAT_RING),b+at,SAT_SEGMENT_BYTES);
   }
+}
+// Events: each its time (i32 Unix seconds) and five-letter name.
+void events_store(const uint8_t *b,size_t n){
+  if(n<9){persist_delete(EVENTS_KEY);return;}
+  persist_write_data(EVENTS_KEY,b,n<252?n-n%9:252);
 }
 // A pass block is kept with whose passes they are: the satellite's catalog
 // number and home, in hundredths of a degree (12 bytes before the block),
@@ -158,6 +164,13 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
     local_day(now,&in.day_start,&in.day_end);
     for(int k=0;k<27;k++){const time_t t=(time_t)(in.day_start+k*3600);in.day_hours[k]=(uint8_t)localtime(&t)->tm_hour;}
   }
+  // The events on the chart's track.
+  {uint8_t e[252];const int n=persist_read_data(EVENTS_KEY,e,sizeof e);
+  const int64_t from=in.view==VIEW_DAY?in.day_start:in.start-2400,to=in.view==VIEW_DAY?in.day_end:in.start+6000;
+  for(int k=0;k+9<=n&&in.event_count<16;k+=9){
+    const int64_t t=le32(e+k);if(t<from||t>to)continue;
+    in.events[in.event_count].t=t;memcpy(in.events[in.event_count].name,e+k+4,5);in.events[in.event_count].name[5]=0;in.event_count++;
+  }}
   const int64_t from=in.view==VIEW_DAY&&in.day_start<in.start-2400?in.day_start:in.start-2400,to=in.view==VIEW_DAY&&in.day_end>in.start+6000?in.day_end:in.start+6000;
   for(int64_t d=from/86400;d<=to/86400&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
   if(sat){

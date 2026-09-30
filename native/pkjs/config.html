@@ -19,13 +19,21 @@
   label.row input[type=radio],label.row input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--route);flex:none}
   .name{flex:1}
   .note{display:block;font-size:13px;opacity:.65}
-  .coords{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:6px 14px 12px}
+  .coords{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:6px 14px 12px}
   .coords label{font-size:13px}
-  .coords input{width:100%;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
+  .coords input{width:100%;min-width:0;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
   .coords[hidden]{display:none}
   button{font:inherit;border-radius:10px;cursor:pointer}
   #locate{grid-column:1/3;padding:10px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
   #status{grid-column:1/3;margin:0;font-size:13px;opacity:.75;min-height:1em}
+  #events{list-style:none;margin:0;padding:0 14px}
+  #events li{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid #edf1f5}
+  #events li:first-child{border-top:0}
+  #events li span{flex:1;font-size:15px}
+  #events li code{font:600 13px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.08em;color:var(--route)}
+  #events li button,#add{padding:8px 12px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
+  #add{grid-column:1/3}
+  .coords input[name=title]{grid-column:1/3}
   .actions{position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;padding:12px;background:linear-gradient(transparent,var(--water) 30%)}
   .actions button{flex:1;padding:14px;border:0;font-weight:600}
   #save{background:var(--route);color:#fff}
@@ -71,6 +79,16 @@
   <fieldset><legend>QZSS chart</legend>
     <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">Its figure-8, the day's hours along it</span></span></label>
     <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">On the hour chart, zoomed far in over Japan or Australia</span></span></label>
+  </fieldset>
+  <fieldset><legend>Events</legend>
+    <ul id="events"></ul>
+    <div class="coords">
+      <label>Date<input name="date" type="date"></label>
+      <label>Time<input name="time" type="time"></label>
+      <label style="grid-column:1/3">Title<input name="title" maxlength="40" placeholder="Dinner"></label>
+      <button type="button" id="add">Add to the route</button>
+      <p class="note" id="event-note" style="grid-column:1/3;margin:0">Set on the route at their minute as reporting points, named with five letters from the title. Kept on the phone and the watch.</p>
+    </div>
   </fieldset>
   <fieldset><legend>Home station</legend>
     <label class="row"><input type="radio" name="home" value="preset"><span class="name">For the time zone<span class="note" id="preset-note"></span></span></label>
@@ -128,6 +146,27 @@
       status.textContent='Found, rounded to 0.01°.';
     },function(e){status.textContent='No location: '+(e&&e.message||'refused');},{timeout:15000,maximumAge:3600000});
   });
+  // Events: {epoch, title}, the phone names them (five-letter codes).
+  var events=(config.events||[]).slice(),list=document.getElementById('events');
+  function two(n){return (n<10?'0':'')+n;}
+  function showEvents(){
+    list.textContent='';events.sort(function(a,b){return a.epoch-b.epoch;});
+    events.forEach(function(e,i){
+      var li=document.createElement('li'),text=document.createElement('span'),d=new Date(e.epoch),remove=document.createElement('button');
+      text.textContent=d.toDateString().slice(0,10)+' '+two(d.getHours())+':'+two(d.getMinutes())+' '+e.title+' ';
+      if(e.label){var code=document.createElement('code');code.textContent=e.label;text.appendChild(code);}
+      remove.type='button';remove.textContent='Remove';remove.addEventListener('click',function(){events.splice(i,1);showEvents();});
+      li.appendChild(text);li.appendChild(remove);list.appendChild(li);
+    });
+  }
+  showEvents();
+  (function(){var d=new Date();form.elements.date.value=d.getFullYear()+'-'+two(d.getMonth()+1)+'-'+two(d.getDate());})();
+  document.getElementById('add').addEventListener('click',function(){
+    var date=form.elements.date.value,time=form.elements.time.value,title=form.elements.title.value.trim();
+    var t=new Date(date+'T'+time).getTime();
+    if(!date||!time||!title||!isFinite(t)){document.getElementById('event-note').textContent='An event needs a date, a time and a title.';return;}
+    events.push({epoch:t,title:title.slice(0,40)});form.elements.title.value='';showEvents();
+  });
   function close(result){location.href='pebblejs://close#'+encodeURIComponent(result);}
   document.getElementById('cancel').addEventListener('click',function(){close('CANCELLED');});
   document.getElementById('save').addEventListener('click',function(){
@@ -139,7 +178,7 @@
       homeValue=JSON.stringify({lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
     }
     close(JSON.stringify({body:picked('body'),plate:picked('plate'),readout:picked('readout'),numerals:picked('numerals'),margin:picked('margin'),span:picked('span'),tape:picked('tape'),
-      clock24:form.elements.clock24.checked?'1':'0',home:homeValue}));
+      clock24:form.elements.clock24.checked?'1':'0',home:homeValue,events:events.map(function(e){return {epoch:e.epoch,title:e.title};})}));
   });
 })();
 </script>

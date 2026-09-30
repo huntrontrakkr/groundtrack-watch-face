@@ -27,6 +27,9 @@
 //   network stations (i16 x, y)
 //   the sliding tape's hours: char this hour[3], next hour[3] (NUL-padded);
 //   u8 with the world sliding, the minute the scene is for (255 otherwise)
+//   events: u8 n; per event i16 the fix's x, y, its name's x, the name's
+//   box x, y, w, h, u8 whether the name is clear of what stays all hour,
+//   char name[5]
 //   60 minutes: f64 sun[3], f64 marker x, y, f64 moon fraction, u8 waxing,
 //   char zulu[5], u8 minute text[2], char top line[24] (a satellite's pass
 //   line, NUL-padded, '°' as 0x7f; empty when the line is fixed), i16 the
@@ -61,8 +64,9 @@ registerNominal();
 // margin's time), span ('day' or 'hour': QZSS's chart), clock24.
 // With tape 'slide' the world scrolls under the index each minute: the
 // scene is for one minute of the hour.
-export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,readout=flag?'flag':false,numerals='even',zone='utc',span='day',tape='fixed',minute=0,timeZone='UTC',clock24=true,home=null}){
-  const state={body,epoch:start+(tape==='slide'?minute*MINUTE:0),timeZone,clock24,plate:plateKey,home,events:[],readout:readout==='callout'?true:readout,numerals,zone,span,tape};
+// events: [{epoch, label}] (label a five-letter name code, src/events.js).
+export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,readout=flag?'flag':false,numerals='even',zone='utc',span='day',tape='fixed',minute=0,events=[],timeZone='UTC',clock24=true,home=null}){
+  const state={body,epoch:start+(tape==='slide'?minute*MINUTE:0),timeZone,clock24,plate:plateKey,home,events,readout:readout==='callout'?true:readout,numerals,zone,span,tape};
   const r=new EnrouteRenderer(atlas,meters);r.render(state);
   const cam=r.camera,pal=PLATES[plateKey];
   if(cam.fuller)throw new Error('Rolling Fuller is not exported');
@@ -78,7 +82,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,re
   const tintProbe=['#550000','#550055','#5500AA','#5500FF','#555500','#555555','#5555AA'];
   if(pal.tints)probe.tints=pal.tints.map(([l],k)=>[l,hex(tintProbe[k])]);
   if(pal.depths)probe.depths=pal.depths.map(([l],k)=>[l,hex(tintProbe[5+k])]);
-  const base=renderEnroute({camera:cam,ground:r.ground,relief:r.relief,light:r.light,plate:probe,epoch:start,timeZone,clock24,home:state.home,events:[],readout:state.readout,numerals,zone,tape,layers:'base'});
+  const base=renderEnroute({camera:cam,ground:r.ground,relief:r.relief,light:r.light,plate:probe,epoch:start,timeZone,clock24,home:state.home,events,readout:state.readout,numerals,zone,tape,layers:'base'});
   const LAYER={[PROBE.grid]:6,[PROBE.route]:7,[PROBE.ink]:8,[PROBE.mark]:9,[PROBE.spaceInk]:10,[PROBE.space]:11};
   const key=i=>'#'+[0,1,2].map(k=>base.buf[i*3+k].toString(16).padStart(2,'0')).join('').toUpperCase();
   const classes=new Uint8Array(W*H);
@@ -128,6 +132,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,re
   u8(an.stations.length);for(const q of an.stations){i16(q.x);i16(q.y);}
   for(const t of [base.tapeAt?.hour,base.tapeAt?.next])for(let k=0;k<3;k++)u8(t&&k<t.length?t.charCodeAt(k):0);
   u8(base.tapeAt?.mode==='slide'?minute:255);
+  u8(base.fixes.length);for(const f of base.fixes){for(const v of [f.x,f.y,f.lx,f.box.x,f.box.y,f.box.w,f.box.h])i16(v);u8(f.clear?1:0);for(let k=0;k<5;k++)u8(k<f.label.length?f.label.charCodeAt(k):0);}
   // Home's acquisition circle on the world band, which changes with the
   // satellite's height; minutes that plot the same pixels share one.
   const circles=[],circleKeys=new Map();

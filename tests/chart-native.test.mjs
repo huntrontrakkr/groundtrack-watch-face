@@ -12,6 +12,7 @@ import {buildScene} from '../tools/export-scene.mjs';
 import {HOMES} from '../src/home.js';
 import {chartInput} from '../tools/chart-input.mjs';
 import {registerLiveFixture} from './tle-fixture.mjs';
+import {nameCode} from '../src/events.js';
 
 let cc=true;try{execFileSync('make',['-s','-C','native/host','chart_test'],{stdio:'pipe'});}catch{cc=false;}
 
@@ -58,6 +59,13 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
     cases.push(['sat:42738','2026-09-27T05:00:00Z','sectional',true,'America/New_York',{span:'hour',readout:'callout'}]);
     // The world band with the world sliding: a scene for a minute.
     cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{tape:'slide',minute:23}],['sat:49260','2026-10-01T09:00:00Z','enroute',false,'America/New_York',{tape:'slide',minute:47}]);
+    // Events: reporting points on the route, their names clear of lettering
+    // or not; on the world band, the day and the hour chart with a callout.
+    const ev=(iso,title)=>({epoch:Date.parse(iso),label:nameCode(title)});
+    cases.push(['sun','2026-09-27T08:00:00Z','enroute',true,'America/New_York',{events:[ev('2026-09-27T08:45:00Z','Run'),ev('2026-09-27T08:47:00Z','Standup'),ev('2026-09-27T09:20:00Z','Dinner'),ev('2026-09-27T07:30:00Z','Early')]}],
+      ['moon','2026-09-19T09:00:00Z','plotboard',false,'UTC',{readout:'callout',events:[ev('2026-09-19T09:50:00Z','Run'),ev('2026-09-19T09:10:00Z','Lecture')]}],
+      ['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{events:[ev('2026-09-30T13:12:00Z','Launch'),ev('2026-09-30T13:40:00Z','Call')]}],
+      ['sat:42738','2026-09-27T05:00:00Z','sunlight',false,'America/New_York',{events:[ev('2026-09-27T09:00:00Z','Breakfast'),ev('2026-09-27T21:00:00Z','Supper')]}]);
     // The world band's sliding tape.
     cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{tape:'tape'}],['sat:43013','2026-09-30T17:00:00Z','plotboard',false,'UTC',{tape:'tape',clock24:false}]);
     cases.forEach((c,k)=>{if(!c[5])c[5]=options[k%options.length];});

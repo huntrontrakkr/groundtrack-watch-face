@@ -39,6 +39,8 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   s->station_count=u8(&r);if(s->station_count>32)return false;
   for(int k=0;k<s->station_count;k++){s->stations[k][0]=i16(&r);s->stations[k][1]=i16(&r);}
   take(&r,s->tape_hour,3);take(&r,s->tape_next,3);s->slide_minute=u8(&r);
+  s->event_count=u8(&r);if(s->event_count>16)return false;
+  for(int k=0;k<s->event_count;k++){s->events[k].x=i16(&r);s->events[k].y=i16(&r);s->events[k].lx=i16(&r);for(int j=0;j<4;j++)s->events[k].box[j]=i16(&r);s->events[k].clear=u8(&r);take(&r,s->events[k].name,5);}
   for(int m=0;m<60;m++){
     EnrMinute *e=&s->minutes[m];
     for(int k=0;k<3;k++)e->sun[k]=f64(&r);

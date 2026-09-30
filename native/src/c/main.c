@@ -195,6 +195,7 @@ static void inbox(DictionaryIterator *in,void *context){
   if((t=dict_find(in,MESSAGE_KEY_SatSegments))){sat_segments_store(t->value->data,t->length);data_arrived(false);}
   // Home's rise and set, or its passes, may have changed the hour's chart.
   if((t=dict_find(in,MESSAGE_KEY_RiseSets))){rise_sets_store(t->value->data,t->length);data_arrived(true);}
+  if((t=dict_find(in,MESSAGE_KEY_Events))){events_store(t->value->data,t->length);data_arrived(true);}
   if((t=dict_find(in,MESSAGE_KEY_Passes))){pass_blocks_store(t->value->data,t->length,&s_settings);data_arrived(true);}
   // Why the phone can't give what the watch asked for (no orbit, say).
   if((t=dict_find(in,MESSAGE_KEY_Status))){set_status(t->value->cstring);layer_mark_dirty(s_layer);}

@@ -31,7 +31,7 @@ try{
   const html=decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length));
 
   browser=await chromium.launch();
-  const page=await browser.newPage({viewport:{width:320,height:640}});
+  const page=await browser.newPage({viewport:{width:320,height:640},timezoneId:zone});
   const errors=[],closes=[];
   page.on('pageerror',e=>errors.push(e.message));
   // Leaving for pebblejs://close#... is how the page answers; the browser
@@ -60,6 +60,9 @@ try{
   await page.check('input[name=plate][value=sectional]');
   await page.check('input[name=readout][value=callout]');await page.check('input[name=numerals][value=accent]');
   await page.check('input[name=margin][value=body]');await page.uncheck('input[name=clock24]');
+  // An event, named by the phone.
+  await page.fill('input[name=date]','2026-09-27');await page.fill('input[name=time]','14:30');await page.fill('input[name=title]','Dinner with Sam');await page.click('#add');
+  assert.match(await page.locator('#events').textContent(),/Dinner with Sam/);
   await page.getByText('A place of my own').click();
   assert.ok(await page.locator('#coords').isVisible());
   // An impossible latitude is refused.
@@ -84,6 +87,10 @@ try{
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
   assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0]));
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
+  const saved=JSON.parse(stored.events);
+  assert.deepEqual(saved.map(e=>[e.title,e.label]),[['Dinner with Sam','DINNR']]);
+  assert.equal(new Date(saved[0].epoch).toISOString(),'2026-09-27T14:30:00.000Z');
+  assert.equal(messages.find(m=>m.Events).Events.length,9);
 
   // Cancel changes nothing.
   const before=JSON.stringify(stored);listeners.webviewclosed({response:'CANCELLED'});

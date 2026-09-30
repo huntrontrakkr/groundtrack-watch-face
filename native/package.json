@@ -13,7 +13,7 @@
     "targetPlatforms": ["emery"],
     "watchapp": {"watchface": true},
     "capabilities": ["configurable", "location"],
-    "messageKeys": ["Status", "Settings", "Segments", "RiseSets", "DataRequest", "DataBody", "SatSegments", "Passes"],
+    "messageKeys": ["Status", "Settings", "Segments", "RiseSets", "DataRequest", "DataBody", "SatSegments", "Passes", "Events"],
     "resources": {"media": [{"type": "raw", "name": "MAP_PACK", "file": "map.pack"}, {"type": "raw", "name": "FIGURES", "file": "figures.bin"}, {"type": "raw", "name": "TABLES", "file": "tables.bin"}]}
   }
 }

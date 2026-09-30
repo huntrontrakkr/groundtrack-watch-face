@@ -48,7 +48,18 @@ typedef struct {
 #define MARGIN 64
 #endif
 static int32_t q30(enr_real v){return (int32_t)(v*(enr_real)Q30);}
-static struct {const EnrScene *s;const EnrMinute *m;int32_t p[ENR_W],u2,sunrise,civil,zone[16],screen[16];} F;
+typedef struct {const EnrScene *s;const EnrMinute *m;int32_t p[ENR_W],u2;} FastNight;
+// Lettering and leaders go through one list of pixels, drawn one at a
+// time. The longest is a satellite's pass line: 24 characters of at most 24
+// pixels each.
+typedef struct {int16_t x,y;} Px;
+#define SCRATCH 640
+// The minute renderer's working memory, taken for each drawing only: a
+// chart is built while none is drawn, and has it then.
+typedef struct {Px scratch[SCRATCH];uint8_t window[3][ENR_W];uint16_t mask[ENR_H];FastNight f;} Work;
+static Work *work;
+#define F (work->f)
+#define scratch (work->scratch)
 static void fast_ready(const EnrScene *s,const EnrMinute *m){
   if(F.s==s&&F.m==m)return;
   F.s=s;F.m=m;
@@ -179,6 +190,14 @@ static int ink_zone(const Ctx *c,int x,int y,bool route_ink,int z){
   for(int k=0;k<s->station_count;k++){const int dx=x-s->stations[k][0],dy=y-s->stations[k][1];if(dx*dx+dy*dy<=5)return zone_at(c,s->stations[k][0],s->stations[k][1]);}
   return z;
 }
+// An event's triangle, inked (after the body) by its fix's night where the
+// ink changes with night; other ink drawn after the body, by its own.
+static int fix_zone(const Ctx *c,int x,int y,int z){
+  const EnrScene *s=c->s;
+  if(!(s->flags&ENR_NIGHT_ZONES)||(s->zoned[ENR_INK][0]==s->zoned[ENR_INK][1]&&s->zoned[ENR_INK][0]==s->zoned[ENR_INK][2]))return z;
+  for(int k=0;k<s->event_count;k++){const int dx=x-s->events[k].x,dy=y-s->events[k].y;if(dx>=-4&&dx<=4&&dy>=-4&&dy<=2)return zone_at(c,s->events[k].x,s->events[k].y);}
+  return z;
+}
 // The base, everywhere or (with a mask) only in the 16-pixel blocks each
 // row's mask marks. Returns the pixels drawn.
 static int draw_base(Ctx *c,const uint16_t *mask){
@@ -193,7 +212,7 @@ static int draw_base(Ctx *c,const uint16_t *mask){
   enr_real lo[BLOCKS],hi[BLOCKS];
   block_bounds(s,minute,lo,hi);
   // Rows y-1, y and y+1 decoded, and which rows they hold.
-  static uint8_t window[3][W];int held[3]={-100,-100,-100},drawn=0;
+  uint8_t (*const window)[W]=work->window;int held[3]={-100,-100,-100},drawn=0;
   for(int y=0;y<H;y++){
     if(mask&&!mask[y])continue;
     uint8_t *row[3];
@@ -259,7 +278,7 @@ static int draw_base(Ctx *c,const uint16_t *mask){
     else if(layer==L_INK||layer==L_EARLY_INK)col=s->zoned[ENR_INK][anchored?ink_zone(c,x,y,layer==L_INK,z):z];
     else if(layer==L_MARK)col=s->zoned[ENR_MARK][z];
     else if(layer==L_SPACE_INK)col=s->space_ink;
-    else col=late_ink(s,ground,x,y,z);
+    else col=late_ink(s,ground,x,y,anchored?fix_zone(c,x,y,z):z);
     c->frame[y*c->stride+x]=col;
     }
   }
@@ -332,12 +351,6 @@ static void draw_body(Ctx *c){
 }
 
 // Lettering in Departure Mono, and the chart's knockout under it.
-typedef struct {int16_t x,y;} Px;
-// One shared list of pixels for lettering and leaders, drawn one at a time.
-// The longest list is a satellite's pass line: 24 characters of at most 24
-// pixels each.
-#define SCRATCH 640
-static Px scratch[SCRATCH];
 static const EnrGlyph *glyph(char ch){const char *p=strchr(ENR_FONT_CHARS,ch);return p&&ch?&ENR_FONT_GLYPHS[p-ENR_FONT_CHARS]:0;}
 static int text_width(const char *text,int n){int w=0;for(int i=0;i<n;i++){const EnrGlyph *g=glyph(text[i]);if(g)w+=g->advance;}return w;}
 static int text_pixels(const char *text,int n,int x,int baseline,Px *out){
@@ -422,7 +435,7 @@ static void draw_late(Ctx *c,const int *box,bool flag){
     if(flag&&!after_flag(s,x,y))continue;
     const uint8_t cls=class_at(c,x,y);const int layer=cls>>4;
     if(layer==L_LATE_CLEARED)plot(c,x,y,base_color(s,cls&15,zone(c,x,y)));
-    else if(layer==L_LATE_INK)plot(c,x,y,late_ink(s,cls&15,x,y,zone(c,x,y)));
+    else if(layer==L_LATE_INK)plot(c,x,y,late_ink(s,cls&15,x,y,fix_zone(c,x,y,zone(c,x,y))));
   }
 }
 static void draw_text(Ctx *c,const char *text,int max,int x,int right,int baseline){
@@ -589,24 +602,25 @@ static void draw_sliding_tape(Ctx *c){
 // under it; on the hour chart hung under the body on whichever side keeps
 // it on the face and its leader clearest of lettering. Its leader runs to
 // the body like a circuit trace and breaks for lettering.
-static void draw_callout(Ctx *c){
+// Where the callout goes this minute: its glyphs, the figure's top left,
+// and its leader (in scratch, the pixels clear of lettering: *shown).
+static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
-  if(!s->fig_bits)return;
+  if(!s->fig_bits)return false;
   const int bx=js_round(m->mx),by=js_round(m->my);
-  Glyph g[8];int n,fh,fx,fy,shown;
-  Px *line=scratch;
+  int fh;Px *line=scratch;
   if(s->view==ENR_VIEW_DAY){
-    const bool big=time_figure(s,m,2,1,g,&n,&fh)<=s->callout_left-6;
-    const int fw=time_figure(s,m,big?2:1,big?1:0,g,&n,&fh);
-    fy=by-fh;if(fy>s->callout_bottom-fh-3)fy=s->callout_bottom-fh-3;
-    if(fy<s->callout_top)fy=s->callout_top;
-    fx=6;const int y=fy+fh+3,ex=fx+fw+1;
+    const bool big=time_figure(s,m,2,1,g,n,&fh)<=s->callout_left-6;
+    const int fw=time_figure(s,m,big?2:1,big?1:0,g,n,&fh);
+    *fy=by-fh;if(*fy>s->callout_bottom-fh-3)*fy=s->callout_bottom-fh-3;
+    if(*fy<s->callout_top)*fy=s->callout_top;
+    *fx=6;const int y=*fy+fh+3,ex=*fx+fw+1;
     // circuitPath() to the shoulder's near end, then the shoulder.
     int k=circuit(bx,by,ex,y,9,line);
-    for(int x=fx-1;x<=ex&&k<SCRATCH;x++)line[k++]=(Px){(int16_t)x,(int16_t)y};
-    shown=0;for(int i=0;i<k;i++)if(open_at(s,line[i]))line[shown++]=line[i];
+    for(int x=*fx-1;x<=ex&&k<SCRATCH;x++)line[k++]=(Px){(int16_t)x,(int16_t)y};
+    *shown=0;for(int i=0;i<k;i++)if(open_at(s,line[i]))line[(*shown)++]=line[i];
   }else{
-    const int fw=time_figure(s,m,1,0,g,&n,&fh),sy=by+26;
+    const int fw=time_figure(s,m,1,0,g,n,&fh),sy=by+26;
     int best=0,score[2];
     for(int k=0;k<2;k++){
       const int side=k?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;f=f>4?f:4;
@@ -615,18 +629,83 @@ static void draw_callout(Ctx *c){
       score[k]=(fits?0:1000)+(len-open)*10+(side==(bx<W/2?1:-1)?0:1);
     }
     if(score[1]<score[0])best=1;
-    const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;fx=f>4?f:4;
-    leader(s,bx,by,sx,sy,side>0?fx+fw:fx-1,line,&shown);fy=sy+3;
+    const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;*fx=f>4?f:4;
+    leader(s,bx,by,sx,sy,side>0?*fx+fw:*fx-1,line,shown);*fy=sy+3;
   }
-  letter(c,line,shown,ENR_INK,1);
+  return true;
+}
+static void draw_callout(Ctx *c){
+  Glyph g[8];int n,fx,fy,shown;
+  if(!callout_place(c,g,&n,&fx,&fy,&shown))return;
+  letter(c,scratch,shown,ENR_INK,1);
   set_time(c,g,n,fx,fy);
+}
+// A box: x, y, w, h (w 0 for none).
+typedef struct {int x,y,w,h;} Box;
+// The bounds of glyphs' pixels as drawn (an outlined figure's outline), at
+// (fx, fy), within x0..x1 (the tape's edges).
+static Box glyph_bounds(const EnrScene *s,const Glyph *g,int n,int fx,int fy,int x0,int x1){
+  int a=W*4,b=H*4,cx=-W*4,cy=-H*4;
+  for(int i=0;i<n;i++){
+    int gx0,gy0,w,h;glyph_box(s,&g[i],&gx0,&gy0,&w,&h);
+    for(int gy=gy0;gy<gy0+h;gy++)for(int gx=gx0;gx<gx0+w;gx++){
+      if(!glyph_bit(s,&g[i],gx,gy))continue;
+      const int lx=g[i].x+gx,ly=g[i].y+gy;
+      if(g[i].group==G_HOLLOW&&solid_at(s,g,n,G_HOLLOW,lx+1,ly)&&solid_at(s,g,n,G_HOLLOW,lx-1,ly)&&solid_at(s,g,n,G_HOLLOW,lx,ly+1)&&solid_at(s,g,n,G_HOLLOW,lx,ly-1))continue;
+      const int x=fx+lx,y=fy+ly;if(x<x0||x>x1)continue;
+      a=x<a?x:a;cx=x>cx?x:cx;b=y<b?y:b;cy=y>cy?y:cy;
+    }
+  }
+  return cx<a?(Box){0,0,0,0}:(Box){a,b,cx-a+1,cy-b+1};
+}
+// What an event's name gives way to this minute: the minute flag or the
+// time callout, the minutes over the fixed tape, the sliding tape's
+// figures (both solid, as the browser counts them).
+static int minute_boxes(Ctx *c,Box *out){
+  const EnrScene *s=c->s;const EnrMinute *m=c->m;int n=0;
+  if(s->view==ENR_VIEW_DAY||(s->view==ENR_VIEW_HOUR&&(s->flags&ENR_CALLOUT))){
+    Glyph g[8];int k,fx,fy,shown;if(callout_place(c,g,&k,&fx,&fy,&shown))out[n++]=glyph_bounds(s,g,k,fx,fy,-W,2*W);
+  }else if(s->view==ENR_VIEW_HOUR&&(s->flags&ENR_MINUTE_FLAG)){
+    const int mx=js_round(m->mx),my=js_round(m->my);const enr_real nx=s->normal_x,ny=s->normal_y;
+    const int tw=text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
+    const enr_real room=s->forward>0?s->c1x-mx:mx-s->c1x;
+    const int sx=js_round(mx+nx*20),top=js_round(my+ny*20)-(ny<=0?4:0)-(ny>0?fh-4:0);
+    const int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
+    out[n++]=(Box){d>0?sx+1:sx-fw-point,top,fw+point,fh};
+  }else if(s->view==ENR_VIEW_WORLD&&(s->flags&ENR_SLIDING_TAPE)&&s->fig_bits){
+    const int IX=W/2,PX=3,now=(int)(m-s->minutes);int hn=0,nn=0;while(hn<3&&s->tape_hour[hn])hn++;
+    while(nn<3&&s->tape_next[nn])nn++;
+    const int cw=run_width(s,s->tape_hour,hn,2),nw=run_width(s,s->tape_next,nn,2);
+    const int nx=js_round(IX+(60-now)*PX-nw/(enr_real)2);int cx=js_round(IX+(0-now)*PX-cw/(enr_real)2);cx=cx>4?cx:4;cx=cx<nx-cw-8?cx:nx-cw-8;
+    Glyph g[3];int k=figure_run(s,s->tape_hour,hn,2,0,0,G_SOLID,g);out[n]=glyph_bounds(s,g,k,cx,4,0,W-1);if(out[n].w)n++;
+    k=figure_run(s,s->tape_next,nn,2,0,0,G_SOLID,g);out[n]=glyph_bounds(s,g,k,nx,4,0,W-1);if(out[n].w)n++;
+  }else if(s->view==ENR_VIEW_WORLD&&(s->flags&ENR_MINUTE_FLAG)){
+    const int lw=text_width(m->minute,2),want=js_round(m->index-lw/(enr_real)2),lx=want>s->tape_hi?s->tape_hi:want;
+    out[n++]=(Box){lx<s->tape_lo?s->tape_lo:lx,s->tape_baseline-18,lw,8};
+  }
+  return n;
+}
+// Events' names, each where it is clear this minute of the minute's own
+// lettering and of the names before it.
+static void draw_events(Ctx *c){
+  const EnrScene *s=c->s;if(!s->event_count)return;
+  Box boxes[3+16];int nb=minute_boxes(c,boxes);
+  for(int k=0;k<s->event_count;k++){
+    if(!s->events[k].clear)continue;
+    const int16_t *b=s->events[k].box;bool free=true;
+    for(int j=0;j<nb&&free;j++){const Box *o=&boxes[j];if(o->w&&!(o->x+o->w+1<=b[0]||b[0]+b[2]+1<=o->x||o->y+o->h+1<=b[1]||b[1]+b[3]+1<=o->y))free=false;}
+    if(!free)continue;
+    boxes[nb++]=(Box){b[0],b[1],b[2],b[3]};
+    int len=0;while(len<5&&s->events[k].name[len])len++;
+    letter(c,scratch,text_pixels(s->events[k].name,len,s->events[k].lx,s->events[k].y-7,scratch),ENR_INK,1);
+  }
 }
 
 // What moves each minute, in the order the browser draws it: the body and
 // its flag (or the tape's index and minutes), what was drawn over them, then
 // the margins' Zulu time, pass line and height. PART_ALL draws them all; a
 // single part is drawn alone, to measure where it goes.
-enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_ZULU,PART_TOP,PART_HEIGHT,PART_CIRCLE,PARTS};
+enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_CIRCLE,PARTS};
 static void draw_moving(Ctx *c,int part){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=s->view==ENR_VIEW_WORLD,flag=(s->flags&ENR_MINUTE_FLAG)&&s->view==ENR_VIEW_HOUR;
   if(part==PART_CIRCLE){draw_circle(c);return;}
@@ -646,6 +725,7 @@ static void draw_moving(Ctx *c,int part){
   }
   if(world&&(!part||part==PART_INDEX)){if(s->flags&ENR_SLIDING_TAPE)draw_sliding_tape(c);else draw_index(c);}
   if(world&&!(s->flags&ENR_SLIDING_TAPE)&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
+  if(!part||part==PART_EVENTS)draw_events(c);
   if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
   if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
   if(world&&(!part||part==PART_HEIGHT))draw_text(c,m->height,sizeof m->height,0,s->height_right,s->height_baseline);
@@ -660,7 +740,9 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
   draw_moving(&c,PART_ALL);
   return drawn;
 }
-void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){render(scene,minute,frame,row_stride,NULL);}
+static bool work_begin(void){work=malloc(sizeof(Work));if(work)work->f.s=NULL;return work;}
+static void work_end(void){free(work);work=NULL;}
+void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){if(work_begin()){render(scene,minute,frame,row_stride,NULL);work_end();}}
 
 void enr_ready(EnrScene *s){
   for(int y=0;y<H;y++){s->row_q[y][0]=q30(s->row_cos[y]);s->row_q[y][1]=q30(s->row_sin[y]);}
@@ -669,7 +751,6 @@ void enr_ready(EnrScene *s){
   const enr_real S=SUNRISE_SINE,C=CIVIL_TWILIGHT_SINE;
   s->night_q[0]=q30(S);s->night_q[1]=q30(C);
   for(int b=0;b<16;b++){s->night_q[2+b]=q30(S-(b+(enr_real)0.5)/16*(S-C));s->night_q[18+b]=b>=4?INT32_MIN/2:q30(b?S-b/(enr_real)4*(S-C):S);}
-  F.s=NULL;
   memset(s->ground_rows,0,sizeof s->ground_rows);
   for(int y=0;y<H;y++)for(unsigned k=s->row_offset[y];k<s->row_offset[y+1];k+=2)if((s->runs[k+1]&15)!=G_SPACE){s->ground_rows[y>>3]|=(uint8_t)(1<<(y&7));break;}
 }
@@ -697,18 +778,25 @@ static void box_blocks(const int *box,uint16_t *mask){
   uint16_t bits=0;for(int b=x0>>4;b<=x1>>4;b++)bits|=(uint16_t)(1<<b);
   for(int y=y0;y<=y1;y++)mask[y]|=bits;
 }
+static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);
 int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
+  if(!work_begin())return 0;
+  const int drawn=update(scene,from,minute,frame,row_stride);
+  work_end();return drawn;
+}
+static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
   minute=minute<0?0:minute>59?59:minute;
   if(from<0||from>59)return render(scene,minute,frame,row_stride,NULL);
-  static uint16_t mask[H];memset(mask,0,sizeof mask);
+  uint16_t *const mask=work->mask;memset(mask,0,sizeof work->mask);
   night_blocks(scene,from,minute,mask);
   // A symbol inked by one point's night is drawn again whole when that
   // point's night changes.
   if((scene->flags&ENR_NIGHT_ZONES)&&(scene->zoned[ENR_INK][0]!=scene->zoned[ENR_INK][1]||scene->zoned[ENR_INK][0]!=scene->zoned[ENR_INK][2])){
     Ctx a={scene,&scene->minutes[from],frame,row_stride,{0,0,0},0,false,{0,0,0,0}},b=a;b.m=&scene->minutes[minute];
     const int16_t pts[3][3]={{scene->c0[0],scene->c0[1],21},{scene->c1[0],(int16_t)(scene->c1[1]-1),6}};
-    for(int k=0;k<2+scene->station_count;k++){
-      const int x=k<2?pts[k][0]:scene->stations[k-2][0],y=k<2?pts[k][1]:scene->stations[k-2][1],r=k<2?pts[k][2]:3;
+    const int n=2+scene->station_count;
+    for(int k=0;k<n+scene->event_count;k++){
+      const int x=k<2?pts[k][0]:k<n?scene->stations[k-2][0]:scene->events[k-n].x,y=k<2?pts[k][1]:k<n?scene->stations[k-2][1]:scene->events[k-n].y,r=k<2?pts[k][2]:k<n?3:5;
       fast_ready(scene,a.m);const int z0=zone_at(&a,x,y);fast_ready(scene,b.m);
       if(z0!=zone_at(&b,x,y)){const int box[4]={x-r,y-r,x+r,y+r};box_blocks(box,mask);}
     }

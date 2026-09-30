@@ -3,7 +3,8 @@
 # checks: stops the phone simulator, writes its localStorage, and installs
 # the app again, which starts it. Usage: tools/emulator-body.sh sat:25544 crt
 # [readout] (off, flag, callout; default flag). NUMERALS, MARGIN, SPAN and
-# CLOCK24 set the rest, as tools/emulator-check.mjs reads them.
+# CLOCK24 set the rest, as tools/emulator-check.mjs reads them; EVENTS_STORED
+# the phone's events as it keeps them (JSON [{epoch, title, label}]).
 set -e
 store="$HOME/.local/share/pebble-sdk/4.33.1/emery/localstorage/a0f61ba3-4580-4bf9-a71c-0a83f3d35600"
 # The emulator too: pebble-tool starts a fresh one when the phone
@@ -15,6 +16,8 @@ python3 - "$store" "$1" "${2:-crt}" "$readout" "${NUMERALS:-even}" "${MARGIN:-ut
 import dbm.dumb,sys
 d=dbm.dumb.open(sys.argv[1],'w')
 for k,v in zip(['body','plate','readout','numerals','margin','span','clock24','tape'],sys.argv[2:]):d[k.encode()]=v.encode()
+import os
+if os.environ.get('EVENTS_STORED'):d[b'events']=os.environ['EVENTS_STORED'].encode()
 d.close()
 PY
 cd "$(dirname "$0")/.."

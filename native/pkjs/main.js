@@ -13,7 +13,8 @@
 //   ('fixed', 'tape' or 'slide': the world band's time scale), clock24
 //   ('1' or '0'), timeZone (default: the phone's),
 //   home (JSON {lat, lon}, or {none: true}; default: the preset home for the
-//   zone, if any)
+//   zone, if any), events (JSON [{epoch, title, label}]: reporting points on
+//   the route, each named with a five-letter code unique on its local day)
 // The settings page (config.html) sets all but timeZone.
 //   elementsUrl: where to fetch element sets (default CelesTrak's GP query),
 //   for development against a mirror
@@ -27,6 +28,7 @@ import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
 import {localDay,localDate} from '../../src/enroute-render.js';
 import {clockParts} from '../../src/render.js';
 import {registerNominal} from '../../src/nominal.js';
+import {uniqueCode} from '../../src/events.js';
 import CONFIG_PAGE from './config.html';
 import {devicePosition} from './device-position.js';
 
@@ -192,6 +194,30 @@ function status(text){
   enqueue({Status:text});
 }
 
+// Events, as the settings page gives them ({epoch, title}): the past day's
+// and after are kept, at most forty, each named with a five-letter code
+// unique on its local day (src/events.js), as the study names them.
+function storedEvents(){var v=[];try{v=JSON.parse(setting('events','[]'));}catch(error){}return v&&v.length!==undefined?v:[];}
+function saveEvents(list){
+  var timeZone=zone(),kept=[],now=Date.now();
+  list.filter(function(e){return e&&isFinite(e.epoch)&&typeof e.title==='string'&&e.title.trim()&&e.epoch>now-86400000;})
+    .sort(function(a,b){return a.epoch-b.epoch;}).slice(0,40).forEach(function(e){
+      var day=localDay(e.epoch,timeZone),taken=kept.filter(function(k){return k.epoch>=day.start&&k.epoch<day.end;}).map(function(k){return k.label;});
+      kept.push({epoch:Math.floor(e.epoch/60000)*60000,title:e.title.trim().slice(0,40),label:uniqueCode(e.title,taken)});
+    });
+  localStorage.setItem('events',JSON.stringify(kept));
+}
+// The watch's events: from two hours ago to four days ahead, at most
+// twenty, each its time (i32 Unix seconds) and name (5 characters).
+function sendEvents(){
+  var now=Date.now(),bytes=[];
+  storedEvents().filter(function(e){return e.epoch>now-7200000&&e.epoch<now+4*86400000;}).slice(0,20).forEach(function(e){
+    var t=Math.floor(e.epoch/1000);bytes.push(t&255,(t>>8)&255,(t>>16)&255,(t>>>24)&255);
+    for(var k=0;k<5;k++)bytes.push(k<e.label.length?e.label.charCodeAt(k):0);
+  });
+  enqueue({Events:bytes.length?bytes:[0]});
+}
+
 // The settings page, offline: a data URL holding the page and the settings.
 var BODIES=['sun','moon'].concat(CATALOG.map(function(c){return bodyId(c.norad);}));
 // A data-URL page can't reliably ask for the phone's location itself (as
@@ -202,7 +228,7 @@ Pebble.addEventListener('showConfiguration',function(){
   function open(position){
     if(opened)return;opened=true;
     var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),
-      margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
+      margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},events:storedEvents(),
       bodies:BODIES.slice(2).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
@@ -225,13 +251,14 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(TAPES.indexOf(chosen.tape)>=0)localStorage.setItem('tape',chosen.tape);
   if(chosen.clock24==='1'||chosen.clock24==='0')localStorage.setItem('clock24',chosen.clock24);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
+  if(chosen.events&&chosen.events.length!==undefined)saveEvents(chosen.events);
   // The watch draws again in the new settings, with home's rise and set
   // for the new home.
-  sendSettings();sendRiseSets();
+  sendSettings();sendRiseSets();sendEvents();
 });
 
 // On launch, the settings: the watch asks for anything else it lacks.
-Pebble.addEventListener('ready',function(){sendSettings();});
+Pebble.addEventListener('ready',function(){sendSettings();sendEvents();});
 Pebble.addEventListener('appmessage',function(e){
   // Segments from a UTC day (days since 1970), and home's rise and set.
   var from=e.payload.DataRequest;

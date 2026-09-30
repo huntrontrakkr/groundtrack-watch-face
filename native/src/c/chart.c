@@ -418,6 +418,12 @@ static Box bounds_of(const Px *p,int n){
   for(int i=1;i<n;i++){if(p[i].x<x0)x0=p[i].x;if(p[i].x>x1)x1=p[i].x;if(p[i].y<y0)y0=p[i].y;if(p[i].y>y1)y1=p[i].y;}
   return (Box){x0,y0,x1-x0+1,y1-y0+1};
 }
+// The bounds of a run of figures' pixels (solid).
+static Box figure_bounds(const FigureRun *r){
+  int x0=W*4,y0=H*4,x1=-W*4,y1=-H*4;
+  for(int y=r->y0;y<r->y1;y++)for(int x=r->x0;x<r->x1;x++)if(figure_solid(r,x,y)){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+  return x1<x0?(Box){0,0,0,0}:(Box){x0,y0,x1-x0+1,y1-y0+1};
+}
 static bool overlaps(const Box *taken,int n,Box b){for(int i=0;i<n;i++)if(taken[i].x<b.x+b.w&&b.x<taken[i].x+taken[i].w&&taken[i].y<b.y+b.h&&b.y<taken[i].y+taken[i].h)return true;return false;}
 
 static const char *const HEXAGON[5]={"..###..",".#...#.","#.....#",".#...#.","..###.."};
@@ -774,6 +780,9 @@ static bool finish_draw(ChartBuild *b){
   // The body is the minute's; all after it lies over it.
   cv.stage=3;
   char hour[4],next[4];
+  // The hour figures' bounds (on the hour chart and the fixed tape), which
+  // events' names give way to.
+  Box figs[2];int nfigs=0;
   {const int hh=in->clock24?in->local_hour:(in->local_hour%12?in->local_hour%12:12),nh=in->clock24?(in->local_hour+1)%24:((in->local_hour+1)%12?(in->local_hour+1)%12:12);
   put_int(hour,hh,1);put_int(next,nh,1);}
   #define PLACE(end,w) ({int v=(int)js_round((end)-(w)/2.0);v=v<W-4-(w)?v:W-4-(w);v>4?v:4;})
@@ -801,8 +810,8 @@ static bool finish_draw(ChartBuild *b){
     }
     const int size=40,hw=run_width(hour,size),nw=run_width(next,size),gx=PLACE(forward?X0:X1,hw),nx=PLACE(forward?X1:X0,nw);
     int base;uint8_t *bits=load_figures(src,size,&base,room,room_size);if(!bits)FAIL;
-    FigureRun run;figure_run(hour,size,gx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,0,L_SPACE_INK);
-    figure_run(next,size,nx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,1,L_SPACE_INK);
+    FigureRun run;figure_run(hour,size,gx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,0,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
+    figure_run(next,size,nx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,1,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
     tape_lo=(int16_t)((gx+hw<nx+nw?gx+hw:nx+nw)+3);tape_hi=(int16_t)((gx>nx?gx:nx)-3-text_width("00"));
   }else if(!day){
     // The hour figures: this hour solid over its rose, the next outlined.
@@ -815,11 +824,37 @@ static bool finish_draw(ChartBuild *b){
       STAND(c0x,c0y,hw,hx0,hy0);STAND(c1x,c1y,nw,nx0,ny0);
       #undef STAND
     }
-    FigureRun run;figure_run(hour,size,hx0,hy0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,0,L_INK);
-    figure_run(next,size,nx0,ny0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,2,L_INK);
+    FigureRun run;figure_run(hour,size,hx0,hy0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,0,L_INK);figs[nfigs++]=figure_bounds(&run);
+    figure_run(next,size,nx0,ny0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,2,L_INK);figs[nfigs++]=figure_bounds(&run);
 
   }
   #undef PLACE
+  // Events are compulsory reporting points: a filled triangle on the route
+  // at the event's minute, its name over it (the minute's: see
+  // enroute_core.c), clear of the lettering, the network and the figures.
+  static const char *const FIX[7]={"....#....","...###...","...###...","..#####..","..#####..",".#######.","#########"};
+  int nevents=0;struct {int16_t x,y,lx,box[4];uint8_t clear;char name[5];} events[16];
+  for(int e=0;e<in->event_count;e++){
+    const int64_t t=in->events[e].t-in->start;int i=1;
+    while(i<count&&!(T_OF(b,i-1)<=t&&T_OF(b,i)>=t))i++;
+    if(i>=count||JUMP(i-1,i))continue;
+    const double f=(double)(t-T_OF(b,i-1))/((T_OF(b,i)-T_OF(b,i-1))?(double)(T_OF(b,i)-T_OF(b,i-1)):1);
+    const int x=(int)js_round(track[i-1].a+(track[i].a-track[i-1].a)*f),y=(int)js_round(track[i-1].b+(track[i].b-track[i-1].b)*f);
+    if(x<5||x>W-6||y<top+8||y>bottom-4)continue;
+    for(int dy=0;dy<7;dy++){int first=-1,last=-1;for(int k=0;k<9;k++)if(FIX[dy][k]=='#'){if(first<0)first=k;last=k;}
+      for(int dx=0;dx<9;dx++){if(FIX[dy][dx]=='#')plot(&cv,x+dx-4,y+dy-4,L_INK);else if(first<dx&&dx<last)clear(&cv,x+dx-4,y+dy-4);}}
+    const char *name=in->events[e].name;const int lw=text_width(name);int lx=x-lw/2;lx=lx<W-4-lw?lx:W-4-lw;lx=lx>4?lx:4;
+    const Box bx=bounds_of(scratch,text_pixels(name,lx,y-7,scratch));
+    bool clear_=bx.y>=(in->home?14:2);
+    #define CLEAR_OF(o) (!((o).x+(o).w+1<=bx.x||bx.x+bx.w+1<=(o).x||(o).y+(o).h+1<=bx.y||bx.y+bx.h+1<=(o).y))
+    for(int k=0;k<taken_n&&clear_;k++)if(CLEAR_OF(taken[k]))clear_=false;
+    for(int k=0;k<avoid_n&&clear_;k++)if(CLEAR_OF(avoid[k]))clear_=false;
+    for(int k=0;k<nfigs&&clear_;k++)if(figs[k].w&&CLEAR_OF(figs[k]))clear_=false;
+    #undef CLEAR_OF
+    if(nevents<16){events[nevents].x=(int16_t)x;events[nevents].y=(int16_t)y;events[nevents].lx=(int16_t)lx;
+      events[nevents].box[0]=(int16_t)bx.x;events[nevents].box[1]=(int16_t)bx.y;events[nevents].box[2]=(int16_t)bx.w;events[nevents].box[3]=(int16_t)bx.h;
+      events[nevents].clear=clear_;memset(events[nevents].name,0,5);memcpy(events[nevents].name,name,strlen(name)<5?strlen(name):5);nevents++;}
+  }
   // Home, over the route and figures, on its own knockout.
   if(home_mark){
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++)if(dx*dx+dy*dy<=36)clear(&cv,hx+dx,hy+dy);
@@ -919,6 +954,7 @@ static bool finish_draw(ChartBuild *b){
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
   out->numerals=(uint8_t)in->numerals;
   out->slide_minute=world&&in->tape==2?(uint8_t)in->minute:255;
+  out->event_count=(uint8_t)nevents;memcpy(out->events,events,sizeof events[0]*nevents);
   if(world&&in->tape){
     memcpy(out->tape_hour,hour,strlen(hour));memcpy(out->tape_next,next,strlen(next));
     if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;

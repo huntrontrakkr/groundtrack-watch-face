@@ -42,6 +42,8 @@ void pass_blocks_store(const uint8_t *bytes,size_t length,const WatchSettings *s
 // satellite, or -1; and whether the pass block holding t is kept.
 int64_t sat_segments_missing(int32_t norad,int64_t from,int32_t seconds);
 bool pass_block_known(int64_t t,const WatchSettings *s);
+// Events, as the phone sends them (9 bytes each).
+void events_store(const uint8_t *bytes,size_t length);
 // Whether home's rise and set are kept for a local date.
 bool rise_set_known(int32_t date);
 // The local day holding t: its midnight and the next (Unix seconds).

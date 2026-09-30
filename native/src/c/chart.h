@@ -36,6 +36,10 @@ typedef struct {
   bool zone_body;            // the margin's time in the nautical zone under the body, not Zulu
   int tape;                  // the world band's time scale: 0 fixed, 1 a sliding tape, 2 the world sliding too
   int minute;                // with the world sliding, the minute of the hour the chart is for
+  // Events, set on the route as compulsory reporting points: their times
+  // (Unix seconds) and five-letter name codes.
+  int event_count;
+  struct {int64_t t;char name[6];} events[16];
   bool clock24;
   int64_t start;             // the hour's first second (Unix time)
   int local_hour;            // the local clock's hour at start, 0-23

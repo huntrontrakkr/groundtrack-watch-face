@@ -63,7 +63,8 @@ int main(int argc,char **argv){
     else if(!strcmp(key,"code"))snprintf(in.code,sizeof in.code,"%s",value);else if(!strcmp(key,"plate"))in.plate=atoi(value);
     else if(!strcmp(key,"flag"))in.flag=atoi(value);else if(!strcmp(key,"readout"))in.readout=atoi(value);
     else if(!strcmp(key,"numerals"))in.numerals=atoi(value);else if(!strcmp(key,"zonebody"))in.zone_body=atoi(value);
-    else if(!strcmp(key,"tape"))in.tape=atoi(value);else if(!strcmp(key,"minute"))in.minute=atoi(value);else if(!strcmp(key,"clock24"))in.clock24=atoi(value);
+    else if(!strcmp(key,"tape"))in.tape=atoi(value);else if(!strcmp(key,"minute"))in.minute=atoi(value);
+    else if(!strcmp(key,"event")&&in.event_count<16){char name[8]={0};long long t=0;sscanf(value,"%lld %7s",&t,name);in.events[in.event_count].t=t;snprintf(in.events[in.event_count].name,6,"%s",name);in.event_count++;}else if(!strcmp(key,"clock24"))in.clock24=atoi(value);
     else if(!strcmp(key,"start"))in.start=atoll(value);else if(!strcmp(key,"hour"))in.local_hour=atoi(value);
     else if(!strcmp(key,"day"))in.day=atoi(value);else if(!strcmp(key,"month"))in.month=atoi(value);
     else if(!strcmp(key,"year"))in.year=atoi(value);else if(!strcmp(key,"yday"))in.day_of_year=atoi(value);
@@ -94,6 +95,7 @@ int main(int argc,char **argv){
   u16((uint16_t)s.c0[0]);u16((uint16_t)s.c0[1]);u16((uint16_t)s.c1[0]);u16((uint16_t)s.c1[1]);
   u8(s.station_count);for(int k=0;k<s.station_count;k++){u16((uint16_t)s.stations[k][0]);u16((uint16_t)s.stations[k][1]);}
   fwrite(s.tape_hour,1,3,out);fwrite(s.tape_next,1,3,out);u8(s.slide_minute);
+  u8(s.event_count);for(int k=0;k<s.event_count;k++){const int16_t v[7]={s.events[k].x,s.events[k].y,s.events[k].lx,s.events[k].box[0],s.events[k].box[1],s.events[k].box[2],s.events[k].box[3]};for(int j=0;j<7;j++)u16((uint16_t)v[j]);u8(s.events[k].clear);fwrite(s.events[k].name,1,5,out);}
   for(int k=0;k<60;k++){const EnrMinute *e=&s.minutes[k];for(int j=0;j<3;j++)f64(e->sun[j]);f64(e->mx);f64(e->my);f64(e->moon_fraction);u8(e->waxing);
     fwrite(e->zulu,1,5,out);fwrite(e->minute,1,2,out);fwrite(e->top,1,24,out);u16((uint16_t)e->index);fwrite(e->height,1,8,out);u8(e->circle);}
   u16(s.circle_count);
