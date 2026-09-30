@@ -23,7 +23,7 @@ Read [the Enroute notes](docs/STUDY-06.md), [the Chart notes](docs/STUDY-05.md),
 
 ## Native watchface (first step)
 
-`native/` is a Pebble SDK project for the Enroute face on Pebble Time 2 (`emery`). Once an hour the phone renders the chart as a compact class plane (26–31 KB), and each minute the watch colours it and adds night, the bold route, the body, the minute flag and Zulu time, using a 6.7 KB portable C core. The core is checked pixel for pixel against the browser renderer in `npm test` (it needs a C compiler). The Pebble SDK build itself hasn't been run yet. [docs/NATIVE.md](docs/NATIVE.md) has the design, the measurements, how to build and what's still open.
+`native/` is a Pebble SDK project for the Enroute face on Pebble Time 2 (`emery`). Once an hour the phone renders the chart itself, with the renderer and the map data bundled into the app's phone JavaScript (`npm run build:pkjs`), as a compact class plane (22–31 KB), and each minute the watch colours it and adds night, the bold route, the body, the minute flag and Zulu time, using a 6.7 KB portable C core. The core is checked pixel for pixel against the browser renderer in `npm test` (it needs a C compiler). The Pebble SDK build itself hasn't been run yet. [docs/NATIVE.md](docs/NATIVE.md) has the design, the measurements, how to build and what's still open.
 
 ## Data and light
 
