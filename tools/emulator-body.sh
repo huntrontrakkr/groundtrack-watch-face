@@ -28,4 +28,4 @@ if os.environ.get('ELEMENTS_URL'):d[b'elementsUrl']=os.environ['ELEMENTS_URL'].e
 d.close()
 PY
 cd "$(dirname "$0")/.."
-PATH="$HOME/.local/bin:$PATH" timeout 150 pb install --emulator emery $project/build/$project.pbw
+PATH="$HOME/.local/bin:$PATH" timeout 150 ${PEBBLE:-pb} install --emulator emery $project/build/$project.pbw

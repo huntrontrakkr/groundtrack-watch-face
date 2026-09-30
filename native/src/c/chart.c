@@ -883,9 +883,6 @@ static bool finish_draw(ChartBuild *b){
   Draw *draw=NULL;Px *scratch=NULL;EnrScene *out=NULL;EnrPoint *points=NULL;int16_t zulu_x=0,zulu_baseline=0;
   int16_t tape_lo=0,tape_hi=0;
   // The class plane, from the ground's runs, each chunk freed once read.
-#ifdef CHART_DEBUG
-  {extern void chart_debug(unsigned);chart_debug(b->sink.n);}
-#endif
   for(int k=0;k<PLANE_BANDS;k++)if(!(b->plane.band[k]=alloc(W*BAND_ROWS)))FAIL;
   const Plane *const classes=&b->plane;
   {int x=0,y=0;const unsigned cap=b->sink.cap,inside=b->sink.n<cap?b->sink.n:cap;

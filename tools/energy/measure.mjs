@@ -48,18 +48,22 @@ async function window(name,ms){
 // moon or sat:<catalog number>; the Sun by default) on MEASURE_PLATE
 // (Enroute), 24-hour, home New York; the minute flag as given. They must be
 // the phone's own, or the phone's next settings build the hour again.
-const KEY=JSON.parse(readFileSync(process.argv[4]||'native/build/js/message_keys.json','utf8'));
+// MEASURE_FACE (enroute, plotboard, fuller) names the face installed.
+const FACE=process.env.MEASURE_FACE||'enroute',PROJECT=FACE==='enroute'?'native':`native-${FACE}`;
+const KEY=JSON.parse(readFileSync(process.argv[4]||`${PROJECT}/build/js/message_keys.json`,'utf8'));
 const BODY=process.env.MEASURE_BODY||'sun',PLATE=Object.keys(PLATES).indexOf(process.env.MEASURE_PLATE||'enroute');
 const settings=flag=>{
-  const h=HOMES['America/New_York'],b=Buffer.alloc(24),sat=BODY.startsWith('sat:'),c=sat?catalogEntry(BODY):null;
+  const h=HOMES['America/New_York'],b=Buffer.alloc(25),sat=BODY.startsWith('sat:'),c=sat?catalogEntry(BODY):null;
+  // Fuller draws a fast satellite's hour, not the world band.
+  const view=v=>FACE==='fuller'&&v==='world'?'hour':v;
   b.set([BODY==='sun'?0:BODY==='moon'?1:2,PLATE,flag,1,1]);b.writeInt32LE(Math.round(h.lat*100),5);b.writeInt32LE(Math.round(h.lon*100),9);
-  b.writeInt32LE(sat?Number(BODY.slice(4)):0,13);b[17]=(c?.symbol==='station'?1:0)|(sat?['hour','world','day'].indexOf(viewOf(BODY)):0)<<1;
+  b.writeInt32LE(sat?Number(BODY.slice(4)):0,13);b[17]=(c?.symbol==='station'?1:0)|(sat?['hour','world','day'].indexOf(view(viewOf(BODY))):0)<<1;
   if(c)b.write(c.code,18,'latin1');
-  b[21]=2;b[22]=0;
+  b[21]=2;b[22]=0;b[23]=0;b[24]=0;
   return b;
 };
 let flag=1;
-const UUID=JSON.parse(readFileSync('native/package.json','utf8')).pebble.uuid;
+const UUID=JSON.parse(readFileSync(`${PROJECT}/package.json`,'utf8')).pebble.uuid;
 const send=()=>{flag^=1;const f=join(out,`${label}-settings.bin`);writeFileSync(f,settings(flag));pebble('send-app-message','--app-uuid',UUID,'--bytes-file',`${KEY.Settings}=${f}`);};
 const kinds=(process.env.MEASURE_KINDS||'idle,minute,build').split(',');
 const want={idle:0,minute:0,build:0},got={idle:0,minute:0,build:0},names=[];for(const k of kinds)want[k]=repeats;
