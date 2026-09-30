@@ -1,0 +1,18 @@
+{
+  "name": "groundtrack-enroute",
+  "author": "Groundtrack",
+  "version": "0.1.0",
+  "private": true,
+  "keywords": ["pebble-app"],
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Groundtrack Enroute",
+    "uuid": "a0f61ba3-4580-4bf9-a71c-0a83f3d35600",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": ["emery"],
+    "watchapp": {"watchface": true},
+    "messageKeys": ["SceneTotal", "SceneOffset", "SceneChunk", "SceneRequest"],
+    "resources": {"media": []}
+  }
+}
