@@ -19,8 +19,8 @@
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
   // the phone sends one.
-  const WatchSettings defaults={3,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0};
-  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=3)*s=defaults;
+  const WatchSettings defaults={4,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0};
+  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=4)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
@@ -140,7 +140,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   const struct tm *lt=localtime(&now);
   ChartInput in;memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:0;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.clock24=s->clock24;
+  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:0;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.minute=lt->tm_min;in.clock24=s->clock24;
   in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
   in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;

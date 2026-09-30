@@ -63,6 +63,11 @@
     <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)</span></label>
     <label class="row"><input type="radio" name="margin" value="body"><span class="name">Nautical zone under the body<span class="note">Its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
   </fieldset>
+  <fieldset><legend>Time scale</legend>
+    <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Fixed<span class="note">For the world band: a ruler with a moving pointer</span></span></label>
+    <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
+    <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Tape + world<span class="note">The map scrolls too, the satellite always under the index; the watch draws the whole chart each minute, which costs battery</span></span></label>
+  </fieldset>
   <fieldset><legend>QZSS chart</legend>
     <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">Its figure-8, the day's hours along it</span></span></label>
     <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">On the hour chart, zoomed far in over Japan or Australia</span></span></label>
@@ -100,7 +105,7 @@
   rows(config.plates,'plate',document.getElementById('plates'));
   function pick(name,value){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
   function picked(name){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
-  pick('body',s.body);pick('plate',s.plate);pick('readout',s.readout);pick('numerals',s.numerals);pick('margin',s.margin);pick('span',s.span);
+  pick('body',s.body);pick('plate',s.plate);pick('readout',s.readout);pick('numerals',s.numerals);pick('margin',s.margin);pick('span',s.span);pick('tape',s.tape);
   form.elements.clock24.checked=s.clock24!=='0';
   document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+s.timeZone+')':'None for '+s.timeZone;
   var home=null;try{home=s.home?JSON.parse(s.home):null;}catch(e){}
@@ -133,7 +138,7 @@
       if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
       homeValue=JSON.stringify({lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
     }
-    close(JSON.stringify({body:picked('body'),plate:picked('plate'),readout:picked('readout'),numerals:picked('numerals'),margin:picked('margin'),span:picked('span'),
+    close(JSON.stringify({body:picked('body'),plate:picked('plate'),readout:picked('readout'),numerals:picked('numerals'),margin:picked('margin'),span:picked('span'),tape:picked('tape'),
       clock24:form.elements.clock24.checked?'1':'0',home:homeValue}));
   });
 })();

@@ -33,17 +33,25 @@ static ChartBuild *s_build;        // a Sun or Moon chart being built
 // Dymaxion's minute_redraw): the chart and minute last drawn, and whether
 // this redraw is the tick's. Any other redraw paints the whole face: after a
 // notification, say, the screen holds something else.
-static const EnrScene *s_drawn_scene;
+// Charts are numbered as they are made: a new chart can take the memory of
+// the one before, so its address doesn't tell them apart.
+static uint32_t s_chart_serial,s_drawn_serial;
 static int s_drawn_minute=-1;
 static bool s_tick_redraw;
+// Whether the screen holds a chart: while the next is built, it stays.
+static bool s_painted;
 static uint32_t s_build_ms;        // time spent building it
 
 static void chart_free(Chart *c){
   if(c->scene){enr_free(c->scene,free);free(c->scene);}
   c->scene=NULL;
 }
+// A chart covers its hour; with the world sliding, its one minute.
 static bool covers(const Chart *c,time_t t){
-  return c->scene&&t>=c->scene->hour_start&&t<c->scene->hour_start+3600;
+  if(!c->scene)return false;
+  const EnrScene *s=c->scene;
+  if(s->slide_minute!=255){const time_t m=s->hour_start+60*s->slide_minute;return t>=m&&t<m+60;}
+  return t>=s->hour_start&&t<s->hour_start+3600;
 }
 static void set_status(const char *text){strncpy(s_status,text,sizeof s_status-1);s_status[sizeof s_status-1]=0;}
 
@@ -103,7 +111,7 @@ static void build_step(void *data){
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
-  if(scene){s_now.scene=scene;s_status[0]=0;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: about %lu ms of work; heap free %u",(unsigned long)s_build_ms,(unsigned)heap_bytes_free());}
+  if(scene){s_now.scene=scene;s_chart_serial++;s_status[0]=0;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: about %lu ms of work; heap free %u",(unsigned long)s_build_ms,(unsigned)heap_bytes_free());}
   else{set_status("NO ROOM FOR THE CHART");APP_LOG(APP_LOG_LEVEL_ERROR,"Chart not finished: %s; heap free %u",chart_failure(),(unsigned)heap_bytes_free());}
   layer_mark_dirty(s_layer);
 }
@@ -114,23 +122,25 @@ static void check(time_t now){if(!covers(&s_now,now))build(now);else need_data(n
 static void update(Layer *layer,GContext *ctx){
   const time_t now=time(NULL);
   if(!covers(&s_now,now)){
+    // While the next chart is built, the last stays on the screen.
+    if(s_build&&s_painted)return;
     // No chart for this hour: an honest blank with a note.
     graphics_context_set_fill_color(ctx,GColorBlack);
     graphics_fill_rect(ctx,layer_get_bounds(layer),0,GCornerNone);
     graphics_context_set_text_color(ctx,GColorWhite);
     graphics_draw_text(ctx,s_build?"DRAWING CHART":s_status[0]?s_status:"AWAITING CHART",fonts_get_system_font(FONT_KEY_GOTHIC_14),
       GRect(0,100,ENR_W,20),GTextOverflowModeTrailingEllipsis,GTextAlignmentCenter,NULL);
-    s_drawn_scene=NULL;s_drawn_minute=-1;s_tick_redraw=false;
+    s_drawn_serial=0;s_drawn_minute=-1;s_tick_redraw=false;s_painted=false;
     return;
   }
   GBitmap *frame=graphics_capture_frame_buffer(ctx);
   if(!frame)return;
   // emery is rectangular: every row is a full row of GColor8 bytes.
   const int minute=(int)((now-s_now.scene->hour_start)/60);
-  const bool partial=s_tick_redraw&&s_drawn_scene==s_now.scene&&s_drawn_minute>=0&&s_drawn_minute<=minute;
+  const bool partial=s_tick_redraw&&s_drawn_serial==s_chart_serial&&s_drawn_minute>=0&&s_drawn_minute<=minute;
   enr_render_update(s_now.scene,partial?s_drawn_minute:-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
   graphics_release_frame_buffer(ctx,frame);
-  s_drawn_scene=s_now.scene;s_drawn_minute=minute;s_tick_redraw=false;
+  s_drawn_serial=s_chart_serial;s_drawn_minute=minute;s_tick_redraw=false;s_painted=true;
 }
 
 static void tick(struct tm *when,TimeUnits changed){
@@ -139,7 +149,7 @@ static void tick(struct tm *when,TimeUnits changed){
   layer_mark_dirty(s_layer);
 }
 // Back from a notification or a menu: the screen holds something else.
-static void focus_changed(bool focused){if(focused){s_drawn_minute=-1;layer_mark_dirty(s_layer);}}
+static void focus_changed(bool focused){if(focused){s_drawn_minute=-1;s_painted=false;layer_mark_dirty(s_layer);}}
 
 // After data arrives: once the messages stop for a moment, check what is
 // still missing and draw the hour again if it needs it (or, with `changed`,
@@ -163,10 +173,10 @@ static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)
 // times 2) and its code (3 characters), then the callout's figures and the
 // margin's time (see native/pkjs/main.js).
 static void take_settings(const uint8_t *b,size_t n){
-  if(n<23)return;
+  if(n<24)return;
   WatchSettings s;memset(&s,0,sizeof s);
-  s.version=3;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
-  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];
+  s.version=4;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
+  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   if(!memcmp(&s,&s_settings,sizeof s)){s_data_ok_until=0;s_data_asked_at=0;check(time(NULL));return;}

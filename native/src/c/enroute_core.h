@@ -23,7 +23,7 @@ typedef float enr_real;
 typedef double enr_real;
 #endif
 
-enum {ENR_NIGHT_ZONES=1,ENR_SCAN=2,ENR_TERMINATOR=4,ENR_NIGHT_DOTS=8,ENR_MINUTE_FLAG=16,ENR_CALLOUT=32};
+enum {ENR_NIGHT_ZONES=1,ENR_SCAN=2,ENR_TERMINATOR=4,ENR_NIGHT_DOTS=8,ENR_MINUTE_FLAG=16,ENR_CALLOUT=32,ENR_SLIDING_TAPE=64,ENR_SLIDING_WORLD=128};
 // The time callout's figures: the hour, then a colon and smaller minutes;
 // smaller minutes; four figures, the minutes outlined; the minutes in
 // Departure Mono at double size; smaller minutes in the route's ink.
@@ -94,6 +94,10 @@ typedef struct {
   int16_t c0[2],c1[2];
   uint8_t station_count;
   int16_t stations[32][2];
+  // The world band's sliding tape: this hour's figures and the next's.
+  char tape_hour[3],tape_next[3];
+  // With the world sliding, the one minute the scene is for (255 otherwise).
+  uint8_t slide_minute;
   EnrMinute minutes[60];
   // Home's acquisition circles, each allocated on its own: circle k has
   // circle_n[k] points, (x, y) bytes at circle_px[k].

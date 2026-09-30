@@ -475,8 +475,12 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // too, and the index line runs on down through the map to the body.
     const {baseline:B,panel:P}=SCALE,sc=()=>pal.spaceInk,fill=pal.route[0],IX=W/2,PX=3,now=Math.floor(minutes);
     for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);
-    for(let x=0;x<W;x++){plot(buf,x,P-1,sc());plot(buf,x,B,sc());if(x<=IX)plot(buf,x,B+1,fill);}
     const hourAt=m=>{const q=Number(clockParts(s0.epoch+m*MINUTE,timeZone).h);return String(clock24?q:q%12||12);};
+    // The whole tape moves each minute: a base layer leaves it to the
+    // native renderer, with this hour's figures and the next's.
+    if(baseOnly){tapeAt={mode:tape,hour:hourAt(0),next:hourAt(60)};hourPixels=[];nextSolid=[];index={x:IX,y:B};}
+    else{
+    for(let x=0;x<W;x++){plot(buf,x,P-1,sc());plot(buf,x,B,sc());if(x<=IX)plot(buf,x,B+1,fill);}
     for(let m=now-Math.ceil(IX/PX)-12;m<=now+Math.ceil(IX/PX)+12;m++){
       const x=IX+(m-now)*PX,mm=((m%60)+60)%60,len=mm===0?12:mm%15===0?6:mm%5===0?4:2;
       for(let d=1;d<=len;d++)plot(buf,x,B+d,sc());
@@ -495,8 +499,10 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     for(let y=0;y<P-1;y++)plot(buf,IX,y,fill);
     for(let k=0;k<6;k++)for(let d=-k;d<=k;d++)plot(buf,IX+d,B-7+k,pal.space);
     for(let k=0;k<5;k++)for(let d=-k;d<=k;d++)plot(buf,IX+d,B-6+k,sc());
+    // The index line on down through the map to the body (the minute's).
     if(tape==='slide')for(let y=top;y<my-8;y++)if(((y-top)>>1)%2===0)plot(buf,IX,y,ink('route')(IX,y));
     index={x:IX,y:B};
+    }
   }else if(camera.world){
     const {baseline:B,panel:P}=SCALE,sc=()=>pal.spaceInk,fill=pal.route[0];
     for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);

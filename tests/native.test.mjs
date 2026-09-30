@@ -48,7 +48,14 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
       ['sun-callout-plain',['sun','2026-12-21T22:00:00Z','sunlight','callout'],[1,59],{NUMERALS:'plain',ZONE:'body'}],
       ['qzs-mono',['sat:42738','2026-09-27T05:00:00Z','hypsometric','noflag'],[10,50],{NUMERALS:'mono',CLOCK24:'0'}],
       ['qzs-accent',['sat:42738','2026-09-27T14:00:00Z','crt','noflag'],[20],{NUMERALS:'accent'}],
-      ['qzs-hour',['sat:42738','2026-09-27T05:00:00Z','sectional','callout'],[0,30],{SPAN:'hour',NUMERALS:'colon'}]
+      ['qzs-hour',['sat:42738','2026-09-27T05:00:00Z','sectional','callout'],[0,30],{SPAN:'hour',NUMERALS:'colon'}],
+      // The world band's sliding tape, early, mid and late in the hour.
+      ['iss-tape',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[0,1,17,33,58,59],{TAPE:'tape'}],
+      ['n20-tape',['sat:43013','2026-09-30T17:00:00Z','sunlight','noflag'],[5,44],{TAPE:'tape',CLOCK24:'0'}],
+      // The world sliding too: a scene for each minute.
+      ['iss-slide-23',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],[23],{TAPE:'slide'}],
+      ['ls9-slide-47',['sat:49260','2026-10-01T09:00:00Z','hypsometric','flag'],[47],{TAPE:'slide'}],
+      ['ls9-slide-0',['sat:49260','2026-10-01T09:00:00Z','plotboard','noflag'],[0],{TAPE:'slide'}]
     ]){
       for(const f of run(dir,name,args,minutes,more))assert.equal(f.differ,0,`${name} minute ${f.minute}: first difference at ${f.first}`);
     }
@@ -76,7 +83,8 @@ test('a minute drawn over the last draws only what changed, and the same pixels'
       ['sun-callout',['sun','2026-09-27T08:00:00Z','enroute','callout'],{NUMERALS:'accent'}],
       // Plotboard, the night crossing this hour's and the next hour's
       // stations.
-      ['sun-plotboard',['sun','2026-09-27T20:00:00Z','plotboard','flag']],['iss-plotboard',['sat:25544','2026-09-30T02:00:00Z','plotboard','flag']],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
+      ['sun-plotboard',['sun','2026-09-27T20:00:00Z','plotboard','flag']],['iss-plotboard',['sat:25544','2026-09-30T02:00:00Z','plotboard','flag']],
+      ['iss-tape',['sat:25544','2026-09-30T13:00:00Z','crt','flag'],{TAPE:'tape'}],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
     ]){
       execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,'0'],{stdio:'pipe',env:{...env,...more}});
       const r=JSON.parse(execFileSync('native/host/harness',[join(dir,`${name}.scene`),join(dir,name),'-u']).toString());

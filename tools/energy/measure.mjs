@@ -51,7 +51,7 @@ async function window(name,ms){
 const KEY=JSON.parse(readFileSync(process.argv[4]||'native/build/js/message_keys.json','utf8'));
 const BODY=process.env.MEASURE_BODY||'sun',PLATE=Object.keys(PLATES).indexOf(process.env.MEASURE_PLATE||'enroute');
 const settings=flag=>{
-  const h=HOMES['America/New_York'],b=Buffer.alloc(23),sat=BODY.startsWith('sat:'),c=sat?catalogEntry(BODY):null;
+  const h=HOMES['America/New_York'],b=Buffer.alloc(24),sat=BODY.startsWith('sat:'),c=sat?catalogEntry(BODY):null;
   b.set([BODY==='sun'?0:BODY==='moon'?1:2,PLATE,flag,1,1]);b.writeInt32LE(Math.round(h.lat*100),5);b.writeInt32LE(Math.round(h.lon*100),9);
   b.writeInt32LE(sat?Number(BODY.slice(4)):0,13);b[17]=(c?.symbol==='station'?1:0)|(sat?['hour','world','day'].indexOf(viewOf(BODY)):0)<<1;
   if(c)b.write(c.code,18,'latin1');

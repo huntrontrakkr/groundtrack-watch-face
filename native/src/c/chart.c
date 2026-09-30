@@ -550,6 +550,8 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     // proportion.
     cam.world=true;cam.scale=(W-16)/(maxlon-minlon>180?maxlon-minlon:180);cam.k=1;cam.lat0=WORLD_SOUTH;cam.y0=H-10;
     cam.lonMid=(maxlon+minlon)/2;cam.x0=W/2;
+    // With the world sliding, centred on the body at the minute.
+    if(in->tape==2){const int i=(in->minute*60+1200)/15;if(i<0||i>=count)FAIL;cam.lonMid=track[i].b;}
     cam.top=(int)ceil(sy(&cam,WORLD_NORTH));cam.bottom=(int)floor(sy(&cam,WORLD_SOUTH));
   }
   else if(in->body<2){
@@ -775,7 +777,10 @@ static bool finish_draw(ChartBuild *b){
   {const int hh=in->clock24?in->local_hour:(in->local_hour%12?in->local_hour%12:12),nh=in->clock24?(in->local_hour+1)%24:((in->local_hour+1)%12?(in->local_hour+1)%12:12);
   put_int(hour,hh,1);put_int(next,nh,1);}
   #define PLACE(end,w) ({int v=(int)js_round((end)-(w)/2.0);v=v<W-4-(w)?v:W-4-(w);v>4?v:4;})
-  if(world){
+  if(world&&in->tape){
+    // A sliding tape moves each minute, all of it the minute's.
+    for(int i=0;i<TAPE_PANEL*W;i++)classes[i]=G_SPACE;
+  }else if(world){
     // The world band's hours are set in a panel over the map, an
     // instrument tape: minute graduations, tall hour marks under the
     // figures, this hour solid and the next outlined. Its index is the
@@ -900,7 +905,7 @@ static bool finish_draw(ChartBuild *b){
   memset(out,0,sizeof *out);
   out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->sink.row_offset,sizeof out->row_offset);
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
-  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0));
+  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0)|(world&&in->tape?64:0)|(world&&in->tape==2?128:0));
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
@@ -910,9 +915,14 @@ static bool finish_draw(ChartBuild *b){
   for(int x=0;x<W;x++){const double lon=glon(&cam,x+.5)*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}
   out->c1x=(enr_real)c1x_;out->normal_x=cam.slow?(enr_real)cam.nx:0;out->normal_y=cam.slow?(enr_real)cam.ny:-1;
   out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;out->top_x=top_x;out->top_baseline=top_baseline;out->height_right=height_right;out->height_baseline=height_baseline;
-  if(world){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
+  if(world&&!in->tape){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
   out->numerals=(uint8_t)in->numerals;
+  out->slide_minute=world&&in->tape==2?(uint8_t)in->minute:255;
+  if(world&&in->tape){
+    memcpy(out->tape_hour,hour,strlen(hour));memcpy(out->tape_next,next,strlen(next));
+    if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
+  }
   out->c0[0]=(int16_t)c0x;out->c0[1]=(int16_t)c0y;out->c1[0]=(int16_t)c1x;out->c1[1]=(int16_t)c1y;
   out->station_count=(uint8_t)nshown;memcpy(out->stations,shown,sizeof(int16_t)*2*nshown);
   if(!world){
@@ -962,7 +972,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     if(in->body>=2&&in->home&&src->pass_line)src->pass_line(src->pass_context,t,e->top);
     memset(e->height,0,sizeof e->height);e->circle=255;e->index=0;
     if(world){
-      e->index=(int16_t)js_round(forward?TAPE_X0+(double)(TAPE_X1-TAPE_X0)*m/60:TAPE_X1-(double)(TAPE_X1-TAPE_X0)*m/60);
+      if(!in->tape)e->index=(int16_t)js_round(forward?TAPE_X0+(double)(TAPE_X1-TAPE_X0)*m/60:TAPE_X1-(double)(TAPE_X1-TAPE_X0)*m/60);
       char *p=put_int(e->height,(int)js_round(altitude),1);memcpy(p," KM",3);
       if(in->home){
         const int n=circle_pixels(&cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring);int k=0;

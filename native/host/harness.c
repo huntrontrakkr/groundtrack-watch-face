@@ -23,7 +23,7 @@ int main(int argc,char **argv){
   EnrScene *scene=malloc(sizeof *scene);
   if(!enr_parse(blob,len,scene,malloc,false)){fprintf(stderr,"malformed scene %s\n",argv[1]);return 2;}
   // The day's callout sets figures from the resource, as the watch does.
-  if(scene->view==ENR_VIEW_DAY||(scene->flags&ENR_CALLOUT)){size_t n;Mem f={slurp("native/resources/figures.bin",&n),0};f.length=n;if(!f.data||!chart_callout_figures(scene,mem_read,&f,malloc)){fprintf(stderr,"no figures\n");return 2;}}
+  if(scene->view==ENR_VIEW_DAY||(scene->flags&(ENR_CALLOUT|ENR_SLIDING_TAPE))){size_t n;Mem f={slurp("native/resources/figures.bin",&n),0};f.length=n;if(!f.data||!chart_callout_figures(scene,mem_read,&f,malloc)){fprintf(stderr,"no figures\n");return 2;}}
   uint8_t *frame=malloc(ENR_W*ENR_H);int failed=0;const char *ppm=0;
   // -b: time a whole hour of minutes, as a CPU proxy (not a watch measurement).
   if(!strcmp(argv[3],"-b")){

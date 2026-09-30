@@ -9,7 +9,8 @@
 // Settings are kept in localStorage:
 //   body, plate, readout ('off', 'flag' or 'callout'; before it, flag '1' or
 //   '0'), numerals (the callout's figures: colon, plain, even, mono, accent),
-//   margin ('utc' or 'body'), span ('day' or 'hour': QZSS's chart), clock24
+//   margin ('utc' or 'body'), span ('day' or 'hour': QZSS's chart), tape
+//   ('fixed', 'tape' or 'slide': the world band's time scale), clock24
 //   ('1' or '0'), timeZone (default: the phone's),
 //   home (JSON {lat, lon}, or {none: true}; default: the preset home for the
 //   zone, if any)
@@ -75,9 +76,10 @@ function pump(){
 // hundredths of a degree (i32 each), then a satellite's catalog number
 // (i32), its kind (1 a station, plus its view, 0 the hour chart, 1 the world
 // band, 2 the whole day, times 2) and its code (3 characters), then the
-// callout's figures (0 colon, 1 plain, 2 even, 3 mono, 4 accent) and the
-// margin's time (0 Zulu, 1 the nautical zone under the body).
-var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'];
+// callout's figures (0 colon, 1 plain, 2 even, 3 mono, 4 accent), the
+// margin's time (0 Zulu, 1 the nautical zone under the body) and the world
+// band's time scale (0 fixed, 1 a sliding tape, 2 the world sliding too).
+var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide'];
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
 function view(body){var v=viewOf(body);return v==='day'&&setting('span','day')==='hour'?'hour':v;}
 function watchSettings(){
@@ -89,7 +91,8 @@ function watchSettings(){
   i32(sat?Number(body.slice(4)):0);
   bytes.push((entry&&entry.symbol==='station'?1:0)|(sat?VIEWS.indexOf(view(body)):0)<<1);
   var code=entry?entry.code:'';for(var k=0;k<3;k++)bytes.push(k<code.length?code.charCodeAt(k):0);
-  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0);
+  var tape=TAPES.indexOf(setting('tape','fixed'));
+  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -199,7 +202,7 @@ Pebble.addEventListener('showConfiguration',function(){
   function open(position){
     if(opened)return;opened=true;
     var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),
-      margin:setting('margin','utc'),span:setting('span','day'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
+      margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       bodies:BODIES.slice(2).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
@@ -219,6 +222,7 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(NUMERALS.indexOf(chosen.numerals)>=0)localStorage.setItem('numerals',chosen.numerals);
   if(chosen.margin==='utc'||chosen.margin==='body')localStorage.setItem('margin',chosen.margin);
   if(chosen.span==='day'||chosen.span==='hour')localStorage.setItem('span',chosen.span);
+  if(TAPES.indexOf(chosen.tape)>=0)localStorage.setItem('tape',chosen.tape);
   if(chosen.clock24==='1'||chosen.clock24==='0')localStorage.setItem('clock24',chosen.clock24);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
   // The watch draws again in the new settings, with home's rise and set

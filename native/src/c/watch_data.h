@@ -22,6 +22,8 @@ typedef struct {
   // The callout's figures (ENR_COLON ... ENR_ACCENT), and the margin's time
   // in the nautical zone under the body rather than Zulu.
   uint8_t numerals,zone_body;
+  // The world band's time scale: 0 fixed, 1 a sliding tape, 2 the world too.
+  uint8_t tape;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);

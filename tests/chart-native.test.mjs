@@ -56,6 +56,10 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
     const options=[{},{readout:'callout',numerals:'colon'},{readout:'callout',numerals:'mono',margin:'body'},{readout:'callout',numerals:'accent',clock24:false},
       {numerals:'plain',margin:'body'},{readout:'callout',numerals:'even'},{numerals:'mono',clock24:false}];
     cases.push(['sat:42738','2026-09-27T05:00:00Z','sectional',true,'America/New_York',{span:'hour',readout:'callout'}]);
+    // The world band with the world sliding: a scene for a minute.
+    cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{tape:'slide',minute:23}],['sat:49260','2026-10-01T09:00:00Z','enroute',false,'America/New_York',{tape:'slide',minute:47}]);
+    // The world band's sliding tape.
+    cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{tape:'tape'}],['sat:43013','2026-09-30T17:00:00Z','plotboard',false,'UTC',{tape:'tape',clock24:false}]);
     cases.forEach((c,k)=>{if(!c[5])c[5]=options[k%options.length];});
     for(const [body,iso,plate,flag,zone,more] of cases){
       const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null,o={flag,...more};

@@ -81,7 +81,7 @@ Messages, all through one queue on the phone:
 | `SatSegments`, `Passes` (phone → watch) | three days of a satellite's segments (160 bytes each, with its elements' epoch), twelve to a message; home's pass blocks for them |
 | `Status` (phone → watch) | why the phone can't give what was asked (no elements for a satellite) |
 
-Satellites' element sets are fetched from CelesTrak at most once every two hours each and used within three days of their epoch; GPS falls back to its nominal orbit. The app's settings page (`native/pkjs/config.html`, opened offline as a data URL) sets the body (the Sun, the Moon or one of seven satellites), plate, home, and the browser's clock options: 24-hour figures, the minute readout (none, the minute flag or a time callout), the callout's figures (four figures with the minutes outlined, the browser's default; the minutes in route ink; in Departure Mono; smaller without or with a colon), the margin's time (Zulu or the nautical zone under the body) and QZSS's chart (its whole day or this hour).
+Satellites' element sets are fetched from CelesTrak at most once every two hours each and used within three days of their epoch; GPS falls back to its nominal orbit. The app's settings page (`native/pkjs/config.html`, opened offline as a data URL) sets the body (the Sun, the Moon or one of seven satellites), plate, home, and the browser's clock options: 24-hour figures, the minute readout (none, the minute flag or a time callout), the callout's figures (four figures with the minutes outlined, the browser's default; the minutes in route ink; in Departure Mono; smaller without or with a colon), the margin's time (Zulu or the nautical zone under the body), QZSS's chart (its whole day or this hour) and the world band's time scale (fixed; a sliding tape; the tape with the world sliding under it, for which the watch builds the chart again each minute, at some cost in battery).
 
 ## What is verified
 
@@ -135,7 +135,7 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 
 ## Open questions and next steps
 
-1. **The other views and options:** the world band's moving tapes; events; and Rolling Fuller.
+1. **The other views and options:** events, and Rolling Fuller.
 2. **Code space.** 60 of 64 KB (the plates, stations and relief heights are a resource, `native/resources/tables.bin`, read while a chart is built), and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
 3. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the `.pbw`, are unchecked.
 4. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.

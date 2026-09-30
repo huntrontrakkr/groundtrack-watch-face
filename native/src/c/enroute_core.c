@@ -538,6 +538,52 @@ static void set_time(Ctx *c,const Glyph *g,int n,int fx,int fy){
     }
   }
 }
+// The world band's tape panel (SCALE in enroute-render.js).
+#define TAPE_B 46
+#define TAPE_P 67
+// The sliding tape: the index stands still in the middle and the tape runs
+// past it, three pixels a minute, the hour figures riding their marks (this
+// hour's pinned at the left until the next pushes it off), cut off at the
+// edges like any tape.
+static void draw_sliding_tape(Ctx *c){
+  const EnrScene *s=c->s;const int B=TAPE_B,P=TAPE_P,IX=W/2,PX=3,now=(int)(c->m-s->minutes);const uint8_t fill=s->zoned[ENR_ROUTE][0],ink=s->space_ink;
+  for(int y=0;y<P;y++)for(int x=0;x<W;x++)plot(c,x,y,s->space);
+  for(int x=0;x<W;x++){plot(c,x,P-1,ink);plot(c,x,B,ink);if(x<=IX)plot(c,x,B+1,fill);}
+  for(int m=now-(IX+PX-1)/PX-12;m<=now+(IX+PX-1)/PX+12;m++){
+    const int x=IX+(m-now)*PX,mm=((m%60)+60)%60,len=mm==0?12:mm%15==0?6:mm%5==0?4:2;
+    for(int d=1;d<=len;d++)plot(c,x,B+d,ink);
+    if(mm==0)for(int d=1;d<=6;d++)plot(c,x,B-d,ink);
+    else if(mm%15==0){char label[2]={(char)('0'+mm/10),(char)('0'+mm%10)};const int lw=text_width(label,2),n=text_pixels(label,2,x-lw/2+1,B+17,scratch);for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,ink);}
+  }
+  if(!s->fig_bits)return;
+  int hn=0,nn=0;while(hn<3&&s->tape_hour[hn])hn++;
+  while(nn<3&&s->tape_next[nn])nn++;
+  const int cw=run_width(s,s->tape_hour,hn,2),nw=run_width(s,s->tape_next,nn,2);
+  const int nx=js_round(IX+(60-now)*PX-nw/(enr_real)2);int cx=js_round(IX+(0-now)*PX-cw/(enr_real)2);cx=cx>4?cx:4;cx=cx<nx-cw-8?cx:nx-cw-8;
+  Glyph g[6];const int n=figure_run(s,s->tape_hour,hn,2,cx,4,G_SOLID,g),k=figure_run(s,s->tape_next,nn,2,nx,4,G_HOLLOW,g+n);
+  for(int i=0;i<n+k;i++){
+    int x0,y0,w,h;glyph_box(s,&g[i],&x0,&y0,&w,&h);
+    for(int gy=y0;gy<y0+h;gy++)for(int gx=x0;gx<x0+w;gx++){
+      const int x=g[i].x+gx,y=g[i].y+gy;
+      if(x<0||x>=W||!glyph_bit(s,&g[i],gx,gy))continue;
+      // The next hour outlined: its edge on the tape (off the tape is not
+      // the figure's).
+      #define ON(a,b) ((a)>=0&&(a)<W&&solid_at(s,g+n,k,G_HOLLOW,a,b))
+      if(g[i].group==G_HOLLOW&&ON(x+1,y)&&ON(x-1,y)&&ON(x,y+1)&&ON(x,y-1))continue;
+      #undef ON
+      plot(c,x,y,ink);
+    }
+  }
+  for(int y=0;y<P-1;y++)plot(c,IX,y,fill);
+  for(int kk=0;kk<6;kk++)for(int d=-kk;d<=kk;d++)plot(c,IX+d,B-7+kk,s->space);
+  for(int kk=0;kk<5;kk++)for(int d=-kk;d<=kk;d++)plot(c,IX+d,B-6+kk,ink);
+  // With the world sliding, the index line on down through the map to the
+  // body, under what is drawn after it (home, the margins).
+  if(s->flags&ENR_SLIDING_WORLD){
+    const int top=s->height_baseline+6,my=js_round(c->m->my);
+    for(int y=top;y<my-8;y++)if(((y-top)>>1)%2==0&&(class_at(c,IX,y)>>4)<L_LATE_CLEARED)plot(c,IX,y,s->zoned[ENR_ROUTE][zone_at(c,IX,y)]);
+  }
+}
 // The time callout (renderEnroute's callout()): on the whole-day chart set
 // aside in open map at the left, level with the body, with its shoulder
 // under it; on the hour chart hung under the body on whichever side keeps
@@ -598,8 +644,8 @@ static void draw_moving(Ctx *c,int part){
     draw_callout(c);
     if(!part){Ctx box=*c;box.measure=true;box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_callout(&box);draw_late(c,box.box,true);}
   }
-  if(world&&(!part||part==PART_INDEX))draw_index(c);
-  if(world&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
+  if(world&&(!part||part==PART_INDEX)){if(s->flags&ENR_SLIDING_TAPE)draw_sliding_tape(c);else draw_index(c);}
+  if(world&&!(s->flags&ENR_SLIDING_TAPE)&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
   if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
   if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
   if(world&&(!part||part==PART_HEIGHT))draw_text(c,m->height,sizeof m->height,0,s->height_right,s->height_baseline);

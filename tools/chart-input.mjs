@@ -10,7 +10,7 @@ import {catalogEntry,viewOf} from '../src/satellites.js';
 // Options as buildScene's: readout ('flag', 'callout' or off; flag: true is
 // 'flag'), numerals, margin ('utc' or 'body'), span ('day' or 'hour'),
 // clock24.
-export function chartInput({body,start,plate,flag,readout=flag?'flag':false,numerals='even',margin='utc',span='day',clock24=true,zone,home}){
+export function chartInput({body,start,plate,flag,readout=flag?'flag':false,numerals='even',margin='utc',span='day',tape='fixed',minute=0,clock24=true,zone,home}){
   const d=localDate(start,zone),[rise,set]=home&&!body.startsWith('sat:')?riseText(body,home,start,zone):['',''],days=new Set();
   for(let t=start-2400e3;t<=start+6000e3;t+=60e3)days.add(Math.floor(t/86400000));
   // A satellite: its segments over the track, and the pass blocks the hour
@@ -25,7 +25,7 @@ export function chartInput({body,start,plate,flag,readout=flag?'flag':false,nume
   const entry=catalogEntry(body),world=viewOf(body)==='world',readoutCode=readout==='flag'?1:readout==='callout'?2:0;
   const dayLines=day?[`daystart ${day.start/1000}`,`dayend ${day.end/1000}`,`dayhours ${Array.from({length:27},(_,k)=>Number(clockParts(day.start+k*3600e3,zone).h)).join(' ')}`]:[];
   return [`body ${body==='moon'?1:sat?(entry?.symbol==='station'?3:2):0}`,`view ${world?1:dayView?2:0}`,...(entry?[`code ${entry.code}`]:[]),...dayLines,`plate ${Object.keys(PLATES).indexOf(plate)}`,`flag ${readoutCode===1?1:0}`,`readout ${readoutCode}`,
-    `numerals ${['colon','plain','even','mono','accent'].indexOf(numerals)}`,`zonebody ${margin==='body'?1:0}`,`clock24 ${clock24?1:0}`,`start ${start/1000}`,
+    `numerals ${['colon','plain','even','mono','accent'].indexOf(numerals)}`,`zonebody ${margin==='body'?1:0}`,`tape ${['fixed','tape','slide'].indexOf(tape)}`,`minute ${minute}`,`clock24 ${clock24?1:0}`,`start ${start/1000}`,
     `hour ${Number(clockParts(start,zone).h)}`,`day ${d.day}`,`month ${d.month}`,`year ${d.year}`,`yday ${d.dayOfYear}`,`home ${home?1:0}`,
     ...(home?[`lat ${home.lat}`,`lon ${home.lon}`,`rise ${rise}`,`set ${set}`]:[]),
     ...[...days].map(day=>`segment ${Buffer.from(encodeSegment(segmentFor(day*86400000))).toString('hex')}`),
