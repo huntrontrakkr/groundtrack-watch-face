@@ -7,6 +7,7 @@
 #include "face.h"
 #include "departure_font.h"
 #include "generated/chart_data.h"
+#include "fuller.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,13 +35,19 @@ const char *chart_failure(void){static char text[24];char *p=text;memcpy(p,"char
 // satellite the world band, between WORLD_NORTH and WORLD_SOUTH.
 #define WORLD_NORTH 72
 #define WORLD_SOUTH (-60)
-typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world,day;double nx,ny;int top,bottom;} Cam;
+// wide: a whole-orbit or whole-day view (fewer contours, a one-ink plate's
+// waterlines left out); on a rolling Fuller sheet every satellite's.
+typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world,day,wide;double nx,ny;int top,bottom;} Cam;
+// The rolling Fuller sheet being built, if it is one: projection goes
+// through it (roll.js project()).
+static const FullerCam *s_roll;
 static double sx(const Cam *c,double lon){return c->x0+(lon-c->lonMid)*c->k*c->scale;}
 static double sy(const Cam *c,double lat){return c->y0-(lat-c->lat0)*c->scale;}
 static double glat(const Cam *c,double y){return c->lat0+(c->y0-y)/c->scale;}
 static double glon(const Cam *c,double x){return c->lonMid+(x-c->x0)/(c->k*c->scale);}
 // project(): the copy of a longitude nearest the middle of the view.
 static void project(const Cam *c,double lat,double lon,double *x,double *y){
+  if(FACE_ROLL&&s_roll){fuller_project(s_roll,lat,lon,x,y);return;}
   static const double turns[3]={-360,0,360};double best=0;bool have=false;
   for(int t=0;t<3;t++){const double q=sx(c,lon+turns[t]);if(!have||fabs(q-c->x0)<fabs(best-c->x0)){best=q;have=true;}}
   *x=best;*y=sy(c,lat);
@@ -63,13 +70,19 @@ static double reach(double altitude,double mask){const double m=mask*RAD;return 
 // the band and the frame; returns how many, as x, y bytes.
 // Bearings' sines and cosines, every `step` degrees.
 static void bearings(int step,double *sb,double *cb){for(int k=0,bearing=0;bearing<360;bearing+=step,k++){const double b=bearing*RAD;sb[k]=f_sin(b);cb[k]=f_cos(b);}}
+static int circle_pixels_on(const Cam *cam,double lat,double lon,double distance,int step,const double *sb,const double *cb,uint8_t *out,bool net);
 static int circle_pixels(const Cam *cam,double lat,double lon,double distance,int step,const double *sb,const double *cb,uint8_t *out){
+  return circle_pixels_on(cam,lat,lon,distance,step,sb,cb,out,false);
+}
+// The same, leaving out points off a Fuller sheet's net (homeCircle()).
+static int circle_pixels_on(const Cam *cam,double lat,double lon,double distance,int step,const double *sb,const double *cb,uint8_t *out,bool net){
   double qx,qy;project(cam,lat,lon,&qx,&qy);const double x=js_round(qx);
   const double p=lat*RAD,d=distance*RAD,sp=f_sin(p),cp=f_cos(p),sd=f_sin(d),cd=f_cos(d);int n=0;
   for(int k=0,bearing=0;bearing<360;bearing+=step,k++){
     double glat_,glon_,cx,cy;
     destination(lat,lon,sp,cp,sd,cd,sb[k],cb[k],&glat_,&glon_);project(cam,glat_,glon_,&cx,&cy);
     if(!(fabs(cx-x)<W/2&&in_band(cam,cy)))continue;
+    if(FACE_ROLL&&net&&s_roll&&fuller_locate(s_roll,cx,cy,NULL)<0)continue;
     const double px=js_round(cx),py=js_round(cy);
     if(px>=0&&py>=0&&px<W&&py<H){out[2*n]=(uint8_t)px;out[2*n+1]=(uint8_t)py;n++;}
   }
@@ -181,12 +194,14 @@ static void smooth_finish(Smooth *s){
 #define RUN_ARENA 16384
 #define RUN_CHUNK 2048
 typedef struct RunChunk {struct RunChunk *next;uint16_t used;uint8_t data[RUN_CHUNK];} RunChunk;
-typedef struct {uint8_t *arena;RunChunk *head,*tail;void *(*alloc)(size_t);uint16_t row_offset[H+1];unsigned n;bool failed;} RunSink;
+// cap: the arena's room for runs (a Fuller build keeps its track at the end).
+typedef struct {uint8_t *arena;RunChunk *head,*tail;void *(*alloc)(size_t);uint16_t row_offset[H+1];unsigned n,cap;bool failed;} RunSink;
 static int row_runs(const uint8_t *row,uint8_t *out);
 static void sink_row(RunSink *k,int y,const uint8_t *row){
   uint8_t runs[2*W];const int n=row_runs(row,runs);
   int at=0;
-  if(k->arena&&k->n<RUN_ARENA){at=n<(int)(RUN_ARENA-k->n)?n:(int)(RUN_ARENA-k->n);memcpy(k->arena+k->n,runs,at);}
+  const unsigned cap=k->cap?k->cap:RUN_ARENA;
+  if(k->arena&&k->n<cap){at=n<(int)(cap-k->n)?n:(int)(cap-k->n);memcpy(k->arena+k->n,runs,at);}
   for(;at<n&&!k->failed;){
     if(!k->tail||k->tail->used==RUN_CHUNK){
       RunChunk *c=k->alloc(sizeof(RunChunk));if(!c){k->failed=true;return;}
@@ -201,6 +216,7 @@ typedef struct {
   const Cam *cam;const Plate *pal;RunSink *sink;uint8_t crow[W];
   Smooth s1,s2,s3;
   uint8_t land[LAND_RING][W/8+1];int land_rows; // land bits of pixel rows computed
+  uint8_t space[LAND_RING][W/8+1];            // a Fuller sheet's pixels off its net
   float e3[E3_RING][W];int e3_rows;           // smoothed relief rows emitted
   float row[W];                               // the sampled row, then each stage's output
   int done;                                   // rows finalised
@@ -250,11 +266,12 @@ static void finalise_row(Ground *g,int y){
   const Plate *pal=g->pal;
   // At world scale coasts crowd together: a one-ink plate keeps its
   // waterlines and shelf edge for the zoomed charts.
-  const bool sparse=(pal->flags&PLATE_MONO)&&(g->cam->world||g->cam->day);
-  const int *const levels=g->cam->day?WIDE_CONTOURS:CHART_CONTOURS,nlevels=g->cam->day?2:6;
+  const bool sparse=(pal->flags&PLATE_MONO)&&(g->cam->world||g->cam->wide);
+  const int *const levels=g->cam->wide?WIDE_CONTOURS:CHART_CONTOURS,nlevels=g->cam->wide?2:6;
   #define level_of(v) level_of_in(v,levels,nlevels)
   if(y<g->cam->top||y>g->cam->bottom){memset(g->crow,G_SPACE,W);sink_row(g->sink,y,g->crow);return;}
   for(int x=0;x<W;x++){
+    if((g->space[y%LAND_RING][x>>3]>>(x&7))&1){g->crow[x]=G_SPACE;continue;}
     const int i=y*W+x,m=material(g,x,y);const bool land=m==M_LAND;
     const double relief=(double)g->e3[y%E3_RING][x];
     int overlay=0;
@@ -283,6 +300,8 @@ static void ground_begin(Ground *g,const Cam *cam,const Plate *pal,RunSink *sink
   g->s1.emit=emit1;g->s1.ctx=g;g->s2.emit=emit2;g->s2.ctx=g;g->s3.emit=emit3;g->s3.ctx=g;
   g->s1.out=g->s2.out=g->s3.out=g->row;
 }
+static bool ground_row_done(Ground *g);
+static int ground_rows_end(Ground *g);
 // Up to `budget` pixel rows of the ground: 1 while rows remain, 0 when the
 // ground is done, -1 if the map fails.
 static int ground_step(Ground *g,Rows *rows,int budget){
@@ -299,7 +318,7 @@ static int ground_step(Ground *g,Rows *rows,int budget){
     const bool mapped=fabs(lat)<=90&&a>=rows->pack->first&&b+1<rows->pack->first+rows->pack->rows;
     if(band&&!mapped)return -1;
     if(mapped&&!need_rows(rows,a,b+1))return -1;
-    float *e0=g->row;uint8_t *land=g->land[y%LAND_RING];memset(land,0,W/8+1);
+    float *e0=g->row;uint8_t *land=g->land[y%LAND_RING];memset(land,0,W/8+1);memset(g->space[y%LAND_RING],0,W/8+1);
     for(int x=0;x<W;x++){
       if(band){
         double c=0;for(int s=0;s<4;s++)c+=coverage(rows,glat(cam,y+SAMPLES[s][1]),glon(cam,x+SAMPLES[s][0]));
@@ -307,11 +326,19 @@ static int ground_step(Ground *g,Rows *rows,int budget){
       }
       e0[x]=(float)(mapped?relief_at(rows,lat,glon(cam,x+.5)):0);
     }
-    g->land_rows=y+1;
-    smooth_push(&g->s1,e0);
-    while(g->done<H&&g->done+6<g->land_rows&&(g->done+1<g->e3_rows||g->e3_rows==H))finalise_row(g,g->done++);
-    if(g->sink->failed)return -1;
+    if(!ground_row_done(g))return -1;
   }
+  return ground_rows_end(g);
+}
+// A pixel row sampled (its land bits and space bits in the rings, its relief
+// in g->row): smoothed, and the rows now ready finalised.
+static bool ground_row_done(Ground *g){
+  g->land_rows++;
+  smooth_push(&g->s1,g->row);
+  while(g->done<H&&g->done+6<g->land_rows&&(g->done+1<g->e3_rows||g->e3_rows==H))finalise_row(g,g->done++);
+  return !g->sink->failed;
+}
+static int ground_rows_end(Ground *g){
   if(g->land_rows<H)return 1;
   smooth_finish(&g->s1);smooth_finish(&g->s2);smooth_finish(&g->s3);
   while(g->done<H)finalise_row(g,g->done++);
@@ -365,11 +392,13 @@ static void segment(Canvas *cv,double ax,double ay,double bx,double by,PixelFn f
   const int dx=abs(xx-x),sx_=x<xx?1:-1,dy=-abs(yy-y),sy_=y<yy?1:-1;int err=dx+dy;
   for(int n=0;n<4000;n++){fn(cv,x,y,arg);if(x==xx&&y==yy)break;const int e=2*err;if(e>=dy){err+=dy;x+=sx_;}if(e<=dx){err+=dx;y+=sy_;}}
 }
-static void casing_pixel(Canvas *cv,int x,int y,void *arg){for(int dy=-2;dy<=2;dy++)for(int dx=-1;dx<=1;dx++)clear(cv,x+dx,y+dy);}
+static void casing_pixel(Canvas *cv,int x,int y,void *arg){const int c=*(bool *)arg?2:1;for(int dy=-c-1;dy<=c+1;dy++)for(int dx=-c;dx<=c;dx++)clear(cv,x+dx,y+dy);}
+// arg: 1 within the hour, 2 heavy, 4 steep.
 static void route_pixel(Canvas *cv,int x,int y,void *arg){
-  const bool hour=*(bool *)arg;
-  if(!hour){if(((x+y)>>1)%2==0)plot(cv,x,y,L_ROUTE);return;}
+  const uint8_t how=*(uint8_t *)arg;
+  if(!(how&1)){if(((x+y)>>1)%2==0)plot(cv,x,y,L_ROUTE);return;}
   plot(cv,x,y,L_ROUTE);
+  if(how&2)plot(cv,how&4?x+1:x,how&4?y:y-1,L_ROUTE);
 }
 // The figures: Jost digits, bottom-aligned on a shared baseline.
 static const FigureGlyph *figure(int size,char c){for(int s=0;s<5;s++)if(FIGURE_SIZES[s]==size)return &FIGURE_GLYPHS[s*10+(c-'0')];return 0;}
@@ -472,6 +501,49 @@ static uint8_t *load_figures(const ChartSources *src,int size,int *base,uint8_t 
   *base=from;return room;
 }
 
+// ---------------------------------------------------------------- Fuller ground
+// fuller-ground.js on the watch: a rolling Fuller sheet's pixels read from
+// its faces' grids (fuller.bin), through a small cache of the grid's rows.
+#define GRID_N ENR_FULLER_N
+#define GRID_POINTS ENR_GRID_POINTS
+#define GRID_INDEX(a,b) ((a)*(GRID_N+1)-(a)*((a)-1)/2+(b))
+#define GRID_SLOTS 64
+#define LAND_SLOTS 16
+#define TILE_RUNS 6144
+typedef struct {int16_t face,a;uint32_t used;uint8_t cover[GRID_N+1],code[GRID_N+1];} GridRow;
+typedef struct {
+  MapReadFn read;void *source;uint32_t tick;
+  GridRow rows[GRID_SLOTS];
+  // Zoomed in: land.bin's rows, and the grid's directions (i16 x 3 each).
+  MapReadFn land;void *land_source;int16_t land_row[LAND_SLOTS];uint32_t land_used[LAND_SLOTS];uint8_t land_bits[LAND_SLOTS][180];
+} GridCache;
+static const GridRow *grid_row(GridCache *c,int face,int a){
+  c->tick++;int slot=0;
+  for(int i=0;i<GRID_SLOTS;i++){if(c->rows[i].face==face&&c->rows[i].a==a){c->rows[i].used=c->tick;return &c->rows[i];}if(c->rows[i].used<c->rows[slot].used)slot=i;}
+  GridRow *r=&c->rows[slot];const uint32_t n=(uint32_t)(GRID_N+1-a),at=(uint32_t)(FULLER_HEADER+GRID_POINTS*6+face*GRID_POINTS+GRID_INDEX(a,0));
+  if(c->read(c->source,at,r->cover,n)!=n||c->read(c->source,at+20*GRID_POINTS,r->code,n)!=n)return NULL;
+  r->face=(int16_t)face;r->a=(int16_t)a;r->used=c->tick;return r;
+}
+static int land_bit(GridCache *c,int x,int y){
+  x=((x%1440)+1440)%1440;y=y<0?0:y>719?719:y;
+  c->tick++;int slot=0;
+  for(int i=0;i<LAND_SLOTS;i++){if(c->land_row[i]==y){c->land_used[i]=c->tick;return (c->land_bits[i][x>>3]>>(x&7))&1;}if(c->land_used[i]<c->land_used[slot])slot=i;}
+  if(c->land(c->land_source,(uint32_t)y*180,c->land_bits[slot],180)!=180)return -1;
+  c->land_row[slot]=(int16_t)y;c->land_used[slot]=c->tick;return (c->land_bits[slot][x>>3]>>(x&7))&1;
+}
+// gridCell(): the three grid points round a fixed-point place, as (a, b)
+// and weights out of 256.
+typedef struct {int a[3],b[3],w[3];} GridCell;
+static int64_t floor_div256(int64_t v){return v>=0?v/256:-((-v+255)/256);}
+static void grid_cell(const int32_t *q,int64_t qx,int64_t qy,GridCell *c){
+  int64_t a=floor_div256(q[0]+q[1]*qx+q[2]*qy),b=floor_div256(q[3]+q[4]*qx+q[5]*qy);
+  a=a<0?0:a>GRID_N*256?GRID_N*256:a;b=b<0?0:b>GRID_N*256-a?GRID_N*256-a:b;
+  const int ia=(int)(a/256),ib=(int)(b/256),fa=(int)(a-ia*256),fb=(int)(b-ib*256);
+  if(ia+ib>=GRID_N){*c=(GridCell){{ia,0,0},{ib,0,0},{256,0,0}};return;}
+  if(fa+fb<=256){*c=(GridCell){{ia,ia+1,ia},{ib,ib,ib+1},{256-fa-fb,fa,fb}};return;}
+  *c=(GridCell){{ia+1,ia,ia+1},{ib+1,ib+1,ib},{fa+fb-256,256-fa,256-fb}};
+}
+
 // ---------------------------------------------------------------- the hour
 // A build in progress: the track and camera, then the ground a slice of
 // rows at a time, then the drawing and the scene.
@@ -482,6 +554,12 @@ struct ChartBuild {
   // Then the scene, its minutes made a few at a time, with home's circle's
   // bearings.
   EnrScene *out;bool forward;int minute;double *sb,*cb;
+  // A rolling Fuller sheet: the pack's constants, the camera, the track on
+  // the screen (kept from the camera to the drawing), each tile's grid
+  // place, the grids' cache, the tiles' row runs as the ground finds them,
+  // and (zoomed in, or for the scene) the grid's directions.
+  FullerConst *fg;FullerCam *fc;double *fx,*fy;int32_t tgrid[FULLER_TILES][6];bool fine;
+  GridCache *gc;int16_t *dirs;
 };
 static void sink_free(ChartBuild *b){
   for(RunChunk *c=b->sink.head;c;){RunChunk *next=c->next;b->src.release(c);c=next;}
@@ -514,11 +592,114 @@ static void ground_free(ChartBuild *b){
   src->release(b->rows);b->rows=NULL;src->release(b->ground);b->ground=NULL;src->release(b->map_work);b->map_work=NULL;
   if(b->pack.cum)map_pack_close(&b->pack,src->release);
 }
+static void fuller_free(ChartBuild *b){
+  const ChartSources *src=&b->src;
+  src->release(b->fg);b->fg=NULL;src->release(b->fc);b->fc=NULL;b->fx=b->fy=NULL;
+  src->release(b->gc);b->gc=NULL;src->release(b->dirs);b->dirs=NULL;
+  s_roll=NULL;
+}
 void chart_abort(ChartBuild *b){
   if(!b)return;
+  fuller_free(b);
   if(b->out){enr_free(b->out,b->src.release);b->src.release(b->out);b->out=NULL;}
   b->src.release(b->sb);b->sb=NULL;
   ground_free(b);sink_free(b);b->src.release(b->classes);b->src.release(b->track);b->src.release(b);
+}
+// rollCamera() and the Fuller ground's setup. A satellite's hour sheet
+// samples its track every 15 seconds from ten minutes before the hour to ten
+// after; a day sheet, the local day every five minutes.
+static bool fuller_begin(ChartBuild *b){
+  const ChartInput *in=&b->in;const ChartSources *src=&b->src;
+  void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
+  const bool day=in->view==2,sat=in->body>=2;
+  const int step=day?300:sat?15:60,lead=(sat?10:40)*60;
+  const int64_t from=day?in->day_start:in->start-lead,to=day?in->day_end:in->start+3600+lead;
+  const int count=(int)((to-from)/step)+1;
+  if(count<2||count>CHART_TRACK_MAX||(in->start-from)%step||(in->start+3600-from)%step)return false;
+  const int i0=(int)((in->start-from)/step),i1=(int)((in->start+3600-from)/step);if(i1>=count)return false;
+  // The track on the screen waits at the end of the runs' arena, where the
+  // drawing finds it.
+  b->fg=alloc(sizeof(FullerConst));b->fc=alloc(sizeof(FullerCam));
+  b->sink.cap=(unsigned)((RUN_ARENA-2*sizeof(double)*(size_t)count)&~(size_t)7);b->fx=(double *)(b->sink.arena+b->sink.cap);b->fy=b->fx+count;
+  double (*dirs)[3]=alloc(sizeof(double)*3*count);FullerCell *cells=alloc(sizeof(FullerCell)*FULLER_CELLS);
+  bool rolled=b->fg&&b->fc&&dirs&&cells&&src->grids&&fuller_const_read(src->grids,src->grid_source,b->fg);
+  for(int i=0;rolled&&i<count;i++){double lat,lon;if(!body_position(src,in->body,from+(int64_t)i*step,&lat,&lon))rolled=false;else fuller_direction(lat,lon,dirs[i]);}
+  rolled=rolled&&fuller_roll(b->fc,cells,b->fg,(const double (*)[3])dirs,count,i0,i1,day,day?192:180,b->fx,b->fy);
+  release(cells);release(dirs);if(!rolled)return false;
+  s_roll=b->fc;
+  b->count=count;b->h0=i0;b->h1=i1;b->step=step;b->t0=(int)(from-in->start);
+  Cam cam;memset(&cam,0,sizeof cam);cam.top=0;cam.bottom=H;cam.day=day;cam.wide=sat||day;b->cam=cam;
+  for(int t=0;t<b->fc->tile_count;t++)fuller_tile_grid(b->fc,t,GRID_N,b->tgrid[t]);
+  // The ground: its caches and rings.
+  b->fine=b->fc->scale>150;
+  b->gc=alloc(sizeof(GridCache));b->ground=alloc(sizeof(Ground));b->sink.alloc=alloc;
+  if(!b->gc||!b->ground)return false;
+  memset(b->gc,0,sizeof *b->gc);b->gc->read=src->grids;b->gc->source=src->grid_source;
+  for(int i=0;i<GRID_SLOTS;i++){b->gc->rows[i].face=-1;b->gc->rows[i].a=-1;}
+  if(b->fine){
+    if(!src->land)return false;
+    b->gc->land=src->land;b->gc->land_source=src->land_source;for(int i=0;i<LAND_SLOTS;i++)b->gc->land_row[i]=-1;
+    b->dirs=alloc(sizeof(int16_t)*3*GRID_POINTS);if(!b->dirs)return false;
+    uint8_t *d=(uint8_t *)b->dirs;if(src->grids(src->grid_source,FULLER_HEADER,d,6*GRID_POINTS)!=6*GRID_POINTS)return false;
+    for(int k=0;k<3*GRID_POINTS;k++)b->dirs[k]=(int16_t)(d[2*k]|d[2*k+1]<<8);
+  }
+  {uint8_t m[1024];if(src->tables(src->table_source,TABLE_METERS_AT,m,1024)!=1024)return false;b->rows=alloc(sizeof(Rows));if(!b->rows)return false;memset(b->rows,0,sizeof *b->rows);memcpy(b->rows->meters,m,1024);}
+  ground_begin(b->ground,&b->cam,&b->plate,&b->sink);
+
+  return true;
+}
+// A grid direction at a quarter-pixel place on a tile, in the face's frame.
+static void grid_direction(const ChartBuild *b,int t,int64_t qx,int64_t qy,int32_t out[3]){
+  GridCell c;grid_cell(b->tgrid[t],qx,qy,&c);
+  for(int k=0;k<3;k++){
+    int32_t s=0;for(int j=0;j<3;j++)s+=b->dirs[GRID_INDEX(c.a[j],c.b[j])*3+k]*c.w[j];
+    out[k]=s>>8;
+  }
+}
+// fuller-ground.js coverage().
+static double land_coverage(GridCache *gc,double lat,double lon,bool *ok){
+  const double u=(wrap(lon)+180)*4-.5,v=(90-lat)*4-.5,i=floor(u),j=floor(v),fu=u-i,fv=v-j;
+  const int b00=land_bit(gc,(int)i,(int)j),b10=land_bit(gc,(int)i+1,(int)j),b01=land_bit(gc,(int)i,(int)j+1),b11=land_bit(gc,(int)i+1,(int)j+1);
+  if(b00<0||b10<0||b01<0||b11<0)*ok=false;
+  return ((double)b00*(1-fu)+(double)b10*fu)*(1-fv)+((double)b01*(1-fu)+(double)b11*fu)*fv;
+}
+// Up to `budget` rows of a Fuller sheet's ground (as ground_step).
+static int fuller_ground_step(ChartBuild *b,int budget){
+  Ground *g=b->ground;GridCache *gc=b->gc;const FullerCam *fc=b->fc;const float *meters=b->rows->meters;
+  static const int SUB[4][2]={{1,1},{3,1},{1,3},{3,3}};
+  for(;budget>0&&g->land_rows<H;budget--){
+    const int y=g->land_rows;
+    float *e0=g->row;uint8_t *land=g->land[y%LAND_RING],*space=g->space[y%LAND_RING];memset(land,0,W/8+1);memset(space,0,W/8+1);
+    for(int x=0;x<W;x++){
+      const int t=fuller_locate(fc,x+.5,y+.5,NULL);
+      if(t<0){space[x>>3]|=(uint8_t)(1<<(x&7));e0[x]=0;continue;}
+      const int face=fc->tiles[t].face;
+      GridCell c;grid_cell(b->tgrid[t],4*x+2,4*y+2,&c);
+      int cover=0;double relief=0;
+      for(int j=0;j<3;j++){
+        const GridRow *r=grid_row(gc,face,c.a[j]);if(!r)return -1;
+        cover+=r->cover[c.b[j]]*c.w[j];relief+=(double)meters[r->code[c.b[j]]]*c.w[j];
+      }
+      e0[x]=(float)(relief/256);
+      bool is_land;
+      if(b->fine){
+        // land.bin at four points in the pixel.
+        double sum=0;bool ok=true;
+        for(int k=0;k<4;k++){
+          const int u=fuller_locate(fc,x+SUB[k][0]/4.0,y+SUB[k][1]/4.0,NULL);if(u<0)continue;
+          int32_t d[3];grid_direction(b,u,4*x+SUB[k][0],4*y+SUB[k][1],d);
+          const double *bs=b->fg->bases[fc->tiles[u].face];
+          const double g0=d[0]*bs[0]+d[1]*bs[3]+d[2]*bs[6],g1=d[0]*bs[1]+d[1]*bs[4]+d[2]*bs[7],g2=d[0]*bs[2]+d[1]*bs[5]+d[2]*bs[8],len=f_sqrt(g0*g0+g1*g1+g2*g2);
+          sum+=land_coverage(gc,f_asin(g2/len)/RAD,f_atan2(g1,g0)/RAD,&ok);
+        }
+        if(!ok)return -1;
+        is_land=sum>=2;
+      }else is_land=cover>=32640;
+      if(is_land)land[x>>3]|=(uint8_t)(1<<(x&7));
+    }
+    if(!ground_row_done(g))return -1;
+  }
+  return ground_rows_end(g);
 }
 ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   ChartBuild *b=src_->alloc(sizeof(ChartBuild));if(!b)return NULL;
@@ -528,6 +709,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   if(in->plate<0||in->plate>=TABLE_PLATES||!read_plate(src,in->plate,&b->plate))FAIL;
   const Plate *pal=&b->plate;
+  if(FACE_ROLL&&in->fuller){if(!fuller_begin(b))FAIL;return b;}
   // chartCamera(). The track is kept only while the camera is set, and made
   // again for the drawing: the ground needs the memory.
   TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*((track_to(in)-track_from(in))/track_step(in)+1));if(!track)FAIL;
@@ -547,7 +729,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     // The whole local day, north up, its shape fitted and set to the right.
     double alo=INFINITY,ahi=-INFINITY,blo=INFINITY,bhi=-INFINITY;
     for(int i=0;i<count;i++){if(track[i].a<alo)alo=track[i].a;if(track[i].a>ahi)ahi=track[i].a;if(track[i].b<blo)blo=track[i].b;if(track[i].b>bhi)bhi=track[i].b;}
-    cam.day=true;cam.lat0=(ahi+alo)/2;cam.k=f_cos(cam.lat0*RAD);cam.lonMid=(bhi+blo)/2;
+    cam.day=cam.wide=true;cam.lat0=(ahi+alo)/2;cam.k=f_cos(cam.lat0*RAD);cam.lonMid=(bhi+blo)/2;
     {const double w=(bhi-blo)*cam.k,sa=(W*.5)/(w>1?w:1),h=ahi-alo,sb=(H-70)/(h>1?h:1);cam.scale=sa<sb?sa:sb;}
     cam.y0=(14+H-16)/2;cam.x0=W-16-(bhi-blo)*cam.k*cam.scale/2;
     h0=0;h1=count-1;
@@ -605,8 +787,14 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1);
 #define CHART_STEP_MINUTES 6
 int chart_step(ChartBuild *b){
   if(b->ground){
-    const int r=ground_step(b->ground,b->rows,CHART_STEP_ROWS);
-    if(r<=0)ground_free(b);
+    const int r=FACE_ROLL&&b->fc?fuller_ground_step(b,CHART_STEP_ROWS):ground_step(b->ground,b->rows,CHART_STEP_ROWS);
+    if(r<=0){
+      ground_free(b);
+      if(b->gc){
+        // The grid's directions are read again for the scene.
+        b->src.release(b->gc);b->gc=NULL;b->src.release(b->dirs);b->dirs=NULL;
+      }
+    }
     return r<0?-1:1;
   }
   if(!b->out)return finish_draw(b)?1:-1;
@@ -641,7 +829,7 @@ static bool finish_draw(ChartBuild *b){
   int16_t tape_lo=0,tape_hi=0;
   // The class plane, from the ground's runs, each chunk freed once read.
   uint8_t *const classes=b->classes=alloc(W*H);if(!classes)FAIL;
-  {int x=0,y=0;const unsigned inside=b->sink.n<RUN_ARENA?b->sink.n:RUN_ARENA;
+  {int x=0,y=0;const unsigned cap=b->sink.cap?b->sink.cap:RUN_ARENA,inside=b->sink.n<cap?b->sink.n:cap;
   for(unsigned k=0;k+1<inside;k+=2){memset(classes+y*W+x,b->sink.arena[k+1],b->sink.arena[k]);x+=b->sink.arena[k];if(x>=W){x=0;y++;}}
   // The arena, read, holds the track and the drawing's lists next.
   for(RunChunk *c=b->sink.head;c;){
@@ -654,8 +842,12 @@ static bool finish_draw(ChartBuild *b){
   _Static_assert(sizeof(TrackPoint)*401+sizeof(Draw)+sizeof(Station)*TABLE_STATIONS+8<=RUN_ARENA,"the arena holds the track, the drawing and the stations");
   _Static_assert(sizeof(TrackPoint)*401+sizeof(EnrPoint)*401+8<=RUN_ARENA,"the arena holds the track and the points");
   TrackPoint *const track=(TrackPoint *)b->sink.arena;
+  const bool rolled=FACE_ROLL&&b->fc;
+  if(rolled){for(int i=0;i<count;i++){track[i].a=b->fx[i];track[i].b=b->fy[i];}b->fx=b->fy=NULL;}
+  else{
   if(make_track(in,src,track)!=count)FAIL;
   for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
+  }
   draw=(Draw *)(b->sink.arena+((sizeof(TrackPoint)*count+7)&~7u));
   // Past the drawing's lists, the stations, then room for the figures' bitmaps.
   Station *const stations=(Station *)(draw+1);
@@ -672,6 +864,24 @@ static bool finish_draw(ChartBuild *b){
   // degree (10) along the edges of the map.
   const bool day=FACE_HOUR&&cam.day;
   const int step=world?30:day?10:5,minor=world?10:day?5:1;
+  if(rolled){
+    // Rolling Fuller: the net's outline in ink, folds inside it dotted.
+    const FullerCam *fc=b->fc;
+    for(int t=0;t<fc->tile_count;t++)for(int e=0;e<3;e++){
+      static const int E[3][2]={{0,1},{1,2},{2,0}};
+      double ax,ay,bx,by;fuller_to_screen(fc,fc->tiles[t].tri[E[e][0]],&ax,&ay);fuller_to_screen(fc,fc->tiles[t].tri[E[e][1]],&bx,&by);
+      int x=(int)js_round(ax),y=(int)js_round(ay);const int xx=(int)js_round(bx),yy=(int)js_round(by);
+      const int dx=abs(xx-x),sx_=x<xx?1:-1,dy=-abs(yy-y),sy_=y<yy?1:-1;int err=dx+dy,n=0;
+      for(int k=0;k<4000;k++){
+        if(fc->tiles[t].edge[e]==2)plot(&cv,x,y,L_SPACE_INK);
+        else if(fc->tiles[t].edge[e]==1||(n++%4==0))plot(&cv,x,y,L_GRID);
+        if(x==xx&&y==yy)break;
+        const int e2=2*err;
+        if(e2>=dy){err+=dy;x+=sx_;}
+        if(e2<=dx){err+=dx;y+=sy_;}
+      }
+    }
+  }else
   {const double g0lat=glat(&cam,bottom),g0lon=glon(&cam,0),g1lat=glat(&cam,top),g1lon=glon(&cam,W);
   for(double lat=ceil(g0lat/step)*step;lat<=g1lat;lat+=step)for(double lon=ceil(g0lon/step)*step;lon<=g1lon;lon+=step){
     const double x=js_round(sx(&cam,lon)),y=js_round(sy(&cam,lat));if(!(y>=top&&y<=bottom))continue;
@@ -697,7 +907,7 @@ static bool finish_draw(ChartBuild *b){
   if(in->home){
     double qx,qy;project(&cam,in->home_lat,in->home_lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
-    if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!overlaps(taken,taken_n,box)){
+    if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!(rolled&&fuller_locate(b->fc,x,y,NULL)<0)&&!overlaps(taken,taken_n,box)){
       home_code_n=text_pixels("HOM",right?x+7:x-7-w,y+4,home_code);taken[taken_n++]=box;home_mark=true;hx=x;hy=y;home_box=box;
       AVOID(bounds_of(home_code,home_code_n));
     }
@@ -707,30 +917,47 @@ static bool finish_draw(ChartBuild *b){
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
   int16_t shown[32][2];int nshown=0;
-  if(world)bearings(5,draw->sb,draw->cb);
+  const bool ringed=world||(rolled&&cam.wide);
+  if(ringed)bearings(5,draw->sb,draw->cb);
+  const double heard_at=f_cos(acquisition*RAD);
   for(unsigned s=0;s<(day?0:TABLE_STATIONS);s++){
+    // On a whole-orbit Fuller sheet, only the stations that hear the
+    // satellite this hour.
+    if(rolled&&cam.wide){
+      double sd[3];fuller_direction(stations[s].lat,stations[s].lon,sd);bool heard=false;
+      for(int i=0;i<count&&!heard;i++){
+        if(!HOUR_OF(b,i))continue;
+        double lat,lon,d[3];if(!body_position(src,in->body,in->start+T_OF(b,i),&lat,&lon))FAIL;fuller_direction(lat,lon,d);
+        if(d[0]*sd[0]+d[1]*sd[1]+d[2]*sd[2]>=heard_at)heard=true;
+      }
+      if(!heard)continue;
+    }
     double qx,qy;project(&cam,stations[s].lat,stations[s].lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
     const int w=text_width(stations[s].code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
     if(overlaps(taken,taken_n,box))continue;
     if(taken_n<64)taken[taken_n++]=box;
     if(nshown<32){shown[nshown][0]=(int16_t)x;shown[nshown][1]=(int16_t)y;nshown++;}
-    if(world){const int n=circle_pixels(&cam,stations[s].lat,stations[s].lon,acquisition,5,draw->sb,draw->cb,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
+    if(ringed){const int n=circle_pixels(&cam,stations[s].lat,stations[s].lon,acquisition,5,draw->sb,draw->cb,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++){const int r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(&cv,x+dx,y+dy,L_INK);}
     plot(&cv,x,y,L_INK);
     const int n=text_pixels(stations[s].code,right?x+5:x-5-w,y+4,scratch);AVOID(bounds_of(scratch,n));letter(&cv,scratch,n,L_INK,1);
   }
   // The route: cased in white on a one-ink plate; dashed outside the hour.
+  // On a Fuller sheet a one-ink plate's route is heavier: two pixels ahead
+  // of the body (the second the hour's), three behind.
+  bool heavy=rolled&&(pal->flags&PLATE_MONO);
   #define JUMP(p,q) (fabs(track[q].a-track[p].a)>W/2)
   if(pal->flags&PLATE_MONO)for(int i=1;i<count;i++){
     if(JUMP(i-1,i)||!(HOUR_OF(b,i-1)&&HOUR_OF(b,i)))continue;
-    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,casing_pixel,0);
+    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,casing_pixel,&heavy);
   }
   cv.early=false;cv.stage=2;
   for(int i=1;i<count;i++){
     if(JUMP(i-1,i))continue;
-    bool hour=HOUR_OF(b,i-1)&&HOUR_OF(b,i);
-    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,route_pixel,&hour);
+    const bool hour=HOUR_OF(b,i-1)&&HOUR_OF(b,i),steep=fabs(track[i].b-track[i-1].b)>fabs(track[i].a-track[i-1].a);
+    uint8_t how=(uint8_t)((hour?1:0)|(heavy?2:0)|(steep?4:0));
+    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,route_pixel,&how);
   }
   // A whole day is graduated in hours instead: a tick every hour, longer
   // and numbered every three, longest at the two midnights. Where the day's
@@ -775,9 +1002,17 @@ static bool finish_draw(ChartBuild *b){
   const int c0x=(int)js_round(track[h0].a),c0y=(int)js_round(track[h0].b),c1x=(int)js_round(track[h1].a),c1y=(int)js_round(track[h1].b);
   const bool forward=c1x>c0x;
   if(!world&&!day){const int R=16;
-  for(int a=0;a<720;a++){const double t=a*PI/360;plot(&cv,c0x+js_round(f_sin(t)*R),c0y-js_round(f_cos(t)*R),L_INK);}
-  for(int a=0;a<360;a+=30){const int len=a%90==0?5:3;for(int r=R-len;r<R;r++){const double t=a*RAD;plot(&cv,c0x+js_round(f_sin(t)*r),c0y-js_round(f_cos(t)*r),L_INK);}}
-  for(int k=0;k<3;k++)for(int d=-k;d<=k;d++){const int r=R+4-k;plot(&cv,c0x+js_round(f_sin(0)*r+f_cos(0)*d),c0y-js_round(f_cos(0)*r-f_sin(0)*d),L_INK);}}
+  // The rose turns to true north at the station: north is up on the
+  // cylindrical charts, anywhere on a rolled Fuller sheet.
+  double north=0;
+  if(rolled){
+    double lat,lon,q0x,q0y,q1x,q1y;if(!body_position(src,in->body,in->start+T_OF(b,h0),&lat,&lon))FAIL;
+    project(&cam,lat,lon,&q0x,&q0y);project(&cam,lat+.5<89.9?lat+.5:89.9,lon,&q1x,&q1y);
+    const double l=f_sqrt((q1x-q0x)*(q1x-q0x)+(q1y-q0y)*(q1y-q0y)),nl=l?l:1;north=f_atan2((q1x-q0x)/nl,-(q1y-q0y)/nl);
+  }
+  for(int a=0;a<720;a++){const double t=a*PI/360;plot(&cv,c0x+js_round(f_sin(t+north)*R),c0y-js_round(f_cos(t+north)*R),L_INK);}
+  for(int a=0;a<360;a+=30){const int len=a%90==0?5:3;for(int r=R-len;r<R;r++){const double t=a*RAD;plot(&cv,c0x+js_round(f_sin(t+north)*r),c0y-js_round(f_cos(t+north)*r),L_INK);}}
+  for(int k=0;k<3;k++)for(int d=-k;d<=k;d++){const int r=R+4-k;plot(&cv,c0x+js_round(f_sin(north)*r+f_cos(north)*d),c0y-js_round(f_cos(north)*r-f_sin(north)*d),L_INK);}}
   if(!day){symbol(&cv,HEXAGON,5,c0x,c0y);plot(&cv,c0x,c0y,L_INK);symbol(&cv,TRIANGLE,7,c1x,c1y-1);}
   // The body is the minute's; all after it lies over it.
   cv.stage=3;
@@ -983,6 +1218,7 @@ static bool finish_draw(ChartBuild *b){
     release(spill);release(arena);b->sink.arena=NULL;runs=all;
   }}
   if(!runs)FAIL;
+  
   // The scene: the plate, the night's tables, the minutes and the track.
   out=alloc(sizeof(EnrScene));if(!out){release((void *)runs);FAIL;}
   memset(out,0,sizeof *out);
@@ -994,8 +1230,40 @@ static bool finish_draw(ChartBuild *b){
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
   for(int k=0;k<5;k++)out->tints[k]=k<pal->tint_count?pal->tints[k]:0;
   for(int k=0;k<2;k++)out->depths[k]=k<pal->depth_count?pal->depths[k]:0;
+  if(!rolled){
   for(int y=0;y<H;y++){const double lat=glat(&cam,y+.5)*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
   for(int x=0;x<W;x++){const double lon=glon(&cam,x+.5)*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}
+  }else{
+    // A Fuller sheet is lit from its faces' grids: their frames, each
+    // tile's place, which tile each pixel lies on, the grid's directions.
+    const FullerCam *fc=b->fc;EnrFuller *f=out->fuller=alloc(sizeof(EnrFuller));if(!f)FAIL;memset(f,0,sizeof *f);
+    double net=INFINITY;for(int t=0;t<fc->tile_count;t++)if(fc->tiles[t].box[1]<net)net=fc->tiles[t].box[1];f->net_top=net>0?net:0;
+    memcpy(f->bases,b->fg->bases,sizeof f->bases);
+    f->tile_count=(uint8_t)fc->tile_count;for(int t=0;t<fc->tile_count;t++){f->tile_face[t]=fc->tiles[t].face;memcpy(f->tile_grid[t],b->tgrid[t],sizeof f->tile_grid[t]);}
+    // Which tile each pixel lies on, found again (the ground had no room to
+    // keep it), as row runs.
+    {unsigned cap=2048,n=0;uint8_t *r=alloc(cap);if(!r)FAIL;f->tile_runs=r;f->tile_offset[0]=0;
+    for(int y=0;y<H;y++){
+      int run=-2;
+      for(int x=0;x<W;x++){
+        const int t=fuller_locate(fc,x+.5,y+.5,NULL);
+        if(t!=run||r[n-2]==255){
+          if(n+2>cap){uint8_t *more=src->resize?src->resize(r,cap*2):NULL;if(!more)FAIL;r=f->tile_runs=more;cap*=2;}
+          r[n]=0;r[n+1]=(uint8_t)(t+1);n+=2;run=t;
+        }
+        r[n-2]++;
+      }
+      f->tile_offset[y+1]=(uint16_t)n;
+    }
+    if(src->resize){uint8_t *fit=src->resize(r,n?n:1);if(fit)f->tile_runs=fit;}}
+    if(b->dirs){f->dirs=b->dirs;b->dirs=NULL;}
+    else{
+      f->dirs=alloc(sizeof(int16_t)*3*GRID_POINTS);if(!f->dirs)FAIL;
+      uint8_t *d=(uint8_t *)f->dirs;if(src->grids(src->grid_source,FULLER_HEADER,d,6*GRID_POINTS)!=6*GRID_POINTS)FAIL;
+      for(int k=0;k<3*GRID_POINTS;k++){const int16_t v=(int16_t)(d[2*k]|d[2*k+1]<<8);f->dirs[k]=v;}
+    }
+    out->heavy=heavy;
+  }
   out->c1x=(enr_real)c1x_;out->normal_x=cam.slow?(enr_real)cam.nx:0;out->normal_y=cam.slow?(enr_real)cam.ny:-1;
   out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;out->top_x=top_x;out->top_baseline=top_baseline;out->height_right=height_right;out->height_baseline=height_baseline;
   if(world&&!in->tape){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
@@ -1022,7 +1290,7 @@ static bool finish_draw(ChartBuild *b){
   out->mark_count=(uint8_t)mark_n;for(int k=0;k<mark_n;k++){out->marks[k][0]=(uint8_t)(marks[k]%W);out->marks[k][1]=(uint8_t)(marks[k]/W);}
   if(home_mark){out->home_box[0]=(int16_t)home_box.x;out->home_box[1]=(int16_t)home_box.y;out->home_box[2]=(int16_t)home_box.w;out->home_box[3]=(int16_t)home_box.h;}
   b->out=out;b->forward=forward;b->minute=0;
-  if(world&&in->home){b->sb=alloc(2*120*sizeof(double));if(!b->sb)FAIL;b->cb=b->sb+120;bearings(3,b->sb,b->cb);}
+  if((world||(rolled&&cam.wide&&!day))&&in->home){b->sb=alloc(2*120*sizeof(double));if(!b->sb)FAIL;b->cb=b->sb+120;bearings(3,b->sb,b->cb);}
   return true;
 fail:
   if(out){enr_free(out,release);release(out);}
@@ -1056,6 +1324,16 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     // A satellite's pass line, which can change within the hour.
     if(in->body>=2&&in->home&&src->pass_line)src->pass_line(src->pass_context,t,e->top);
     memset(e->height,0,sizeof e->height);e->circle=255;e->index=0;
+    // A Fuller satellite sheet's home circle follows the satellite's height.
+    if(FACE_ROLL&&b->fc&&cam.wide&&!cam.day&&in->home){
+      const int n=circle_pixels_on(&cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring,true);int k=0;
+      for(;k<out->circle_count;k++)if(out->circle_n[k]==n&&!memcmp(out->circle_px[k],ring,2*n))break;
+      if(k==out->circle_count){
+        if(k>=60||!(out->circle_px[k]=src->alloc(n?2*n:1)))FAIL;
+        memcpy(out->circle_px[k],ring,2*n);out->circle_n[k]=(uint8_t)n;out->circle_count++;
+      }
+      e->circle=(uint8_t)k;
+    }
     if(world){
       if(!in->tape)e->index=(int16_t)js_round(forward?TAPE_X0+(double)(TAPE_X1-TAPE_X0)*m/60:TAPE_X1-(double)(TAPE_X1-TAPE_X0)*m/60);
       char *p=put_int(e->height,(int)js_round(altitude),1);memcpy(p," KM",3);
@@ -1078,7 +1356,7 @@ EnrScene *chart_finish(ChartBuild *b){
   int r;while((r=chart_step(b))>0){}
   if(r<0||!b->out||b->minute<60){chart_abort(b);return NULL;}
   EnrScene *out=b->out;b->out=NULL;
-  enr_ready(out);b->src.release(b->sb);b->src.release(b);
+  enr_ready(out);b->src.release(b->sb);fuller_free(b);b->src.release(b);
   return out;
 }
 bool chart_callout_figures(EnrScene *s,MapReadFn read,void *source,void *(*alloc)(size_t)){

@@ -48,6 +48,10 @@ int main(int argc,char **argv){
   char tables[1024];snprintf(tables,sizeof tables,"%.*stables.bin",(int)(strrchr(argv[2],'/')?strrchr(argv[2],'/')-argv[2]+1:0),argv[2]);
   tb.data=slurp(tables,&n);tb.length=n;
   if(!m.data||!f.data||!tb.data){fprintf(stderr,"no pack, figures or tables\n");return 2;}
+  // The Fuller sheets' grids and the coastline: FULLER_GRIDS and LAND_BITS,
+  // or public/ beside the repository's native/.
+  Mem gr={0,0},lb={0,0};
+  {const char *g=getenv("FULLER_GRIDS"),*l=getenv("LAND_BITS");gr.data=slurp(g?g:"public/fuller.bin",&n);gr.length=gr.data?n:0;lb.data=slurp(l?l:"public/land.bin",&n);lb.length=lb.data?n:0;}
   ChartInput in;memset(&in,0,sizeof in);
   char line[8192],key[32],value[8000];
   while(fgets(line,sizeof line,stdin)){
@@ -57,6 +61,7 @@ int main(int argc,char **argv){
     if(!strcmp(key,"satseg")){uint8_t b[SAT_SEGMENT_BYTES];unhex(value,b,sizeof b);sat_segment_decode(b,&sats[nsats++]);}
     else if(!strcmp(key,"passes")){block_len[nblocks]=unhex(value,blocks[nblocks],sizeof blocks[0]);nblocks++;}
     else if(!strcmp(key,"segment")){uint8_t b[SEG_BYTES];for(int i=0;i<SEG_BYTES;i++){unsigned v;sscanf(value+2*i,"%2x",&v);b[i]=(uint8_t)v;}seg_decode(b,&segs[nsegs++]);}
+    else if(!strcmp(key,"fuller"))in.fuller=atoi(value);
     else if(!strcmp(key,"body"))in.body=atoi(value);else if(!strcmp(key,"view"))in.view=atoi(value);
     else if(!strcmp(key,"daystart"))in.day_start=atoll(value);else if(!strcmp(key,"dayend"))in.day_end=atoll(value);
     else if(!strcmp(key,"dayhours")){char *p=value;for(int k=0;k<27;k++)in.day_hours[k]=(uint8_t)strtol(p,&p,10);}
@@ -75,12 +80,13 @@ int main(int argc,char **argv){
     else if(!strcmp(key,"set"))snprintf(in.rise_right,sizeof in.rise_right,"%s",value);
   }
   const ChartSources src={.map=mem_read,.map_source=&m,.figures=mem_read,.figure_source=&f,.tables=mem_read,.table_source=&tb,.segment=seg_for,
-    .satellite=sat_for,.pass_line=pass_for,.alloc=counted,.release=uncounted,.resize=recounted};
+    .satellite=sat_for,.pass_line=pass_for,.alloc=counted,.release=uncounted,.resize=recounted,
+    .grids=gr.data?mem_read:NULL,.grid_source=&gr,.land=lb.data?mem_read:NULL,.land_source=&lb};
   EnrScene *scene=chart_build(&in,&src);
   if(!scene){fprintf(stderr,"build failed\n");return 1;}
   const EnrScene s=*scene;
   out=fopen(argv[3],"wb");
-  fputs("GTS3",out);u16(200);u16(228);u8(s.flags);u8(s.body);u8((uint8_t)s.forward);u8(s.view);i32(s.hour_start);
+  fputs("GTS3",out);u16(200);u16(228);u8(s.flags);u8(s.body);u8((uint8_t)s.forward);u8((uint8_t)(s.view|(s.fuller?16:0)|(s.heavy?32:0)));i32(s.hour_start);
   for(int k=0;k<9;k++)for(int z=0;z<3;z++)u8(s.zoned[k][z]);
   u8(s.space);u8(s.space_ink);u8(s.screen);u8(s.waterline);u8(s.terminator);u8(s.night_dots);
   for(int k=0;k<5;k++)u8(s.tints[k]);
@@ -107,6 +113,14 @@ int main(int argc,char **argv){
   for(int k=0;k<s.track_count;k++){u16((uint16_t)s.track[k].x);u16((uint16_t)s.track[k].y);u8(s.track[k].flags);}
   for(int y=0;y<=228;y++)u16(s.row_offset[y]);
   fwrite(s.runs,1,s.row_offset[228],out);
+  if(s.fuller){
+    const EnrFuller *fu=s.fuller;f64(fu->net_top);
+    for(int k=0;k<20;k++)for(int j=0;j<9;j++)f64(fu->bases[k][j]);
+    u8(fu->tile_count);for(int t=0;t<fu->tile_count;t++){u8(fu->tile_face[t]);for(int k=0;k<6;k++)i32(fu->tile_grid[t][k]);}
+    for(int y=0;y<=228;y++)u16(fu->tile_offset[y]);
+    fwrite(fu->tile_runs,1,fu->tile_offset[228],out);
+    for(int k=0;k<3*ENR_GRID_POINTS;k++)u16((uint16_t)fu->dirs[k]);
+  }
   fclose(out);
   {int held=0;for(int y=0;y<228;y++){const int ahead=(int)s.row_offset[y+1]-(y+1<228?(y+1)*200:200*228);if(ahead>held)held=ahead;}fprintf(stderr,"queue %d; ",held);}
   fprintf(stderr,"scene %u bytes, runs %u bytes, peak %u bytes, kept %u bytes\n",(unsigned)sizeof s,(unsigned)s.row_offset[228],(unsigned)peak,(unsigned)live);

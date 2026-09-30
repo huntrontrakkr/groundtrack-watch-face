@@ -26,6 +26,7 @@ typedef struct {uint8_t width,height;uint16_t first;} FigureGlyph;
 typedef struct {
   int body;                  // 0 the Sun, 1 the Moon, 2 a satellite, 3 a space station
   int view;                  // 0 the hour chart, 1 the world band (fast satellites), 2 the whole day (QZSS)
+  bool fuller;               // a rolling Fuller sheet of the hour (a satellite) or the day (view 2)
   int64_t day_start,day_end; // the local day (whole-day chart): its midnights
   uint8_t day_hours[27];     // the local clock's hour at day_start + k hours
   char code[4];              // a satellite's code ("ISS"), for the world band's margin
@@ -59,6 +60,10 @@ typedef struct {
   MapReadFn map;void *map_source;
   MapReadFn figures;void *figure_source;
   MapReadFn tables;void *table_source;   // native/resources/tables.bin
+  // The Fuller sheets' faces' grids (fuller.bin) and, zoomed in, the
+  // quarter-degree coastline (land.bin: 720 rows of 180 bytes).
+  MapReadFn grids;void *grid_source;
+  MapReadFn land;void *land_source;
   SegmentFn segment;void *segment_context;
   // A satellite's segment for a time (in Unix seconds), and home's pass line
   // at a time into out (24 characters, '°' as 0x7f; empty for none).

@@ -1,12 +1,12 @@
 # Host harness and a watch-side size check for the native core.
-CORE=enroute_parse.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/chart.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/passes.c
+CORE=enroute_parse.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/chart.c ../src/c/fuller.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/passes.c
 CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 
 harness: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The watch's own chart builder, writing the phone's scene format.
-CHART_SRC=../src/c/chart.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/fmath.c ../src/c/passes.c
+CHART_SRC=../src/c/chart.c ../src/c/fuller.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/fmath.c ../src/c/passes.c
 chart_test: chart_test.c $(CHART_SRC) ../src/c/chart.h ../src/c/fmath.h ../src/c/generated/chart_data.h ../src/c/departure_font.h ../src/c/enroute_core.h
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ chart_test.c $(CHART_SRC) -lm
 

@@ -72,6 +72,15 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
     cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',{transfer:'vernier'}],['sat:43013','2026-09-30T17:00:00Z','enroute',false,'UTC',{transfer:'comb'}],
       ['sat:49260','2026-10-01T09:00:00Z','red',true,'America/New_York',{transfer:'chevrons'}],['sat:25544','2026-09-30T13:00:00Z','console',false,'UTC',{transfer:'chevrons',readout:'callout'}],
       ['sat:20580','2026-09-30T05:00:00Z','sectional',true,'UTC',{transfer:'comb'}],['sat:48274','2026-09-30T21:00:00Z','enroute',true,'America/New_York',{transfer:'vernier',clock24:false}]);
+    // Rolling Fuller sheets: satellites' hours (GPS zoomed in past the
+    // grids' coastlines), the Sun's, the Moon's and QZSS's days, QZSS's hour.
+    const fuller=(more={})=>({projection:'fuller',...more});
+    cases.push(['sat:25544','2026-09-30T13:00:00Z','crt',true,'America/New_York',fuller()],['sat:48274','2026-10-01T06:30:00Z','sectional',true,'Asia/Kolkata',fuller()],
+      ['sat:20580','2026-09-30T20:00:00Z','hypsometric',false,'Europe/London',fuller({readout:'callout'})],['sat:49260','2026-10-01T09:00:00Z','red',true,'America/New_York',fuller()],
+      ['sat:43013','2026-09-30T17:00:00Z','sunlight',true,'UTC',fuller({events:[ev('2026-09-30T17:20:00Z','Launch')]})],['sat:36585','2026-09-27T13:00:00Z','hypsometric',true,'America/New_York',fuller()],
+      ['sun','2026-09-27T08:00:00Z','enroute',true,'UTC',fuller()],['moon','2026-09-19T09:00:00Z','console',false,'America/New_York',fuller({readout:'callout',numerals:'mono'})],
+      ['sun','2026-12-21T22:30:00Z','crt',false,'Asia/Kolkata',fuller({clock24:false})],['sat:42738','2026-09-27T05:00:00Z','crt',false,'America/New_York',fuller({readout:'callout'})],
+      ['sat:42738','2026-09-27T05:00:00Z','sectional',true,'America/New_York',fuller({span:'hour'})]);
     cases.forEach((c,k)=>{if(!c[5])c[5]=options[k%options.length];});
     for(const [body,iso,plate,flag,zone,more] of cases){
       const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null,o={flag,...more};

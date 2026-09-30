@@ -313,7 +313,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // On a whole-orbit Fuller sheet only the stations that can hear the
   // satellite during this hour are shown, each with its acquisition circle.
   stage=1;
-  const heard=s=>camera.track.some(p=>p.hour&&dot(p.dir,direction(s.lat,s.lon))>=Math.cos(ACQUISITION*RAD));
+  const heard=s=>camera.track.some(p=>p.hour&&dot(p.dir,direction(s.lat,s.lon))>=cos(ACQUISITION*RAD));
   for(const s of network.stations){
     if(camera.day||(camera.wide&&!heard(s)))continue;
     const p=camera.project(s.lat,s.lon),x=Math.round(p.x),y=Math.round(p.y);
