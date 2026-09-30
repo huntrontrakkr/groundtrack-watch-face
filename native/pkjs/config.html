@@ -117,9 +117,10 @@
   // {lat, lon} or null}
   var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
   // Each face shows what it draws: Enroute the hour chart and the whole day,
-  // Plotboard the world band.
+  // Plotboard the world band, Fuller rolling Fuller sheets of the hour and
+  // the day (Enroute's options, every satellite).
   var plotboard=config.face==='plotboard';
-  document.getElementById('title').textContent=plotboard?'Groundtrack Plotboard':'Groundtrack Enroute';
+  document.getElementById('title').textContent=plotboard?'Groundtrack Plotboard':config.face==='fuller'?'Groundtrack Fuller':'Groundtrack Enroute';
   [].forEach.call(document.querySelectorAll(plotboard?'.enroute':'.plotboard'),function(e){e.remove();});
   function rows(list,name,into){
     list.forEach(function(p){

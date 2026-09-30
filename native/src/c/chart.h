@@ -23,6 +23,9 @@ typedef struct {uint8_t width,height;uint16_t first;} FigureGlyph;
 
 // Track points: 141 on the hour chart, 401 on the world band.
 #define CHART_TRACK_MAX 401
+// A rolling Fuller sheet's: 321 for a satellite's hour, at most 301 for a
+// day (of 25 hours).
+#define FULLER_TRACK_MAX 321
 typedef struct {
   int body;                  // 0 the Sun, 1 the Moon, 2 a satellite, 3 a space station
   int view;                  // 0 the hour chart, 1 the world band (fast satellites), 2 the whole day (QZSS)

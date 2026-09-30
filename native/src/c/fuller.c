@@ -103,6 +103,16 @@ static void roll_to(const FullerConst *g,FullerCell *tile,const double d[3]){
     FullerCell next;across(g,tile,edge,&next);*tile=next;
   }
 }
+void fuller_track_start(const FullerConst *g,const double d0[3],FullerCell *tile){
+  const double S3=g->S3;memset(tile,0,sizeof *tile);
+  tile->face=(uint8_t)fuller_face_of(g,d0);
+  tile->tri[0][0]=0;tile->tri[0][1]=1/S3;tile->tri[1][0]=.5;tile->tri[1][1]=-1/(2*S3);tile->tri[2][0]=-.5;tile->tri[2][1]=-1/(2*S3);
+  key_of(tile->tri,tile->key);
+}
+void fuller_track_next(const FullerCam *cam,FullerCell *tile,const double d[3],double *x,double *y){
+  roll_to(cam->g,tile,d);
+  double w[3],p[2];fuller_forward(cam->g,tile->face,d,w);flat_point(w,tile->tri,p);fuller_to_screen(cam,p,x,y);
+}
 // rollCamera().
 bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const double (*dirs)[3],int count,int i0,int i1,bool day,double span,double *xs,double *ys){
   memset(cam,0,sizeof *cam);cam->g=g;int cell_count=0;
@@ -142,7 +152,7 @@ bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const dou
   double mx,my;{const double m[2]={(a[0]+b[0])/2,(a[1]+b[1])/2};fuller_to_screen(cam,m,&mx,&my);}
   int frontier_from=path_from,frontier_to=path_n;
   for(int ring=0;ring<2;ring++){
-    FullerCell cand[FULLER_CELLS];double dist[FULLER_CELLS];int nc=0;
+    FullerCell *const cand=cells+FULLER_CELLS;double *const dist=(double *)(cand+FULLER_CELLS);int nc=0;
     for(int k=frontier_from;k<frontier_to;k++)for(int e=0;e<3;e++){
       FullerCell n;across(g,&cells[k],e,&n);
       if(find(cells,cell_count,n.key)>=0||printed[n.face]||!on_screen(cam,n.tri))continue;

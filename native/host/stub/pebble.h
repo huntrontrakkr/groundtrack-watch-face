@@ -106,4 +106,6 @@ int persist_delete(uint32_t key);
 #define RESOURCE_ID_MAP_PACK 1
 #define RESOURCE_ID_TABLES 3
 #define RESOURCE_ID_FIGURES 2
+#define RESOURCE_ID_FULLER_GRIDS 4
+#define RESOURCE_ID_LAND_BITS 5
 void app_event_loop(void);

@@ -169,3 +169,27 @@ test('Groundtrack Plotboard\'s phone side: the fast satellites, the ISS first, t
     assert.deepEqual(config.bodies.map(b=>b[0]),['sat:25544','sat:48274','sat:20580','sat:49260','sat:43013']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('Groundtrack Fuller\'s phone side: every body, each satellite\'s hour a Fuller sheet',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
+  try{
+    const out=join(dir,'index.js');execFileSync(process.execPath,['tools/build-pkjs.mjs','--face','fuller',out],{stdio:'pipe'});
+    const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-29T22:30:00Z');
+    // With nothing set, the ISS's hour, as the watch starts; NOAA-20's hour
+    // too (view 0), QZSS's day (view 2) unless its hour is chosen, the Sun.
+    for(const [stored,expect] of [[{timeZone:'UTC'},[2,25544,1]],[{timeZone:'UTC',body:'sun'},[0,0,0]],[{timeZone:'UTC',body:'sat:25544'},[2,25544,1|0<<1]],[{timeZone:'UTC',body:'sat:43013'},[2,43013,0]],
+      [{timeZone:'UTC',body:'sat:42738'},[2,42738,2<<1]],[{timeZone:'UTC',body:'sat:42738',span:'hour'},[2,42738,0]]]){
+      const p=phone(bundle,now,stored);p.listeners.ready({});await p.quiet();
+      const set=p.messages.find(m=>m.Settings).Settings;
+      assert.deepEqual([set[0],set[13]|set[14]<<8|set[15]<<16,set[17]],expect,JSON.stringify(stored));
+    }
+    let opened=null;const listeners={};
+    const context=vm.createContext({console:{log:()=>{}},setTimeout,navigator:{},localStorage:{getItem:()=>null,setItem:()=>{}},
+      Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{opened=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
+    vm.runInContext(`Date.now=()=>${now};`,context);vm.runInContext(bundle,context);
+    listeners.showConfiguration({});for(let i=0;i<300&&!opened;i++)await new Promise(r=>setTimeout(r,20));
+    const config=JSON.parse(/var config=(\{.*?\}),s=config/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
+    assert.equal(config.face,'fuller');
+    assert.deepEqual(config.bodies.map(b=>b[0]),['sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585','sat:42738']);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});

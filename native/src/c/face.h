@@ -8,18 +8,22 @@
 #define FACE_HOUR 0
 #define FACE_WORLD 1
 #define FACE_ROLL 0
+#define FACE_CHART 1
 #elif defined(FACE_ENROUTE)
 #define FACE_HOUR 1
 #define FACE_WORLD 0
 #define FACE_ROLL 0
+#define FACE_CHART 1
 #elif defined(FACE_FULLER)
 #define FACE_HOUR 1
 #define FACE_WORLD 0
 #define FACE_ROLL 1
+#define FACE_CHART 0
 #else
 #define FACE_HOUR 1
 #define FACE_WORLD 1
 #define FACE_ROLL 1
+#define FACE_CHART 1
 #endif
 // A scene's view, as far as this face can have it.
 #define VIEW_IS_WORLD(v) (FACE_WORLD&&(!FACE_HOUR||(v)==1))

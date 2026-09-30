@@ -6,8 +6,8 @@
 //
 //   node tools/fuller-pack.mjs
 //
-// Writes public/fuller.bin (the study's) and native-fuller/resources/fuller.bin
-// (the watch's). The format, little-endian:
+// Writes public/fuller.bin, the study's and (linked from native/resources)
+// Groundtrack Fuller's. The format, little-endian:
 //   "GTF1", u8 N, 3 bytes padding;
 //   f64 S3, Z, EL, DVE, RAW_EDGE (fuller.js's constants);
 //   20 faces' bases, f64 n[3], u[3], v[3];
@@ -18,7 +18,7 @@
 //   per face, per grid point, u8 relief code (relief.js).
 // Grid point (a, b), a + b <= N, has weights (1 - (a+b)/N, a/N, b/N) and
 // index a*(N+1) - a*(a-1)/2 + b.
-import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
 import {F,NEIGHBORS,BASES,inverseFace,CONSTANTS} from '../src/fuller.js';
 import {decodeRelief,reliefAt,reliefMeters} from '../src/relief.js';
 import {lonLat,dot} from '../src/geometry.js';
@@ -61,5 +61,5 @@ F.forEach((_,face)=>{
 });
 out.push(...cover,...relief);
 const bytes=Uint8Array.from(out);
-for(const path of ['public','native-fuller/resources']){mkdirSync(path,{recursive:true});writeFileSync(`${path}/fuller.bin`,bytes);}
+writeFileSync('public/fuller.bin',bytes);
 console.log(`fuller.bin: ${N} steps an edge, ${GRID_POINTS} points a face, ${bytes.length} bytes`);

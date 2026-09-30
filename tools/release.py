@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Package, check and publish one version of the watch faces (after Dymaxion's).
 
-Two faces are built from one source: Groundtrack Enroute (native/) and
-Groundtrack Plotboard (native-plotboard/). Each command takes --face (enroute,
-plotboard or all; all by default).
+Three faces are built from one source: Groundtrack Enroute (native/),
+Groundtrack Plotboard (native-plotboard/) and Groundtrack Fuller
+(native-fuller/). Each command takes --face (enroute, plotboard, fuller or all;
+all by default).
 
 package  copies each face's .pbw to release-artifacts/, deflated, every member
          byte for byte, with SHA256SUMS and the release notes
@@ -48,6 +49,8 @@ FACES = {
     "enroute": Face("enroute", "native", "Groundtrack Enroute", "docs/STORE-LISTING.md", "GROUNDTRACK_STORE_APP_ID"),
     "plotboard": Face("plotboard", "native-plotboard", "Groundtrack Plotboard", "docs/STORE-LISTING-PLOTBOARD.md",
                       "GROUNDTRACK_PLOTBOARD_STORE_APP_ID"),
+    "fuller": Face("fuller", "native-fuller", "Groundtrack Fuller", "docs/STORE-LISTING-FULLER.md",
+                   "GROUNDTRACK_FULLER_STORE_APP_ID"),
 }
 # The store takes at most 256 KB of resources an app; an app's code and static
 # data are capped at 64 KB (PebbleOS #1873).
@@ -58,7 +61,7 @@ CAPABILITIES = {"configurable", "location"}
 
 def version_for(tag=None):
     versions = [json.loads((ROOT / path).read_text())["version"] for path in
-                ["package.json", "native/package.json", "native-plotboard/package.json", "package-lock.json"]]
+                ["package.json", "native/package.json", "native-plotboard/package.json", "native-fuller/package.json", "package-lock.json"]]
     if len(set(versions)) != 1 or not re.fullmatch(r"\d+\.\d+\.\d+", versions[0]):
         raise ValueError("Root, watch faces' and lockfile versions must match (major.minor.patch).")
     version = versions[0]

@@ -30,7 +30,9 @@ static void pass_for(void *ctx,int64_t t,char out[24]){
 // Counting allocator: the build's peak, as the watch's heap would see it
 // (each block with 8 bytes of the allocator's own).
 static size_t live,peak;
-static void *counted(size_t n){size_t *p=malloc(n+sizeof(size_t));if(!p)return 0;*p=n;live+=n+8;if(live>peak)peak=live;return p+1;}
+// HEAP_LIMIT fails allocations past it, as a watch out of memory would.
+static size_t limit;
+static void *counted(size_t n){if(limit&&live+n+8>limit)return 0;size_t *p=malloc(n+sizeof(size_t));if(!p)return 0;*p=n;live+=n+8;if(live>peak)peak=live;return p+1;}
 static void uncounted(void *q){if(!q)return;size_t *p=(size_t *)q-1;live-=*p+8;free(p);}
 static void *recounted(void *q,size_t n){if(!q)return counted(n);size_t *p=(size_t *)q-1;const size_t old=*p;p=realloc(p,n+sizeof(size_t));if(!p)return 0;live=live-old+n;if(live>peak)peak=live;*p=n;return p+1;}
 static size_t unhex(const char *hex,uint8_t *out,size_t max){size_t n=0;while(hex[0]&&hex[1]&&n<max){unsigned v;sscanf(hex,"%2x",&v);out[n++]=(uint8_t)v;hex+=2;}return n;}
@@ -82,8 +84,9 @@ int main(int argc,char **argv){
   const ChartSources src={.map=mem_read,.map_source=&m,.figures=mem_read,.figure_source=&f,.tables=mem_read,.table_source=&tb,.segment=seg_for,
     .satellite=sat_for,.pass_line=pass_for,.alloc=counted,.release=uncounted,.resize=recounted,
     .grids=gr.data?mem_read:NULL,.grid_source=&gr,.land=lb.data?mem_read:NULL,.land_source=&lb};
+  if(getenv("HEAP_LIMIT"))limit=(size_t)atol(getenv("HEAP_LIMIT"));
   EnrScene *scene=chart_build(&in,&src);
-  if(!scene){fprintf(stderr,"build failed\n");return 1;}
+  if(!scene){fprintf(stderr,"build failed (%s); %u bytes still held\n",chart_failure(),(unsigned)live);return 1;}
   const EnrScene s=*scene;
   out=fopen(argv[3],"wb");
   fputs("GTS3",out);u16(200);u16(228);u8(s.flags);u8(s.body);u8((uint8_t)s.forward);u8((uint8_t)(s.view|(s.fuller?16:0)|(s.heavy?32:0)));i32(s.hour_start);

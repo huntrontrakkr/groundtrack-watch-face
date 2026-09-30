@@ -1,11 +1,14 @@
-# Native: Groundtrack Enroute and Plotboard on the watch
+# Native: Groundtrack Enroute, Plotboard and Fuller on the watch
 
-Study 06 on Pebble Time 2 (`emery`, 200×228, 64 colours), as two watch faces built from one source:
+Study 06 on Pebble Time 2 (`emery`, 200×228, 64 colours), as three watch faces built from one source:
 
 - **Groundtrack Enroute** (`native/`): the hour chart of the Sun, the Moon and GPS, and QZSS's whole day (or its hour).
 - **Groundtrack Plotboard** (`native-plotboard/`, whose sources and resources are `native/`'s, linked): the world band of the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20, with its tapes.
+- **Groundtrack Fuller** (`native-fuller/`, likewise linked): the rolling Fuller sheet of any of the nine bodies: a satellite's hour, the Sun's, the Moon's and QZSS's day (or QZSS's hour).
 
-Each compiles only its own charts (`native/src/c/face.h`: the other face's code is left out as dead code), so each has room under PebbleOS's 64 KB cap for an app, and heap for its builds: Enroute's code is 53 KB, Plotboard's 52 KB, where the two together were 61 KB. The phone side is one source bundled for each face, with its own bodies and settings; each face has its own app id, listing and settings. The host tests exercise both faces' code together.
+Each compiles only its own charts (`native/src/c/face.h`: the other face's code is left out as dead code), so each has room under PebbleOS's 64 KB cap for an app, and heap for its builds: Enroute's code is 54 KB, Plotboard's 54 KB, Fuller's 61 KB. The phone side is one source bundled for each face, with its own bodies and settings; each face has its own app id, listing and settings. The host tests exercise both faces' code together.
+
+**Groundtrack Fuller.** The watch rolls the icosahedron along the track as the study does (`native/src/c/fuller.c`, to the same bits) and builds the sheet's ground from the faces' pre-projected grids (`fuller.bin`, 100 KB; see Study 06), not from the map pack, which this face leaves out: a pixel's place on its face's grid is an integer affine function of the pixel, and its land, relief and the Sun's height are interpolated between three grid points in integers. Zoomed in past 150 px a face (GPS's hour) its coastline comes from the quarter-degree `land.bin` (130 KB) at the grids' directions. Each minute the renderer lights the sheet from the grid (about 5 million instructions; it draws the whole ground again each minute, to be pared down). The build fits a smaller heap: the class plane is kept in four bands, so its runs can be made a band at a time, and the track is rolled again for the drawing rather than kept.
 
 For the Sun, the Moon and all seven satellites (GPS on the hour chart; the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20 on the world band; QZSS on the whole-day chart) the watch draws each hour's chart itself, from its own map and ephemeris, and needs the phone only now and then; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel.
 
@@ -130,7 +133,7 @@ With [pebble-tool](https://pypi.org/project/pebble-tool/) 5.0.40 and SDK 4.33.1:
 ```sh
 uv tool install --python 3.11 pebble-tool==5.0.40   # or pip
 pebble sdk install 4.33.1
-npm run build:native                  # both faces: native/build/native.pbw, native-plotboard/build/native-plotboard.pbw
+npm run build:native                  # all three faces: native/build/native.pbw, native-plotboard/build/native-plotboard.pbw, native-fuller/build/native-fuller.pbw
 tools/emulator.sh install --emulator emery native/build/native.pbw
 npm run check:emulator                # screenshot, compared with the browser renderer
 ```

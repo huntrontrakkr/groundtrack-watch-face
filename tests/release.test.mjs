@@ -11,7 +11,7 @@ ${script}`],{stdio:'pipe'}).toString();
 
 test('versions agree, and a tag must name the version',()=>{
   const version=JSON.parse(readFileSync('package.json','utf8')).version;
-  for(const face of ['native','native-plotboard'])assert.equal(JSON.parse(readFileSync(`${face}/package.json`,'utf8')).version,version);
+  for(const face of ['native','native-plotboard','native-fuller'])assert.equal(JSON.parse(readFileSync(`${face}/package.json`,'utf8')).version,version);
   assert.equal(python(`print(release.version_for('v${version}'))`).trim(),version);
   python(`
 for tag in ['v0.0.9','${version}','v99.0.0']:
@@ -21,10 +21,12 @@ for tag in ['v0.0.9','${version}','v99.0.0']:
 });
 
 test('each face asks for the settings page and the phone\'s location, with its own identity and the same messages and resources',()=>{
-  const [a,b]=['native','native-plotboard'].map(f=>JSON.parse(readFileSync(`${f}/package.json`,'utf8')).pebble);
-  for(const p of [a,b])assert.ok(p.capabilities.includes('configurable')&&p.capabilities.includes('location'));
-  assert.notEqual(a.uuid,b.uuid);assert.deepEqual([a.displayName,b.displayName],['Groundtrack Enroute','Groundtrack Plotboard']);
-  assert.deepEqual(a.messageKeys,b.messageKeys);assert.deepEqual(a.resources,b.resources);
+  const [a,b,c]=['native','native-plotboard','native-fuller'].map(f=>JSON.parse(readFileSync(`${f}/package.json`,'utf8')).pebble);
+  for(const p of [a,b,c])assert.ok(p.capabilities.includes('configurable')&&p.capabilities.includes('location'));
+  assert.equal(new Set([a.uuid,b.uuid,c.uuid]).size,3);assert.deepEqual([a.displayName,b.displayName,c.displayName],['Groundtrack Enroute','Groundtrack Plotboard','Groundtrack Fuller']);
+  assert.deepEqual(a.messageKeys,b.messageKeys);assert.deepEqual(a.messageKeys,c.messageKeys);assert.deepEqual(a.resources,b.resources);
+  // Fuller reads the faces' grids and the coastline instead of the map.
+  assert.deepEqual(c.resources.media.map(m=>m.name),['FULLER_GRIDS','LAND_BITS','FIGURES','TABLES']);
 });
 
 test('a package is checked for identity, platform, capabilities and the store\'s limits',()=>{

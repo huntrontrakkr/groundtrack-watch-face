@@ -86,7 +86,9 @@ function pump(){
 // vernier, 2 a comb, 3 chevrons).
 var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide'],TRANSFERS=['off','vernier','comb','chevrons'];
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
-function view(body){var v=viewOf(body);return v==='day'&&setting('span','day')==='hour'?'hour':v;}
+// On Groundtrack Fuller every satellite's chart is a rolling Fuller sheet of
+// its hour (QZSS's of its day, unless its hour is chosen).
+function view(body){var v=viewOf(body);if(FACE==='fuller'&&v==='world')v='hour';return v==='day'&&setting('span','day')==='hour'?'hour':v;}
 function watchSettings(){
   var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
   var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null,numerals=NUMERALS.indexOf(setting('numerals','even'));
@@ -226,8 +228,12 @@ function sendEvents(){
 // Enroute: the Sun, the Moon, and the satellites on the hour chart or the
 // whole day (GPS, QZSS); Plotboard: the fast satellites on the world band.
 var FACE=typeof GROUNDTRACK_FACE==='string'?GROUNDTRACK_FACE:'enroute';
-var BODIES=(FACE==='plotboard'?[]:['sun','moon']).concat(CATALOG.filter(function(c){return (viewOf(bodyId(c.norad))==='world')===(FACE==='plotboard');}).map(function(c){return bodyId(c.norad);}));
-function currentBody(){var b=setting('body',BODIES[0]);return BODIES.indexOf(b)>=0?b:BODIES[0];}
+// Enroute: the Sun, the Moon, GPS and QZSS; Plotboard: the fast satellites;
+// Fuller: all of them.
+var BODIES=(FACE==='plotboard'?[]:['sun','moon']).concat(CATALOG.filter(function(c){return FACE==='fuller'||(viewOf(bodyId(c.norad))==='world')===(FACE==='plotboard');}).map(function(c){return bodyId(c.norad);}));
+// Fuller starts on the ISS's hour, as the watch does.
+var FIRST=FACE==='fuller'?'sat:25544':BODIES[0];
+function currentBody(){var b=setting('body',FIRST);return BODIES.indexOf(b)>=0?b:FIRST;}
 // A data-URL page can't reliably ask for the phone's location itself (as
 // Dymaxion found), so the phone takes a coarse fix first, waiting at most
 // five seconds, and passes it in, rounded to 0.01°.

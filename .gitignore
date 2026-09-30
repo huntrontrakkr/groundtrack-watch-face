@@ -23,3 +23,6 @@ __pycache__/
 native-plotboard/build/
 native-plotboard/.lock-waf*
 native-plotboard/src/pkjs/index.js
+native-fuller/build/
+native-fuller/.lock-waf*
+native-fuller/src/pkjs/index.js

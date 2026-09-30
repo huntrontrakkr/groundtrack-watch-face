@@ -140,5 +140,6 @@ test('night decided by fixed point first is night decided by the double sums, ev
 test('the watch app type-checks against the SDK signatures',{skip:!cc&&'no C compiler'},()=>{
   // A stand-in pebble.h (native/host/stub) declares what main.c uses; the
   // real check is the Pebble SDK build.
-  for(const f of ['main.c','watch_data.c'])execFileSync('cc',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Inative/host/stub','-Inative/src/c','-DENR_FLOAT','-fsyntax-only','native/src/c/'+f],{stdio:'pipe'});
+  // Each face's build, and the host's (all of them).
+  for(const face of [[],['-DFACE_ENROUTE'],['-DFACE_PLOTBOARD'],['-DFACE_FULLER']])for(const f of ['main.c','watch_data.c'])execFileSync('cc',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Inative/host/stub','-Inative/src/c','-DENR_FLOAT',...face,'-fsyntax-only','native/src/c/'+f],{stdio:'pipe'});
 });

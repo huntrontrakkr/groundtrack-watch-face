@@ -37,6 +37,7 @@ jobs:
           path: |
             native/build/native.pbw
             native-plotboard/build/native-plotboard.pbw
+            native-fuller/build/native-fuller.pbw
           retention-days: 14
 
   emulator:

@@ -5,7 +5,8 @@
 //
 //   node tools/emulator-check.mjs <out-dir> [body] [plate] [flag|noflag|callout] [zone]
 //
-// NUMERALS, MARGIN, SPAN, TAPE, TRANSFER and CLOCK24 give the phone's other settings
+// NUMERALS, MARGIN, SPAN, TAPE, TRANSFER, CLOCK24 and PROJECTION (chart,
+// fuller: Groundtrack Fuller) give the phone's other settings
 // (native/pkjs/main.js; defaults even, utc, day, fixed, 1), EVENTS_STORED its
 // events as it keeps them.
 //
@@ -13,7 +14,7 @@
 // the flag by default, in the phone's own time zone); home is the zone's
 // preset. The emulator must be running the app with its scene received.
 // PEBBLE names the pebble command (default: tools/emulator.sh). TLE_FILE
-// registers an element set first, the one the phone used for a satellite.
+// registers element sets first (three lines each), the ones the phone used.
 import {execFileSync} from 'node:child_process';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
@@ -25,7 +26,7 @@ import {MINUTE} from '../src/ephemeris.js';
 import {W,H} from '../src/enroute-render.js';
 import {decodePNG,encodePNG} from './png.mjs';
 import {registerElements} from '../src/satellites.js';
-if(process.env.TLE_FILE)registerElements(readFileSync(process.env.TLE_FILE,'utf8'),'celestrak');
+if(process.env.TLE_FILE){const lines=readFileSync(process.env.TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','celestrak');}
 
 const [outArg='test-results/emulator',body='sun',plate='enroute',flagArg='flag',zone=Intl.DateTimeFormat().resolvedOptions().timeZone]=process.argv.slice(2);
 const out=resolve(outArg);mkdirSync(out,{recursive:true});
@@ -45,7 +46,7 @@ if(at===null)throw new Error('No screenshot within one minute');
 const shot=decodePNG(readFileSync(shotFile));
 if(shot.width!==W||shot.height!==H)throw new Error(`Screenshot is ${shot.width}x${shot.height}, not ${W}x${H}`);
 const start=civilHour(at,zone),minute=Math.floor((at-start)/MINUTE);
-const e=process.env,{renderer,state}=buildScene({body,start,plate,readout:flagArg==='noflag'?false:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',minute,events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null});
+const e=process.env,{renderer,state}=buildScene({body,start,plate,readout:flagArg==='noflag'?false:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',projection:e.PROJECTION||'chart',minute,events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null});
 const ref=Buffer.from(renderer.render({...state,epoch:start+minute*MINUTE}).buf);
 
 // Side by side: watch, browser, differences in red over a faded browser frame.

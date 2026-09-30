@@ -5,7 +5,7 @@
 #include "fmath.h"
 #include "face.h"
 // A Fuller sheet, on a face that can draw one.
-#define ROLLED(s) (FACE_ROLL&&(s)->fuller)
+#define ROLLED(s) (FACE_ROLL&&(!FACE_CHART||(s)->fuller))
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -215,6 +215,7 @@ static void clear(Ctx *c,int x,int y){
 // A block's night, from those bounds, at one minute: 0 all day, 1 all
 // night, 2 in between.
 static void block_bounds(const EnrScene *s,int m,enr_real lo[BLOCKS],enr_real hi[BLOCKS]){
+  if(ROLLED(s))return;
   const enr_real *u=s->minutes[m].sun;
   for(int b=0;b<BLOCKS;b++){lo[b]=(enr_real)1e9;hi[b]=(enr_real)-1e9;}
   for(int x=0;x<W;x++){const enr_real p=s->col_cos[x]*u[0]+s->col_sin[x]*u[1];if(p<lo[x>>4])lo[x>>4]=p;if(p>hi[x>>4])hi[x>>4]=p;}
@@ -826,7 +827,7 @@ static void work_end(void){free(work);work=NULL;}
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){if(work_begin()){render(scene,minute,frame,row_stride,NULL);work_end();}}
 
 void enr_ready(EnrScene *s){
-  for(int y=0;y<H;y++){s->row_q[y][0]=q30(s->row_cos[y]);s->row_q[y][1]=q30(s->row_sin[y]);}
+  if(!ROLLED(s))for(int y=0;y<H;y++){s->row_q[y][0]=q30(s->row_cos[y]);s->row_q[y][1]=q30(s->row_sin[y]);}
   // Night's thresholds: sunrise, civil twilight, the zones' dither for each
   // Bayer value (t*16 > b + 0.5) and the paper screen's (t*4 > b, and t > 0).
   const enr_real S=SUNRISE_SINE,C=CIVIL_TWILIGHT_SINE;

@@ -96,6 +96,7 @@ static void build_abort(void){if(s_build){chart_abort(s_build);s_build=NULL;}loc
 static void build(time_t now){
   if(s_build)return;
   chart_free(&s_now);
+  APP_LOG(APP_LOG_LEVEL_INFO,"Building the chart; heap free %u",(unsigned)heap_bytes_free());
   s_build=local_chart(now,&s_settings);s_build_ms=0;
   if(s_build)app_timer_register(1,build_step,NULL);
   else{set_status("AWAITING EPHEMERIS");layer_mark_dirty(s_layer);}

@@ -4,6 +4,7 @@
 #include "segments.h"
 #include "map_pack.h"
 #include "passes.h"
+#include "face.h"
 
 #define SETTINGS_KEY 1
 #define SEGMENT_KEY 100        // + UTC day % 64
@@ -20,9 +21,11 @@
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
   // the phone sends one.
-  // The Sun on Enroute, the ISS on Plotboard.
-#ifdef FACE_PLOTBOARD
+  // The Sun on Enroute, the ISS on Plotboard and Fuller.
+#if defined(FACE_PLOTBOARD)
   const WatchSettings defaults={5,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_WORLD,"ISS",ENR_EVEN,0,0,0};
+#elif defined(FACE_FULLER)
+  const WatchSettings defaults={5,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0};
 #else
   const WatchSettings defaults={5,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0};
 #endif
@@ -151,7 +154,9 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   const struct tm *lt=localtime(&now);
   ChartInput in;memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:0;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.minute=lt->tm_min;in.clock24=s->clock24;
+  // On Groundtrack Fuller every chart is a rolling Fuller sheet, of the day
+  // for the Sun and Moon.
+  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:FACE_ROLL?VIEW_DAY:0;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.minute=lt->tm_min;in.clock24=s->clock24;
   in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
   in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
@@ -181,7 +186,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   if(sat){
     // A satellite: its segments over the track, and home's passes for the
     // hour.
-    const int lead=in.view?1200:2400;
+    const int lead=FACE_ROLL?600:in.view?1200:2400;
     const int64_t t0=in.view==VIEW_DAY?in.day_start:in.start-lead,t1=in.view==VIEW_DAY?(in.day_end>in.start+3600?in.day_end:in.start+3600):in.start+3600+lead;
     for(int64_t t=t0;t<=t1&&days.nsat<6;){
       if(!sat_segment_load(s->norad,t,&days.sat[days.nsat])){local_chart_done();return NULL;}
@@ -194,8 +199,16 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
     }
   }
   // The sources stay valid while the build runs.
-  static ResHandle map,figures,tables;map=resource_get_handle(RESOURCE_ID_MAP_PACK);figures=resource_get_handle(RESOURCE_ID_FIGURES);tables=resource_get_handle(RESOURCE_ID_TABLES);
-  const ChartSources src={.map=resource_read,.map_source=&map,.figures=resource_read,.figure_source=&figures,.tables=resource_read,.table_source=&tables,
+  static ResHandle map,figures,tables;figures=resource_get_handle(RESOURCE_ID_FIGURES);tables=resource_get_handle(RESOURCE_ID_TABLES);
+#if FACE_ROLL
+  // Groundtrack Fuller reads the faces' grids and the coastline, not the map.
+  static ResHandle grids,land;grids=resource_get_handle(RESOURCE_ID_FULLER_GRIDS);land=resource_get_handle(RESOURCE_ID_LAND_BITS);(void)map;
+  const ChartSources src={.grids=resource_read,.grid_source=&grids,.land=resource_read,.land_source=&land,
+#else
+  map=resource_get_handle(RESOURCE_ID_MAP_PACK);
+  const ChartSources src={.map=resource_read,.map_source=&map,
+#endif
+    .figures=resource_read,.figure_source=&figures,.tables=resource_read,.table_source=&tables,
     .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,
     .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc};
   #undef days

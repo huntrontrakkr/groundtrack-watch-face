@@ -1,0 +1,61 @@
+{
+  "name": "groundtrack-fuller",
+  "author": "Groundtrack",
+  "version": "0.1.0",
+  "private": true,
+  "keywords": [
+    "pebble-app"
+  ],
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Groundtrack Fuller",
+    "uuid": "638c835d-73cf-4ad6-a2fa-312fe087de5d",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "configurable",
+      "location"
+    ],
+    "messageKeys": [
+      "Status",
+      "Settings",
+      "Segments",
+      "RiseSets",
+      "DataRequest",
+      "DataBody",
+      "SatSegments",
+      "Passes",
+      "Events"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "raw",
+          "name": "FULLER_GRIDS",
+          "file": "fuller.bin"
+        },
+        {
+          "type": "raw",
+          "name": "LAND_BITS",
+          "file": "land.bin"
+        },
+        {
+          "type": "raw",
+          "name": "FIGURES",
+          "file": "figures.bin"
+        },
+        {
+          "type": "raw",
+          "name": "TABLES",
+          "file": "tables.bin"
+        }
+      ]
+    }
+  }
+}

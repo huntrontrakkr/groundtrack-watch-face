@@ -24,7 +24,10 @@ typedef struct {double tri[3][2];int64_t key[2];uint8_t face;bool route;} Fuller
 // gives), and the tiles kept: the cells on the screen, in the net's order,
 // each with its box on the screen and its edges (0 a fold, 1 a cut, 2 the
 // outline).
-#define FULLER_CELLS 96
+#define FULLER_CELLS 64
+// The scratch fuller_roll() needs: the cells, the candidates for the next
+// ring and their distances (kept off the watch's small stack).
+#define FULLER_SCRATCH (sizeof(FullerCell)*2*FULLER_CELLS+sizeof(double)*FULLER_CELLS)
 #define FULLER_TILES 24
 typedef struct {double tri[3][2],box[4];uint8_t face,edge[3];} FullerTile;
 typedef struct {
@@ -39,10 +42,15 @@ int fuller_face_of(const FullerConst *g,const double d[3]);
 void fuller_forward(const FullerConst *g,int face,const double d[3],double w[3]);
 // rollCamera()'s rolling and net. dirs: the track's directions, count of
 // them; i0 and i1 the hour's stations (the day's first and last for day);
-// cells, FULLER_CELLS of scratch.
+// cells, FULLER_SCRATCH bytes of scratch.
 // span as the study's (180, or 192 for a day). Writes each point's screen
 // position to xs, ys. False if the net does not fit.
 bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const double (*dirs)[3],int count,int i0,int i1,bool day,double span,double *xs,double *ys);
+// The route again, a point at a time, as fuller_roll() rolled it: start
+// with the first point's direction, then each point's in turn gives its
+// screen position.
+void fuller_track_start(const FullerConst *g,const double d0[3],FullerCell *tile);
+void fuller_track_next(const FullerCam *cam,FullerCell *tile,const double d[3],double *x,double *y);
 void fuller_to_plane(const FullerCam *cam,double x,double y,double p[2]);
 void fuller_to_screen(const FullerCam *cam,const double p[2],double *x,double *y);
 // The tile holding a screen point, or -1; with its weights.

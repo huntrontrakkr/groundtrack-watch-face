@@ -10,9 +10,14 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "face.h"
 
 #define ENR_W 200
 #define ENR_H 228
+// The equirectangular charts' lighting tables, by row and column; a face
+// without those charts (Groundtrack Fuller) keeps none.
+#define ENR_TRIG_H (FACE_CHART?ENR_H:1)
+#define ENR_TRIG_W (FACE_CHART?ENR_W:1)
 
 // Arithmetic for night and the body. Doubles match the browser renderer
 // exactly, and the watch uses them; ENR_FLOAT (single precision) remains
@@ -98,7 +103,7 @@ typedef struct {
   // Pebble GColor8 values: 0b11rrggbb.
   uint8_t zoned[ENR_ZONED][3];
   uint8_t space,space_ink,screen,waterline,terminator,night_dots,tints[5],depths[2];
-  enr_real row_cos[ENR_H],row_sin[ENR_H],col_cos[ENR_W],col_sin[ENR_W];
+  enr_real row_cos[ENR_TRIG_H],row_sin[ENR_TRIG_H],col_cos[ENR_TRIG_W],col_sin[ENR_TRIG_W];
   enr_real c1x,normal_x,normal_y;
   int16_t zulu_x,zulu_baseline,top_x,top_baseline,height_right,height_baseline;
   // The world band's tape: its ends, baseline, and where the minutes may go.
@@ -151,7 +156,7 @@ typedef struct {
   uint8_t ground_rows[(ENR_H+7)/8];
   // The rows' cosines and sines, and night's thresholds, in 2^30 fixed
   // point, for the minute renderer's fast night.
-  int32_t row_q[ENR_H][2],night_q[34];
+  int32_t row_q[ENR_TRIG_H][2],night_q[34];
 } EnrScene;
 
 // Parse a scene blob as src/native-scene.js writes it (host only:

@@ -3,7 +3,7 @@
 // native/src/pkjs/index.js for the Pebble SDK to package; with --face
 // plotboard, Groundtrack Plotboard's into native-plotboard/src/pkjs/index.js.
 //
-//   node tools/build-pkjs.mjs [--face enroute|plotboard] [out-file]
+//   node tools/build-pkjs.mjs [--face enroute|plotboard|fuller] [out-file]
 import {readFileSync,mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -11,8 +11,8 @@ import {build} from 'esbuild';
 
 const root=new URL('..',import.meta.url);
 const args=process.argv.slice(2),at=args.indexOf('--face'),face=at>=0?args.splice(at,2)[1]:'enroute';
-if(!['enroute','plotboard'].includes(face))throw new Error(`No face ${face}`);
-const out=args[0]||fileURLToPath(new URL(face==='plotboard'?'native-plotboard/src/pkjs/index.js':'native/src/pkjs/index.js',root));
+if(!['enroute','plotboard','fuller'].includes(face))throw new Error(`No face ${face}`);
+const out=args[0]||fileURLToPath(new URL(face==='enroute'?'native/src/pkjs/index.js':`native-${face}/src/pkjs/index.js`,root));
 
 const data={
   name:'groundtrack-data',
