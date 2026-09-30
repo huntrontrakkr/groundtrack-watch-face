@@ -21,6 +21,10 @@ Open the URL printed by Vite. **Study 06 — Enroute** is the default. It draws 
 
 Read [the Enroute notes](docs/STUDY-06.md), [the Chart notes](docs/STUDY-05.md), [the Shorelight notes](docs/STUDY-04.md), [the unfolded atlas notes](docs/STUDY-03.md), [the sculptural globe notes](docs/STUDY-02.md), [the first study's research](docs/DESIGN.md), and [the battery architecture](docs/ENERGY.md).
 
+## Native watchface (first step)
+
+`native/` is a Pebble SDK project for the Enroute face on Pebble Time 2 (`emery`). Once an hour the phone renders the chart itself, with the renderer and the map data bundled into the app's phone JavaScript (`npm run build:pkjs`), as a compact class plane (22–31 KB), and each minute the watch colours it and adds night, the bold route, the body, the minute flag and Zulu time, using a 6.7 KB portable C core. The core is checked pixel for pixel against the browser renderer in `npm test` (it needs a C compiler). The Pebble SDK build itself hasn't been run yet. [docs/NATIVE.md](docs/NATIVE.md) has the design, the measurements, how to build and what's still open.
+
 ## Data and light
 
 Sun and Moon positions use Astronomy Engine. The same calculated Sun supplies Study 06's night screen, Study 05's day, twilight and night zones and flat numeral shadows, and the earlier studies' directional lighting and volume-shadow geometry. Study 06's relief is a quarter-degree grid from NOAA ETOPO1 and USGS GMTED2010 (public domain), rebuilt by `npm run generate:relief` from the AWS Open Data Terrain Tiles; it is generalized and not for navigation. Towers are deliberately exaggerated artwork; roofs, counters and small shadow penumbras receive explicit display treatments for legibility. Coastlines contain no terrain elevations. The compass indicates geographic north at the body's map location, not the wearer's heading.
