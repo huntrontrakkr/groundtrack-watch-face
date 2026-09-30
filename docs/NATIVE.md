@@ -24,7 +24,7 @@ The phone sends no charts: it once rendered satellites' scenes and sent them an 
 - **The camera and track:** the hour and forty minutes either side, a minute apart, from the Sun and Moon segments or a satellite's; for the world band twenty minutes either side every fifteen seconds, the whole world between 72°N and 60°S fitted to the hour's longitudes; for the whole-day chart the local day (23 or 25 hours across a clock change) every five minutes, its shape fitted and set to the right, graduated in hours.
 - **The ground, streamed row by row** from the map pack: land from four bilinear samples of the atlas per pixel; the relief's bilinear sample and its three smoothing passes, as floats, exactly as the browser's `Float32Array`s; coast and waterline distances; contours, the shelf edge and height tints. Only three stages of three rows, a ring of smoothed rows and the map's columns under the chart are kept, never a full-frame array.
 - **The base layer**, in the renderer's order, writing layers instead of colours: the graticule, home and the tracking network (on the world band with their acquisition circles), the route cased, dashed and graduated, the rose, the hour figures (Jost, from a resource) or the world band's tape, home's mark, the margins with home's rise and set or the satellite's elements.
-- **The whole-day chart's time callout** is the minute's: the hour in Jost with a drawn colon and the minutes smaller on its baseline, set aside in open map level with the satellite, with a shoulder and an elbow leader to it that breaks for the hour labels and home's code; the minute renderer sets it from the 20, 28 and 40 px figures, which the scene keeps.
+- **The time callout** is the minute's: on the whole-day chart set aside in open map level with the satellite, on the hour chart (as an option) hung under the body on the side that keeps it on the face and its leader clearest; an elbow leader breaks for lettering. The minute renderer sets the time in the chosen figures from the 20, 28 and 40 px Jost figures, which the scene keeps (the colon drawn to match, Departure Mono's doubled from its regular figures).
 - **The minutes:** for each, the Sun's direction, the body's place, the Moon's phase, the pass line, and on the world band the tape's index, the satellite's height and home's acquisition circle for that height (120 points by arcsine and arctangent, the same functions as the browser's; minutes that plot the same pixels share one).
 
 Each minute the face redraws only what changed: per row, the minute renderer knows which 16-pixel blocks lie wholly in day or in night, repaints the blocks the terminator crossed and the boxes of the moving things (body, route, flag, Zulu time, pass line), and leaves the rest of the frame buffer as it was. A full repaint happens only when the face comes back into focus.
@@ -81,7 +81,7 @@ Messages, all through one queue on the phone:
 | `SatSegments`, `Passes` (phone → watch) | three days of a satellite's segments (160 bytes each, with its elements' epoch), twelve to a message; home's pass blocks for them |
 | `Status` (phone → watch) | why the phone can't give what was asked (no elements for a satellite) |
 
-Satellites' element sets are fetched from CelesTrak at most once every two hours each and used within three days of their epoch; GPS falls back to its nominal orbit. The app's settings page (`native/pkjs/config.html`, opened offline as a data URL) sets the body (the Sun, the Moon or one of seven satellites), plate, minute flag and home.
+Satellites' element sets are fetched from CelesTrak at most once every two hours each and used within three days of their epoch; GPS falls back to its nominal orbit. The app's settings page (`native/pkjs/config.html`, opened offline as a data URL) sets the body (the Sun, the Moon or one of seven satellites), plate, home, and the browser's clock options: 24-hour figures, the minute readout (none, the minute flag or a time callout), the callout's figures (four figures with the minutes outlined, the browser's default; the minutes in route ink; in Departure Mono; smaller without or with a colon), the margin's time (Zulu or the nautical zone under the body) and QZSS's chart (its whole day or this hour).
 
 ## What is verified
 
@@ -102,8 +102,8 @@ These are measurements of the code in the emulator and on the host, not of a wat
 
 | | |
 |---|---|
-| App code and static data | 61 KB of the 64 KB an app may have (doubles in software make every sum a call) |
-| Heap free at launch | 70 KB; about 66 KB used at a build's peak; 30–47 KB free with the hour's chart |
+| App code and static data | 62 KB of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call) |
+| Heap free at launch | 69 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
 | Building the hour, in the emulator | 0.7–1.1 seconds of work, in slices |
 | Radio for the Sun and Moon | settings on launch; about 10 KB of segments every few weeks |
 | Radio for a satellite | GPS about 2.5 KB of segments and passes every day or two; a fast satellite (hour-long segments) about 13 KB every two to three days |
@@ -135,8 +135,8 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 
 ## Open questions and next steps
 
-1. **The other views and options:** the world band's moving tapes; events; the time callout and the figure styles on the hour chart; Zulu's nautical zone; Rolling Fuller; and Plotboard's per-anchor zones.
-2. **Code space.** 61 of 64 KB, and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
+1. **The other views and options:** the world band's moving tapes; events; Rolling Fuller; and Plotboard's per-anchor zones.
+2. **Code space.** 62 of 64 KB, and each KB of code is one less of heap for the build: the other views need room, which may mean trimming (shared helpers, fewer inlined copies) or moving work to the phone.
 3. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the `.pbw`, are unchecked.
 4. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.
 5. **Energy on a watch.** The emulator's instruction counts guide the work; current is measured only on a watch, as `docs/ENERGY.md` sets out. No battery claim is made until then.

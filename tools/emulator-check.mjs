@@ -3,7 +3,10 @@
 // minute and compares them pixel for pixel. Writes watch | browser | the
 // pixels that differ (red) side by side at 2x.
 //
-//   node tools/emulator-check.mjs <out-dir> [body] [plate] [flag|noflag] [zone]
+//   node tools/emulator-check.mjs <out-dir> [body] [plate] [flag|noflag|callout] [zone]
+//
+// NUMERALS, MARGIN, SPAN and CLOCK24 give the phone's other settings
+// (native/pkjs/main.js; defaults even, utc, day, 1).
 //
 // The settings must be the phone's (native/pkjs/main.js: sun, enroute and
 // the flag by default, in the phone's own time zone); home is the zone's
@@ -41,7 +44,7 @@ if(at===null)throw new Error('No screenshot within one minute');
 const shot=decodePNG(readFileSync(shotFile));
 if(shot.width!==W||shot.height!==H)throw new Error(`Screenshot is ${shot.width}x${shot.height}, not ${W}x${H}`);
 const start=civilHour(at,zone),minute=Math.floor((at-start)/MINUTE);
-const {renderer,state}=buildScene({body,start,plate,flag:flagArg==='flag',timeZone:zone,home:HOMES[zone]||null});
+const e=process.env,{renderer,state}=buildScene({body,start,plate,readout:flagArg==='noflag'?false:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null});
 const ref=Buffer.from(renderer.render({...state,epoch:start+minute*MINUTE}).buf);
 
 // Side by side: watch, browser, differences in red over a faded browser frame.
@@ -54,6 +57,6 @@ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
 }
 const name=`${body.replace(/\W/g,'-')}-${plate}-${String(minute).padStart(2,'0')}`;
 writeFileSync(join(out,name+'.png'),encodePNG(sheet,wide,H,2));
-const result={body,plate,flag:flagArg==='flag',zone,hour:new Date(start).toISOString(),minute,differ,first,...(differ?{where}:{})};
+const result={body,plate,readout:flagArg,zone,hour:new Date(start).toISOString(),minute,differ,first,...(differ?{where}:{})};
 console.log(JSON.stringify(result));
 process.exitCode=differ?1:0;

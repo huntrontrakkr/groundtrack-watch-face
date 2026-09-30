@@ -45,7 +45,27 @@
   </fieldset>
   <fieldset><legend>Plate</legend><div id="plates"></div></fieldset>
   <fieldset><legend>Clock</legend>
-    <label class="row"><input type="checkbox" name="flag"><span class="name">Minute flag<span class="note">A pennant on the route with the minutes</span></span></label>
+    <label class="row"><input type="checkbox" name="clock24"><span class="name">24-hour figures</span></label>
+  </fieldset>
+  <fieldset><legend>Minute readout</legend>
+    <label class="row"><input type="radio" name="readout" value="off"><span class="name">Off<span class="note">The body on the graduated route is the index</span></span></label>
+    <label class="row"><input type="radio" name="readout" value="flag"><span class="name">Minute flag<span class="note">A pennant on a staff from the body, with the minutes</span></span></label>
+    <label class="row"><input type="radio" name="readout" value="callout"><span class="name">Time callout<span class="note">The time in full, hung from a leader</span></span></label>
+  </fieldset>
+  <fieldset><legend>Callout time</legend>
+    <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Four figures, minutes outlined</span></label>
+    <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Minutes in route ink</span></label>
+    <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Minutes in Departure Mono</span></label>
+    <label class="row"><input type="radio" name="numerals" value="plain"><span class="name">Smaller minutes, no colon</span></label>
+    <label class="row"><input type="radio" name="numerals" value="colon"><span class="name">Smaller minutes with colon</span></label>
+  </fieldset>
+  <fieldset><legend>Margin time</legend>
+    <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)</span></label>
+    <label class="row"><input type="radio" name="margin" value="body"><span class="name">Nautical zone under the body<span class="note">Its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
+  </fieldset>
+  <fieldset><legend>QZSS chart</legend>
+    <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">Its figure-8, the day's hours along it</span></span></label>
+    <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">On the hour chart, zoomed far in over Japan or Australia</span></span></label>
   </fieldset>
   <fieldset><legend>Home station</legend>
     <label class="row"><input type="radio" name="home" value="preset"><span class="name">For the time zone<span class="note" id="preset-note"></span></span></label>
@@ -80,7 +100,8 @@
   rows(config.plates,'plate',document.getElementById('plates'));
   function pick(name,value){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
   function picked(name){var inputs=form.elements[name];for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
-  pick('body',s.body);pick('plate',s.plate);form.elements.flag.checked=s.flag==='1';
+  pick('body',s.body);pick('plate',s.plate);pick('readout',s.readout);pick('numerals',s.numerals);pick('margin',s.margin);pick('span',s.span);
+  form.elements.clock24.checked=s.clock24!=='0';
   document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+s.timeZone+')':'None for '+s.timeZone;
   var home=null;try{home=s.home?JSON.parse(s.home):null;}catch(e){}
   if(home&&home.none)pick('home','none');
@@ -112,7 +133,8 @@
       if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
       homeValue=JSON.stringify({lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
     }
-    close(JSON.stringify({body:picked('body'),plate:picked('plate'),flag:form.elements.flag.checked?'1':'0',home:homeValue}));
+    close(JSON.stringify({body:picked('body'),plate:picked('plate'),readout:picked('readout'),numerals:picked('numerals'),margin:picked('margin'),span:picked('span'),
+      clock24:form.elements.clock24.checked?'1':'0',home:homeValue}));
   });
 })();
 </script>

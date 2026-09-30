@@ -11,8 +11,8 @@ import {join} from 'node:path';
 let cc=true;try{execFileSync('make',['-s','-C','native/host','harness'],{stdio:'pipe'});}catch{cc=false;}
 // Live satellites' element sets, for the world band.
 const env={...process.env,TLE_FILE:'tests/fixtures/celestrak-2026-09-29.tle'};
-const run=(dir,name,args,minutes)=>{
-  execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,...minutes.map(String)],{stdio:'pipe',env});
+const run=(dir,name,args,minutes,more={})=>{
+  execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,...minutes.map(String)],{stdio:'pipe',env:{...env,...more}});
   return execFileSync('native/host/harness',[join(dir,`${name}.scene`),join(dir,name),...minutes.map(String)]).toString().trim().split('\n').map(l=>JSON.parse(l));
 };
 
@@ -21,7 +21,7 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
   try{
     // Paper and zoned plates, night, the day/night lines, height tints, the
     // minute flag, the Moon's phase and a satellite's pass line.
-    for(const [name,args,minutes] of [
+    for(const [name,args,minutes,more] of [
       ['sun-enroute',['sun','2026-09-27T08:00:00Z','enroute','flag'],[0,24,59]],
       ['moon-crt',['moon','2026-09-19T09:00:00Z','crt','flag'],[0,24,47]],
       ['moon-red',['moon','2026-09-19T09:00:00Z','red','noflag'],[12,59]],
@@ -38,9 +38,19 @@ test('the native core draws the hour exactly as the browser does',{skip:!cc&&'no
       // QZSS's day: the time callout, big and small, its leader.
       ['qzs-crt',['sat:42738','2026-09-27T05:00:00Z','crt','flag'],[0,24,59]],
       ['qzs-sunlight',['sat:42738','2026-09-27T14:00:00Z','sunlight','noflag'],[7,33]],
-      ['qzs-enroute',['sat:42738','2026-09-27T19:00:00Z','enroute','noflag'],[0,45]]
+      ['qzs-enroute',['sat:42738','2026-09-27T19:00:00Z','enroute','noflag'],[0,45]],
+      // The time callout on the hour chart, in each style; the nautical
+      // zone; the 12-hour clock; QZSS's day in other styles and its hour.
+      ['sun-callout-colon',['sun','2026-09-27T08:00:00Z','enroute','callout'],[0,24,59],{NUMERALS:'colon'}],
+      ['moon-callout-even',['moon','2026-09-19T09:00:00Z','crt','callout'],[5,47],{NUMERALS:'even',ZONE:'body'}],
+      ['sun-callout-mono',['sun','2026-06-21T13:00:00Z','sectional','callout'],[12,38],{NUMERALS:'mono'}],
+      ['gps-callout-accent',['sat:36585','2026-09-27T13:00:00Z','red','callout'],[3,30],{NUMERALS:'accent',CLOCK24:'0'}],
+      ['sun-callout-plain',['sun','2026-12-21T22:00:00Z','sunlight','callout'],[1,59],{NUMERALS:'plain',ZONE:'body'}],
+      ['qzs-mono',['sat:42738','2026-09-27T05:00:00Z','hypsometric','noflag'],[10,50],{NUMERALS:'mono',CLOCK24:'0'}],
+      ['qzs-accent',['sat:42738','2026-09-27T14:00:00Z','crt','noflag'],[20],{NUMERALS:'accent'}],
+      ['qzs-hour',['sat:42738','2026-09-27T05:00:00Z','sectional','callout'],[0,30],{SPAN:'hour',NUMERALS:'colon'}]
     ]){
-      for(const f of run(dir,name,args,minutes))assert.equal(f.differ,0,`${name} minute ${f.minute}: first difference at ${f.first}`);
+      for(const f of run(dir,name,args,minutes,more))assert.equal(f.differ,0,`${name} minute ${f.minute}: first difference at ${f.first}`);
     }
     // Plotboard's inks change with night; the browser colors a symbol by
     // the zone at its anchor, the native core pixel by pixel, so the two
@@ -55,15 +65,16 @@ test('a minute drawn over the last draws only what changed, and the same pixels'
     // Every plate, the Sun at noon and the Moon at nightfall, a satellite:
     // each minute over the one before (and over a jump of five) must be the
     // minute drawn whole.
-    for(const [name,args] of [
+    for(const [name,args,more={}] of [
       ['sun-enroute',['sun','2026-09-27T08:00:00Z','enroute','flag']],['sun-sectional',['sun','2026-06-21T13:00:00Z','sectional','flag']],
       ['moon-plotboard',['moon','2026-09-19T09:00:00Z','plotboard','flag']],['moon-hypsometric',['moon','2026-09-19T09:00:00Z','hypsometric','noflag']],
       ['moon-red',['moon','2026-09-19T09:00:00Z','red','noflag']],['moon-crt',['moon','2026-09-19T09:00:00Z','crt','flag']],
       ['moon-sunlight',['moon','2026-09-19T09:00:00Z','sunlight','flag']],['gps-crt',['sat:36585','2026-09-27T13:00:00Z','crt','flag']],
       ['iss-crt',['sat:25544','2026-09-30T13:00:00Z','crt','flag']],['ls9-plotboard',['sat:49260','2026-10-01T09:00:00Z','plotboard','flag']],
-      ['qzs-hypsometric',['sat:42738','2026-09-27T05:00:00Z','hypsometric','noflag']]
+      ['qzs-hypsometric',['sat:42738','2026-09-27T05:00:00Z','hypsometric','noflag']],
+      ['sun-callout',['sun','2026-09-27T08:00:00Z','enroute','callout'],{NUMERALS:'accent'}],['moon-callout',['moon','2026-09-19T09:00:00Z','crt','callout'],{NUMERALS:'mono'}]
     ]){
-      execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,'0'],{stdio:'pipe',env});
+      execFileSync(process.execPath,['tools/export-scene.mjs',dir,name,...args,'0'],{stdio:'pipe',env:{...env,...more}});
       const r=JSON.parse(execFileSync('native/host/harness',[join(dir,`${name}.scene`),join(dir,name),'-u']).toString());
       assert.equal(r.differ,0,`${name}: ${r.differ} pixels differ`);
       assert.ok(r.drawn<200*228,`${name}: every pixel drawn again`);

@@ -7,10 +7,13 @@
 // This is the source; tools/build-pkjs.mjs bundles it into
 // native/src/pkjs/index.js.
 // Settings are kept in localStorage:
-//   body, plate, flag ('1' or '0'), timeZone (default: the phone's),
+//   body, plate, readout ('off', 'flag' or 'callout'; before it, flag '1' or
+//   '0'), numerals (the callout's figures: colon, plain, even, mono, accent),
+//   margin ('utc' or 'body'), span ('day' or 'hour': QZSS's chart), clock24
+//   ('1' or '0'), timeZone (default: the phone's),
 //   home (JSON {lat, lon}, or {none: true}; default: the preset home for the
 //   zone, if any)
-// The settings page (config.html) sets body, plate, flag and home.
+// The settings page (config.html) sets all but timeZone.
 //   elementsUrl: where to fetch element sets (default CelesTrak's GP query),
 //   for development against a mirror
 // Satellites' element sets are fetched from CelesTrak at most once every two
@@ -67,20 +70,26 @@ function pump(){
 }
 
 // What the watch needs to draw its charts itself. Settings: body (0 Sun, 1
-// Moon, 2 a satellite), plate, flag, 24-hour, home, then home's latitude and
-// longitude in hundredths of a degree (i32 each), then a satellite's catalog
-// number (i32), its kind (1 a station, plus its view, 0 the hour chart, 1
-// the world band, 2 the whole day, times 2) and its code (3 characters).
-var VIEWS=['hour','world','day'];
+// Moon, 2 a satellite), plate, the minute readout (0 none, 1 the flag, 2 a
+// time callout), 24-hour, home, then home's latitude and longitude in
+// hundredths of a degree (i32 each), then a satellite's catalog number
+// (i32), its kind (1 a station, plus its view, 0 the hour chart, 1 the world
+// band, 2 the whole day, times 2) and its code (3 characters), then the
+// callout's figures (0 colon, 1 plain, 2 even, 3 mono, 4 accent) and the
+// margin's time (0 Zulu, 1 the nautical zone under the body).
+var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'];
+function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
+function view(body){var v=viewOf(body);return v==='day'&&setting('span','day')==='hour'?'hour':v;}
 function watchSettings(){
   var body=setting('body','sun'),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
-  var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null;
-  var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,setting('flag','1')==='1'?1:0,1,h?1:0];
+  var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null,numerals=NUMERALS.indexOf(setting('numerals','even'));
+  var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,READOUTS.indexOf(readout()),setting('clock24','1')==='0'?0:1,h?1:0];
   function i32(v){bytes.push(v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255);}
   i32(h?Math.round(h.lat*100):0);i32(h?Math.round(h.lon*100):0);
   i32(sat?Number(body.slice(4)):0);
-  bytes.push((entry&&entry.symbol==='station'?1:0)|(sat?VIEWS.indexOf(viewOf(body)):0)<<1);
+  bytes.push((entry&&entry.symbol==='station'?1:0)|(sat?VIEWS.indexOf(view(body)):0)<<1);
   var code=entry?entry.code:'';for(var k=0;k<3;k++)bytes.push(k<code.length?code.charCodeAt(k):0);
+  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -94,7 +103,7 @@ function sendSatellite(norad){
     if(problem){console.log('No elements for '+body+': '+(reason||problem));status(problem);return;}
     // From an hour ago, or for the whole-day chart from a day ago (its day
     // starts at local midnight).
-    var span=satelliteSpan(body),now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=viewOf(body)==='day'?26*3600:3600;
+    var span=satelliteSpan(body),now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=view(body)==='day'?26*3600:3600;
     for(var t=Math.floor((now-back)/span)*span;t<now+SAT_DAYS*86400;t+=span){
       var seg;try{seg=encodeSatelliteSegment(satelliteSegmentFor(body,t*1000));}catch(error){break;}
       for(var k=0;k<seg.length;k++)bytes.push(seg[k]);sent++;
@@ -189,7 +198,8 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),flag:setting('flag','1'),home:setting('home',''),timeZone:timeZone},
+    var config={settings:{body:setting('body','sun'),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),
+      margin:setting('margin','utc'),span:setting('span','day'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       bodies:BODIES.slice(2).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
@@ -205,7 +215,11 @@ Pebble.addEventListener('webviewclosed',function(e){
   try{chosen=JSON.parse(e.response.charAt(0)==='{'?e.response:decodeURIComponent(e.response));}catch(error){console.log('Unreadable settings');return;}
   if(BODIES.indexOf(chosen.body)>=0)localStorage.setItem('body',chosen.body);
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
-  if(chosen.flag==='1'||chosen.flag==='0')localStorage.setItem('flag',chosen.flag);
+  if(READOUTS.indexOf(chosen.readout)>=0)localStorage.setItem('readout',chosen.readout);
+  if(NUMERALS.indexOf(chosen.numerals)>=0)localStorage.setItem('numerals',chosen.numerals);
+  if(chosen.margin==='utc'||chosen.margin==='body')localStorage.setItem('margin',chosen.margin);
+  if(chosen.span==='day'||chosen.span==='hour')localStorage.setItem('span',chosen.span);
+  if(chosen.clock24==='1'||chosen.clock24==='0')localStorage.setItem('clock24',chosen.clock24);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
   // The watch draws again in the new settings, with home's rise and set
   // for the new home.

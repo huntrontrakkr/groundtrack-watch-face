@@ -446,13 +446,13 @@ typedef struct {Px scratch[SCRATCH];Box taken[64];Px home_code[64];double sb[72]
 // Point i is at t0 + i*step seconds from the hour (see make_track).
 typedef struct {double a,b;} TrackPoint;
 // The figures of one size, loaded while they are drawn.
-static uint8_t *load_figures(const ChartSources *src,int size,int *base){
+// Into `room` (the build's arena, past what it holds), of `space` bytes.
+static uint8_t *load_figures(const ChartSources *src,int size,int *base,uint8_t *room,size_t space){
   int s=0;while(s<5&&FIGURE_SIZES[s]!=size)s++;
   if(s==5)return NULL;
   const int from=FIGURE_GLYPHS[s*10].first,to=s<4?FIGURE_GLYPHS[(s+1)*10].first:FIGURE_BYTES;
-  uint8_t *bits=src->alloc(to-from);
-  if(bits&&src->figures(src->figure_source,from,bits,to-from)!=(size_t)(to-from)){src->release(bits);return NULL;}
-  *base=from;return bits;
+  if((size_t)(to-from)>space||src->figures(src->figure_source,from,room,to-from)!=(size_t)(to-from))return NULL;
+  *base=from;return room;
 }
 
 // ---------------------------------------------------------------- the hour
@@ -635,6 +635,8 @@ static bool finish_draw(ChartBuild *b){
   if(make_track(in,src,track)!=count)FAIL;
   for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
   draw=(Draw *)(b->sink.arena+((sizeof(TrackPoint)*count+7)&~7u));
+  // Past the drawing's lists, room in the arena for the figures' bitmaps.
+  uint8_t *const room=(uint8_t *)(draw+1);const size_t room_size=RUN_ARENA-(size_t)(room-b->sink.arena);
   scratch=draw->scratch;
   Canvas cv={classes,true,0};
   uint8_t ring[2*120];
@@ -661,7 +663,8 @@ static bool finish_draw(ChartBuild *b){
   // acquisition circle on the world band is the minute's.)
   Box *const taken=draw->taken;int taken_n=0;
   // The lettering the day's callout breaks its leader for.
-  Box avoid[12];int avoid_n=0;
+  Box avoid[24];int avoid_n=0;
+  #define AVOID(b) do{if(avoid_n<24)avoid[avoid_n++]=(b);}while(0)
   if(!world){taken[taken_n++]=(Box){0,H-16,W,16};if(in->home)taken[taken_n++]=(Box){0,0,W,14};}
   bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};Px *const home_code=draw->home_code;int home_code_n=0;
   if(in->home){
@@ -669,7 +672,7 @@ static bool finish_draw(ChartBuild *b){
     const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
     if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!overlaps(taken,taken_n,box)){
       home_code_n=text_pixels("HOM",right?x+7:x-7-w,y+4,home_code);taken[taken_n++]=box;home_mark=true;hx=x;hy=y;home_box=box;
-      avoid[avoid_n++]=bounds_of(home_code,home_code_n);
+      AVOID(bounds_of(home_code,home_code_n));
     }
   }
   cv.stage=1;
@@ -686,7 +689,7 @@ static bool finish_draw(ChartBuild *b){
     if(world){const int n=circle_pixels(&cam,STATIONS[s].lat,STATIONS[s].lon,acquisition,5,draw->sb,draw->cb,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++){const int r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(&cv,x+dx,y+dy,L_INK);}
     plot(&cv,x,y,L_INK);
-    const int n=text_pixels(STATIONS[s].code,right?x+5:x-5-w,y+4,scratch);letter(&cv,scratch,n,L_INK,1);
+    const int n=text_pixels(STATIONS[s].code,right?x+5:x-5-w,y+4,scratch);AVOID(bounds_of(scratch,n));letter(&cv,scratch,n,L_INK,1);
   }
   // The route: cased in white on a one-ink plate; dashed outside the hour.
   #define JUMP(p,q) (fabs(track[q].a-track[p].a)>W/2)
@@ -716,7 +719,7 @@ static bool finish_draw(ChartBuild *b){
         char label[4];put_int(label,v,1);const int lw=text_width(label);
         const int n=text_pixels(label,(int)js_round(p->a+nx*9-lw/2.0)+1,(int)js_round(p->b+ny*9+9),scratch);const Box bx=bounds_of(scratch,n);
         bool clear_=true;for(int k=0;k<nlabels;k++){const Box *o=&labels[k];if(!(o->x+o->w+6<=bx.x||bx.x+bx.w+6<=o->x||o->y+o->h+4<=bx.y||bx.y+bx.h+4<=o->y))clear_=false;}
-        if(clear_&&nlabels<10){labels[nlabels++]=bx;if(avoid_n<12)avoid[avoid_n++]=bx;letter(&cv,scratch,n,L_ROUTE,(pal->flags&PLATE_MONO)?1:0);}
+        if(clear_&&nlabels<10){labels[nlabels++]=bx;AVOID(bx);letter(&cv,scratch,n,L_ROUTE,(pal->flags&PLATE_MONO)?1:0);}
       }
     }
   }
@@ -735,7 +738,7 @@ static bool finish_draw(ChartBuild *b){
       char label[4];label[0]=(char)('0'+m/10);label[1]=(char)('0'+m%10);label[2]=0;
       const int lw=text_width(label);
       const int n=text_pixels(label,(int)js_round(track[i].a+nx*8-lw/2.0)+1,(int)js_round(track[i].b+ny*8+9),scratch);
-      letter(&cv,scratch,n,L_ROUTE,(pal->flags&PLATE_MONO)?1:0);
+      AVOID(bounds_of(scratch,n));letter(&cv,scratch,n,L_ROUTE,(pal->flags&PLATE_MONO)?1:0);
     }
   }
   // This hour's VOR rose (on the hour chart) and hexagon; the next hour's
@@ -773,15 +776,14 @@ static bool finish_draw(ChartBuild *b){
       }
     }
     const int size=40,hw=run_width(hour,size),nw=run_width(next,size),gx=PLACE(forward?X0:X1,hw),nx=PLACE(forward?X1:X0,nw);
-    int base;uint8_t *bits=load_figures(src,size,&base);if(!bits)FAIL;
+    int base;uint8_t *bits=load_figures(src,size,&base,room,room_size);if(!bits)FAIL;
     FigureRun run;figure_run(hour,size,gx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,0,L_SPACE_INK);
     figure_run(next,size,nx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,1,L_SPACE_INK);
-    release(bits);
     tape_lo=(int16_t)((gx+hw<nx+nw?gx+hw:nx+nw)+3);tape_hi=(int16_t)((gx>nx?gx:nx)-3-text_width("00"));
   }else if(!day){
     // The hour figures: this hour solid over its rose, the next outlined.
     const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
-    int base;uint8_t *bits=load_figures(src,size,&base);if(!bits)FAIL;
+    int base;uint8_t *bits=load_figures(src,size,&base,room,room_size);if(!bits)FAIL;
     int hx0=PLACE(c0x,hw),hy0=gy,nx0=PLACE(c1x,nw),ny0=gy;
     if(cam.slow){
       // Each figure stands off its station on the route's open side.
@@ -791,7 +793,7 @@ static bool finish_draw(ChartBuild *b){
     }
     FigureRun run;figure_run(hour,size,hx0,hy0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,0,L_INK);
     figure_run(next,size,nx0,ny0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,2,L_INK);
-    release(bits);
+
   }
   #undef PLACE
   // Home, over the route and figures, on its own knockout.
@@ -879,7 +881,7 @@ static bool finish_draw(ChartBuild *b){
   memset(out,0,sizeof *out);
   out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->sink.row_offset,sizeof out->row_offset);
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
-  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->flag?16:0));
+  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0));
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
@@ -891,11 +893,16 @@ static bool finish_draw(ChartBuild *b){
   out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;out->top_x=top_x;out->top_baseline=top_baseline;out->height_right=height_right;out->height_baseline=height_baseline;
   if(world){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
-  if(day){
-    out->callout_left=(int16_t)(floor(least)-8);out->callout_top=(int16_t)(4+(in->home?14:0));out->callout_bottom=H-18;
-    memset(out->hour_text,0,3);memcpy(out->hour_text,hour,strlen(hour));out->avoid_count=(uint8_t)avoid_n;
+  out->numerals=(uint8_t)in->numerals;
+  if(!world){
+    // The time callout's place, hour and the lettering it breaks for; its
+    // figures, when it is drawn.
+    if(day){out->callout_left=(int16_t)(floor(least)-8);out->callout_top=(int16_t)(4+(in->home?14:0));out->callout_bottom=H-18;}
+    memset(out->hour_text,0,3);
+    if(in->numerals==ENR_EVEN&&in->clock24&&!hour[1]){out->hour_text[0]='0';out->hour_text[1]=hour[0];}else memcpy(out->hour_text,hour,strlen(hour));
+    out->avoid_count=(uint8_t)avoid_n;
     for(int k=0;k<avoid_n;k++){out->avoid[k][0]=(int16_t)avoid[k].x;out->avoid[k][1]=(int16_t)avoid[k].y;out->avoid[k][2]=(int16_t)avoid[k].w;out->avoid[k][3]=(int16_t)avoid[k].h;}
-    if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
+    if((day||in->readout==2)&&!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
   }
   if(home_mark){out->home_box[0]=(int16_t)home_box.x;out->home_box[1]=(int16_t)home_box.y;out->home_box[2]=(int16_t)home_box.w;out->home_box[3]=(int16_t)home_box.h;}
   b->out=out;b->forward=forward;b->minute=0;
@@ -919,8 +926,15 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     double mx,my;project(&cam,lat,lon,&mx,&my);e->mx=(enr_real)mx;e->my=(enr_real)my;
     const Segment *seg=src->segment(src->segment_context,(int32_t)(t/86400));if(!seg)FAIL;
     bool waxing;double fraction;seg_moon_light(seg,t,&fraction,&waxing);e->moon_fraction=(enr_real)fraction;e->waxing=waxing;
-    const int64_t day=t%86400;const int hh=(int)(day/3600),mm=(int)(day%3600/60);
-    e->zulu[0]=(char)('0'+hh/10);e->zulu[1]=(char)('0'+hh%10);e->zulu[2]=(char)('0'+mm/10);e->zulu[3]=(char)('0'+mm%10);e->zulu[4]='Z';
+    // The margin's time: Zulu, or the nautical zone's under the body (15
+    // degrees wide, lettered A-M east, N-Y west).
+    int zh=0;char zl='Z';
+    if(in->zone_body){
+      const double v=js_round((f_fmod(lon+540,360)-180)/15);zh=v>12?12:v<-12?-12:(int)v;
+      if(zh>0)zl="ABCDEFGHIKLM"[zh-1];else if(zh<0)zl="NOPQRSTUVWXY"[-zh-1];
+    }
+    const int64_t day=((t+zh*3600)%86400+86400)%86400;const int hh=(int)(day/3600),mm=(int)(day%3600/60);
+    e->zulu[0]=(char)('0'+hh/10);e->zulu[1]=(char)('0'+hh%10);e->zulu[2]=(char)('0'+mm/10);e->zulu[3]=(char)('0'+mm%10);e->zulu[4]=zl;
     // The local clock's minute: the hour starts on the local hour.
     e->minute[0]=(char)('0'+m/10);e->minute[1]=(char)('0'+m%10);memset(e->top,0,sizeof e->top);
     // A satellite's pass line, which can change within the hour.

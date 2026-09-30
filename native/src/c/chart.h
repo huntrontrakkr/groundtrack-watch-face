@@ -30,7 +30,10 @@ typedef struct {
   uint8_t day_hours[27];     // the local clock's hour at day_start + k hours
   char code[4];              // a satellite's code ("ISS"), for the world band's margin
   int plate;                 // index into PLATES (src/enroute-render.js order)
-  bool flag;                 // the minute flag
+  bool flag;                 // the minute flag (readout 1)
+  int readout;               // the minute readout: 0 none, 1 the flag, 2 a time callout
+  int numerals;              // the callout's figures (ENR_COLON ... ENR_ACCENT)
+  bool zone_body;            // the margin's time in the nautical zone under the body, not Zulu
   bool clock24;
   int64_t start;             // the hour's first second (Unix time)
   int local_hour;            // the local clock's hour at start, 0-23

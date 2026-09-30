@@ -19,8 +19,8 @@
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
   // the phone sends one.
-  const WatchSettings defaults={2,BODY_SUN,0,1,1,0,0,0,0,0,0,""};
-  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=2)*s=defaults;
+  const WatchSettings defaults={3,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0};
+  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=3)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
@@ -38,9 +38,24 @@ void sat_segments_store(const uint8_t *b,size_t n){
     if(span>0)persist_write_data(SAT_KEY+(uint32_t)(((start/span)%SAT_RING+SAT_RING)%SAT_RING),b+at,SAT_SEGMENT_BYTES);
   }
 }
-void pass_blocks_store(const uint8_t *b,size_t n){
-  if(n<5||n>256)return;
-  persist_write_data(PASS_KEY+(uint32_t)((le32(b)/PASS_BLOCK_SECONDS)%8),b,n);
+// A pass block is kept with whose passes they are: the satellite's catalog
+// number and home, in hundredths of a degree (12 bytes before the block),
+// so another satellite's or another home's are never taken for them.
+#define PASS_WHOSE 12
+static void whose(uint8_t *w,const WatchSettings *s){
+  const int32_t v[3]={s->norad,s->lat100,s->lon100};
+  for(int k=0;k<3;k++)for(int j=0;j<4;j++)w[4*k+j]=(uint8_t)((uint32_t)v[k]>>(8*j));
+}
+void pass_blocks_store(const uint8_t *b,size_t n,const WatchSettings *s){
+  if(n<5||n+PASS_WHOSE>256)return;
+  uint8_t r[256];whose(r,s);memcpy(r+PASS_WHOSE,b,n);
+  persist_write_data(PASS_KEY+(uint32_t)((le32(b)/PASS_BLOCK_SECONDS)%8),r,n+PASS_WHOSE);
+}
+// The block holding t, if kept for these settings: its length, or 0.
+static int pass_block_load(int64_t t,const WatchSettings *s,uint8_t *r){
+  const int64_t block=t/PASS_BLOCK_SECONDS*PASS_BLOCK_SECONDS;uint8_t w[PASS_WHOSE];whose(w,s);
+  const int n=persist_read_data(PASS_KEY+(uint32_t)((block/PASS_BLOCK_SECONDS)%8),r,256);
+  return n>=PASS_WHOSE+5&&!memcmp(r,w,PASS_WHOSE)&&le32(r+PASS_WHOSE)==block?n:0;
 }
 // The segment holding t: satellites' segments span an hour or six.
 static bool sat_segment_load(int32_t norad,int64_t t,SatSegment *seg){
@@ -57,10 +72,7 @@ int64_t sat_segments_missing(int32_t norad,int64_t from,int32_t seconds){
   for(int64_t t=from;t<from+seconds;){if(!sat_segment_load(norad,t,&seg))return t;t=seg.start+(int64_t)seg.span;}
   return -1;
 }
-bool pass_block_known(int64_t t){
-  uint8_t b[4];const int64_t block=t/PASS_BLOCK_SECONDS*PASS_BLOCK_SECONDS;
-  return persist_read_data(PASS_KEY+(uint32_t)((block/PASS_BLOCK_SECONDS)%8),b,4)==4&&le32(b)==block;
-}
+bool pass_block_known(int64_t t,const WatchSettings *s){uint8_t r[256];return pass_block_load(t,s,r)>0;}
 static bool segment_load(int32_t day,Segment *seg){
   uint8_t b[SEG_WATCH_BYTES];
   if(persist_read_data(SEGMENT_KEY+ring(day),b,sizeof b)!=(int)sizeof b||le32(b)!=day)return false;
@@ -111,7 +123,7 @@ static const Segment *segment_for(void *ctx,int32_t day){Days *d=ctx;for(int i=0
 static const SatSegment *sat_for(void *ctx,int64_t t){Days *d=ctx;for(int i=0;i<d->nsat;i++)if(t>=d->sat[i].start&&t<d->sat[i].start+d->sat[i].span)return &d->sat[i];return NULL;}
 static void pass_for(void *ctx,int64_t t,char out[24]){
   Days *d=ctx;
-  for(int i=0;i<2;i++)if(d->pass_len[i]>=5&&t>=le32(d->pass[i])&&t<le32(d->pass[i])+PASS_BLOCK_SECONDS){pass_line_from(d->pass[i],(size_t)d->pass_len[i],t,out);return;}
+  for(int i=0;i<2;i++){const uint8_t *b=d->pass[i]+PASS_WHOSE;if(d->pass_len[i]>=PASS_WHOSE+5&&t>=le32(b)&&t<le32(b)+PASS_BLOCK_SECONDS){pass_line_from(b,(size_t)(d->pass_len[i]-PASS_WHOSE),t,out);return;}}
   memset(out,0,24);
 }
 static size_t resource_read(void *source,uint32_t at,uint8_t *out,size_t n){
@@ -128,7 +140,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   const struct tm *lt=localtime(&now);
   ChartInput in;memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:0;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.flag=s->flag;in.clock24=s->clock24;
+  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:0;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.clock24=s->clock24;
   in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
   in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
@@ -159,9 +171,8 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
     }
     for(int k=0;k<2;k++){
       const int64_t block=(in.start+k*3599)/PASS_BLOCK_SECONDS*PASS_BLOCK_SECONDS;
-      if(k&&block==le32(days.pass[0]))break;
-      const int n=persist_read_data(PASS_KEY+(uint32_t)((block/PASS_BLOCK_SECONDS)%8),days.pass[k],256);
-      if(n>=5&&le32(days.pass[k])==block)days.pass_len[k]=n;
+      if(k&&days.pass_len[0]&&block==le32(days.pass[0]+PASS_WHOSE))break;
+      days.pass_len[k]=pass_block_load(block,s,days.pass[k]);
     }
   }
   // The sources stay valid while the build runs.

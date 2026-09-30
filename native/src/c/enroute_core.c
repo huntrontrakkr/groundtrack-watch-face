@@ -421,14 +421,27 @@ static void draw_text(Ctx *c,const char *text,int max,int x,int right,int baseli
 // shoulder ruled under it and the leader run to the body like a circuit
 // trace, breaking for lettering.
 static const int FIGURE_PX[3]={20,28,40};
-typedef struct {int size;char ch;int x,y;} Glyph;
+// A glyph of the callout: a Jost figure, the drawn colon, or a Departure
+// Mono figure at double size; solid in the ink, outlined, or in the
+// route's ink.
+enum {K_JOST,K_COLON,K_MONO};
+enum {G_SOLID,G_HOLLOW,G_ACCENT};
+typedef struct {uint8_t kind,size,group;char ch;int16_t x,y;} Glyph;
 static int fig_height(const EnrScene *s,int size,char ch){return ch==':'?s->figures[size].height[0]:s->figures[size].height[ch-'0'];}
 // The colon, drawn to match the figures: two rounded square dots the weight
 // of the strokes, one on the baseline, one at the height of the middle bar.
 static int colon_side(const EnrScene *s,int size){const int d=js_round(s->figures[size].height[0]/(enr_real)7);return d>3?d:3;}
 static int fig_width(const EnrScene *s,int size,char ch){return ch==':'?colon_side(s,size):s->figures[size].width[ch-'0'];}
+// A Departure Mono figure doubled: its pixels relative to (x, baseline).
+static bool mono_bit(char ch,int gx,int gy){
+  const EnrGlyph *g=glyph(ch);if(!g||gx<0)return false;
+  const int px=gx>>1,ry=(gy>>1)+g->top;
+  for(int r=0;r<g->count;r++){const EnrRun *run=&ENR_FONT_RUNS[g->first+r];if(run->y==ry&&px>=g->left+run->x&&px<g->left+run->x+run->n)return true;}
+  return false;
+}
 static bool glyph_bit(const EnrScene *s,const Glyph *g,int gx,int gy){
-  if(g->ch==':'){
+  if(g->kind==K_MONO)return mono_bit(g->ch,gx,gy);
+  if(g->kind==K_COLON){
     const int h=s->figures[g->size].height[0],d=colon_side(s,g->size),top=js_round(h*(enr_real)0.3);
     const int r=gy>=top&&gy<top+d?gy-top:gy>=h-d?gy-(h-d):-1;
     if(r<0||gx<0||gx>=d)return false;
@@ -438,54 +451,113 @@ static bool glyph_bit(const EnrScene *s,const Glyph *g,int gx,int gy){
   if(gx<0||gy<0||gx>=w||gy>=h)return false;
   return s->fig_bits[s->figures[g->size].first[k]+gy*((w+7)/8)+(gx>>3)]&(128>>(gx&7));
 }
+// The box a glyph's pixels may fill: x0, y0 and the size, from its origin.
+static void glyph_box(const EnrScene *s,const Glyph *g,int *x0,int *y0,int *w,int *h){
+  if(g->kind==K_MONO){*x0=0;*y0=-32;*w=2*7+2;*h=40;return;}
+  *x0=0;*y0=0;*w=fig_width(s,g->size,g->ch);*h=fig_height(s,g->size,g->ch);
+}
+static bool solid_at(const EnrScene *s,const Glyph *g,int n,int group,int x,int y){
+  for(int i=0;i<n;i++)if(g[i].group==group&&glyph_bit(s,&g[i],x-g[i].x,y-g[i].y))return true;
+  return false;
+}
 static int gap_for(int size){return js_round(FIGURE_PX[size]/(enr_real)16);}
 // figurePixels(): a run of figures on a shared top, each glyph bottom-aligned.
-static int figure_run(const EnrScene *s,const char *t,int n,int size,int x,int y,Glyph *out){
+static int figure_run(const EnrScene *s,const char *t,int n,int size,int x,int y,int group,Glyph *out){
   int h=0;for(int i=0;i<n;i++){const int gh=fig_height(s,size,t[i]);if(gh>h)h=gh;}
-  for(int i=0;i<n;i++){out[i]=(Glyph){size,t[i],x,y+h-fig_height(s,size,t[i])};x+=fig_width(s,size,t[i])+gap_for(size);}
+  for(int i=0;i<n;i++){out[i]=(Glyph){t[i]==':'?K_COLON:K_JOST,(uint8_t)size,(uint8_t)group,t[i],(int16_t)x,(int16_t)(y+h-fig_height(s,size,t[i]))};x+=fig_width(s,size,t[i])+gap_for(size);}
   return n;
 }
 static int run_width(const EnrScene *s,const char *t,int n,int size){int w=0;for(int i=0;i<n;i++)w+=fig_width(s,size,t[i]);return w+gap_for(size)*(n-1);}
-// timeFigure(): the glyphs relative to the hour's top left; returns the width.
+// timeFigure(): the glyphs relative to the hour's top left, in the scene's
+// style; returns the width.
 static int time_figure(const EnrScene *s,const EnrMinute *m,int big,int small,Glyph *g,int *count,int *height){
   int hn=0;while(hn<3&&s->hour_text[hn])hn++;
   const int fh=fig_height(s,big,'0'),gap=gap_for(big),sh=fig_height(s,small,'0');
-  int n=figure_run(s,s->hour_text,hn,big,0,0,g),x=run_width(s,s->hour_text,hn,big);
-  x+=gap+1;n+=figure_run(s,":",1,small,x,fh-sh,g+n);x+=colon_side(s,small)+gap+1;
-  n+=figure_run(s,m->minute,2,small,x,fh-sh,g+n);x+=run_width(s,m->minute,2,small);
+  int n=figure_run(s,s->hour_text,hn,big,0,0,G_SOLID,g),x=run_width(s,s->hour_text,hn,big);
+  switch(s->numerals){
+  case ENR_COLON:
+    x+=gap+1;n+=figure_run(s,":",1,small,x,fh-sh,G_SOLID,g+n);x+=colon_side(s,small)+gap+1;
+    n+=figure_run(s,m->minute,2,small,x,fh-sh,G_SOLID,g+n);x+=run_width(s,m->minute,2,small);break;
+  case ENR_EVEN:
+    x+=gap+3;n+=figure_run(s,m->minute,2,big,x,0,G_HOLLOW,g+n);x+=run_width(s,m->minute,2,big);break;
+  case ENR_MONO:
+    x+=gap+3;for(int k=0;k<2;k++)g[n++]=(Glyph){K_MONO,0,G_SOLID,m->minute[k],(int16_t)(x+14*k),(int16_t)fh};
+    x+=28-2;break;
+  default:
+    x+=gap+3;n+=figure_run(s,m->minute,2,small,x,fh-sh,s->numerals==ENR_ACCENT?G_ACCENT:G_SOLID,g+n);x+=run_width(s,m->minute,2,small);
+  }
   *count=n;*height=fh;return x;
 }
-static void draw_callout(Ctx *c){
-  const EnrScene *s=c->s;const EnrMinute *m=c->m;
-  if(s->view!=ENR_VIEW_DAY||!s->fig_bits)return;
-  const int bx=js_round(m->mx),by=js_round(m->my);
-  Glyph g[8];int n,fh;
-  const bool big=time_figure(s,m,2,1,g,&n,&fh)<=s->callout_left-6;
-  const int fw=time_figure(s,m,big?2:1,big?1:0,g,&n,&fh);
-  int fy=by-fh;if(fy>s->callout_bottom-fh-3)fy=s->callout_bottom-fh-3;
-  if(fy<s->callout_top)fy=s->callout_top;
-  const int fx=6,y=fy+fh+3,ex=fx+fw+1;
-  // The leader, where it is clear of lettering.
-  Px *line=scratch;int k=circuit(bx,by,ex,y,9,line);
-  for(int x=fx-1;x<=ex&&k<SCRATCH;x++)line[k++]=(Px){(int16_t)x,(int16_t)y};
-  int kept=0;
-  for(int i=0;i<k;i++){
-    bool open=true;
-    for(int a=0;a<s->avoid_count&&open;a++){const int16_t *b=s->avoid[a];if(line[i].x>=b[0]-2&&line[i].x<b[0]+b[2]+2&&line[i].y>=b[1]-2&&line[i].y<b[1]+b[3]+2)open=false;}
-    if(open)line[kept++]=line[i];
-  }
-  letter(c,line,kept,ENR_INK,1);
-  // The figures, as one lettering: every knockout, then the ink.
-  for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){
-    const int w=fig_width(s,g[i].size,g[i].ch),h=g[i].ch==':'?s->figures[g[i].size].height[0]:fig_height(s,g[i].size,g[i].ch);
-    for(int gy=0;gy<h;gy++)for(int gx=0;gx<w;gx++){
+// Whether a leader's pixel is clear of lettering.
+static bool open_at(const EnrScene *s,Px p){
+  for(int a=0;a<s->avoid_count;a++){const int16_t *b=s->avoid[a];if(p.x>=b[0]-2&&p.x<b[0]+b[2]+2&&p.y>=b[1]-2&&p.y<b[1]+b[3]+2)return false;}
+  return true;
+}
+// A leader: circuitPath() from the body to (sx, sy), then the shoulder from
+// there to (ex, sy); returns its length, and in *shown how many are open.
+static int leader(const EnrScene *s,int bx,int by,int sx,int sy,int ex,Px *line,int *shown){
+  int k=circuit(bx,by,sx,sy,9,line);
+  const int dx=ex>sx?1:-1;
+  for(int x=sx;k<SCRATCH;x+=dx){line[k++]=(Px){(int16_t)x,(int16_t)sy};if(x==ex)break;}
+  int kept=0;for(int i=0;i<k;i++)if(open_at(s,line[i]))line[kept++]=line[i];
+  *shown=kept;return k;
+}
+// setTime(): the figure lettered in ink (solid and outlined), then the
+// route's ink (accented minutes), each as one lettering: every knockout,
+// then the ink.
+static void set_time(Ctx *c,const Glyph *g,int n,int fx,int fy){
+  const EnrScene *s=c->s;
+  for(int ink=0;ink<2;ink++)for(int pass=0;pass<2;pass++)for(int i=0;i<n;i++){
+    if((g[i].group==G_ACCENT)!=(ink==1))continue;
+    int x0,y0,w,h;glyph_box(s,&g[i],&x0,&y0,&w,&h);
+    for(int gy=y0;gy<y0+h;gy++)for(int gx=x0;gx<x0+w;gx++){
       if(!glyph_bit(s,&g[i],gx,gy))continue;
-      const int x=fx+g[i].x+gx,yy=fy+g[i].y+gy;
-      if(!pass){for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)clear(c,x+dx,yy+dy);continue;}
-      const int cx=x<0?0:x>W-1?W-1:x,cy=yy<0?0:yy>H-1?H-1:yy;
-      plot(c,x,yy,(class_at(c,cx,cy)&15)==G_SPACE?s->space_ink:s->zoned[ENR_INK][zone_at(c,x,yy)]);
+      const int lx=g[i].x+gx,ly=g[i].y+gy;
+      // An outlined figure keeps the pixels at its edge.
+      if(g[i].group==G_HOLLOW&&solid_at(s,g,n,G_HOLLOW,lx+1,ly)&&solid_at(s,g,n,G_HOLLOW,lx-1,ly)&&solid_at(s,g,n,G_HOLLOW,lx,ly+1)&&solid_at(s,g,n,G_HOLLOW,lx,ly-1))continue;
+      const int x=fx+lx,y=fy+ly;
+      if(!pass){for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)clear(c,x+dx,y+dy);continue;}
+      const int cx=x<0?0:x>W-1?W-1:x,cy=y<0?0:y>H-1?H-1:y;
+      plot(c,x,y,(class_at(c,cx,cy)&15)==G_SPACE?s->space_ink:s->zoned[ink?ENR_ROUTE:ENR_INK][zone_at(c,x,y)]);
     }
   }
+}
+// The time callout (renderEnroute's callout()): on the whole-day chart set
+// aside in open map at the left, level with the body, with its shoulder
+// under it; on the hour chart hung under the body on whichever side keeps
+// it on the face and its leader clearest of lettering. Its leader runs to
+// the body like a circuit trace and breaks for lettering.
+static void draw_callout(Ctx *c){
+  const EnrScene *s=c->s;const EnrMinute *m=c->m;
+  if(!s->fig_bits)return;
+  const int bx=js_round(m->mx),by=js_round(m->my);
+  Glyph g[8];int n,fh,fx,fy,shown;
+  Px *line=scratch;
+  if(s->view==ENR_VIEW_DAY){
+    const bool big=time_figure(s,m,2,1,g,&n,&fh)<=s->callout_left-6;
+    const int fw=time_figure(s,m,big?2:1,big?1:0,g,&n,&fh);
+    fy=by-fh;if(fy>s->callout_bottom-fh-3)fy=s->callout_bottom-fh-3;
+    if(fy<s->callout_top)fy=s->callout_top;
+    fx=6;const int y=fy+fh+3,ex=fx+fw+1;
+    // circuitPath() to the shoulder's near end, then the shoulder.
+    int k=circuit(bx,by,ex,y,9,line);
+    for(int x=fx-1;x<=ex&&k<SCRATCH;x++)line[k++]=(Px){(int16_t)x,(int16_t)y};
+    shown=0;for(int i=0;i<k;i++)if(open_at(s,line[i]))line[shown++]=line[i];
+  }else{
+    const int fw=time_figure(s,m,1,0,g,&n,&fh),sy=by+26;
+    int best=0,score[2];
+    for(int k=0;k<2;k++){
+      const int side=k?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;f=f>4?f:4;
+      int open;const int len=leader(s,bx,by,sx,sy,side>0?f+fw:f-1,line,&open);
+      const bool fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
+      score[k]=(fits?0:1000)+(len-open)*10+(side==(bx<W/2?1:-1)?0:1);
+    }
+    if(score[1]<score[0])best=1;
+    const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;fx=f>4?f:4;
+    leader(s,bx,by,sx,sy,side>0?fx+fw:fx-1,line,&shown);fy=sy+3;
+  }
+  letter(c,line,shown,ENR_INK,1);
+  set_time(c,g,n,fx,fy);
 }
 
 // What moves each minute, in the order the browser draws it: the body and
@@ -506,7 +578,7 @@ static void draw_moving(Ctx *c,int part){
       if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_flag(&box);draw_late(c,box.box,true);}
     }
   }
-  if(s->view==ENR_VIEW_DAY&&(!part||part==PART_CALLOUT)){
+  if((s->view==ENR_VIEW_DAY||(s->view==ENR_VIEW_HOUR&&(s->flags&ENR_CALLOUT)))&&(!part||part==PART_CALLOUT)){
     draw_callout(c);
     if(!part){Ctx box=*c;box.measure=true;box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_callout(&box);draw_late(c,box.box,true);}
   }

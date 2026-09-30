@@ -51,11 +51,17 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       ['sat:42738','2026-09-26T20:30:00Z','hypsometric',true,'Asia/Kolkata']
     ];
     registerLiveFixture();
-    for(const [body,iso,plate,flag,zone] of cases){
-      const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null;
-      const {scene}=buildScene({body,start,plate,flag,timeZone,home});
+    // And the browser's other options: the callout in each style, the
+    // nautical zone, the 12-hour clock, QZSS on the hour chart.
+    const options=[{},{readout:'callout',numerals:'colon'},{readout:'callout',numerals:'mono',margin:'body'},{readout:'callout',numerals:'accent',clock24:false},
+      {numerals:'plain',margin:'body'},{readout:'callout',numerals:'even'},{numerals:'mono',clock24:false}];
+    cases.push(['sat:42738','2026-09-27T05:00:00Z','sectional',true,'America/New_York',{span:'hour',readout:'callout'}]);
+    cases.forEach((c,k)=>{if(!c[5])c[5]=options[k%options.length];});
+    for(const [body,iso,plate,flag,zone,more] of cases){
+      const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null,o={flag,...more};
+      const {scene}=buildScene({body,start,plate,timeZone,home,...o,zone:o.margin||'utc'});
       const out=join(dir,'c.scene');
-      const r=spawnSync('native/host/chart_test',['native/resources/map.pack','native/resources/figures.bin',out],{input:chartInput({body,start,plate,flag,zone:timeZone,home})});
+      const r=spawnSync('native/host/chart_test',['native/resources/map.pack','native/resources/figures.bin',out],{input:chartInput({body,start,plate,zone:timeZone,home,...o})});
       assert.equal(r.status,0,r.stderr.toString());
       const c=readFileSync(out);
       let first=-1;for(let i=0;i<Math.max(c.length,scene.length);i++)if(c[i]!==scene[i]){first=i;break;}

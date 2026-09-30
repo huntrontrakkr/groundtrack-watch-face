@@ -32,8 +32,8 @@ bool enr_parse(const uint8_t *blob,size_t length,EnrScene *s,void *(*alloc)(size
   s->top_x=i16(&r);s->top_baseline=i16(&r);s->height_right=i16(&r);s->height_baseline=i16(&r);
   s->tape_x0=i16(&r);s->tape_x1=i16(&r);s->tape_baseline=i16(&r);s->tape_lo=i16(&r);s->tape_hi=i16(&r);
   s->home_x=i16(&r);s->home_y=i16(&r);for(int k=0;k<4;k++)s->home_box[k]=i16(&r);
-  s->callout_left=i16(&r);s->callout_top=i16(&r);s->callout_bottom=i16(&r);take(&r,s->hour_text,3);
-  s->avoid_count=u8(&r);if(s->avoid_count>12)return false;
+  s->callout_left=i16(&r);s->callout_top=i16(&r);s->callout_bottom=i16(&r);take(&r,s->hour_text,3);s->numerals=u8(&r);
+  s->avoid_count=u8(&r);if(s->avoid_count>24)return false;
   for(int k=0;k<s->avoid_count;k++)for(int j=0;j<4;j++)s->avoid[k][j]=i16(&r);
   for(int m=0;m<60;m++){
     EnrMinute *e=&s->minutes[m];

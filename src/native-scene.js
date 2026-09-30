@@ -4,7 +4,7 @@
 //
 // Scene file (little-endian), version 3:
 //   'GTS3', u16 W, u16 H, u8 flags (1 zones night, 2 scan, 4 terminator,
-//   8 night dots, 16 minute flag), u8 body (0 Sun, 1 Moon, 2 satellite,
+//   8 night dots, 16 minute flag, 32 time callout), u8 body (0 Sun, 1 Moon, 2 satellite,
 //   3 station), i8 forward, u8 view (0 the hour chart, 1 the world band, 2
 //   the whole day),
 //   i32 hour start (Unix seconds)
@@ -17,8 +17,10 @@
 //   the world band's tape: i16 x0, x1, baseline, the minutes' least and
 //   greatest x; home: i16 x, y (-1000 without), box x, y, w, h
 //   the day's time callout: i16 the track's least x less 8, the top and
-//   bottom it keeps within, char hour[3] (the hour's figures, NUL-padded),
-//   u8 n and n boxes (i16 x, y, w, h) of lettering its leader breaks for
+//   bottom it keeps within (the hour chart's callout: 0), char hour[3] (the
+//   hour's figures as the callout sets them, NUL-padded), u8 the figures'
+//   style (0 colon, 1 plain, 2 even, 3 mono, 4 accent), u8 n and n boxes
+//   (i16 x, y, w, h) of lettering its leader breaks for
 //   60 minutes: f64 sun[3], f64 marker x, y, f64 moon fraction, u8 waxing,
 //   char zulu[5], u8 minute text[2], char top line[24] (a satellite's pass
 //   line, NUL-padded, '°' as 0x7f; empty when the line is fixed), i16 the
@@ -37,7 +39,7 @@
 //   acquisition circle, 12 knockout and 13 ink drawn before the route, 14
 //   knockout and 15 ink (or mark, round home) drawn after the body)
 import {sin,cos} from './fmath.js';
-import {EnrouteRenderer,renderEnroute,PLATES,passText,homeCircle,W,H} from './enroute-render.js';
+import {EnrouteRenderer,renderEnroute,PLATES,passText,homeCircle,nauticalZone,W,H} from './enroute-render.js';
 import {clockParts} from './render.js';
 import {position,moonLight,MINUTE} from './ephemeris.js';
 import {catalogEntry} from './satellites.js';
@@ -48,8 +50,11 @@ registerNominal();
 // Build one hour's scene from the coastline atlas and the decoded relief.
 // Returns the scene bytes, and the renderer and state, which can then draw
 // the browser's frames of the same hour.
-export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,timeZone='UTC',clock24=true,home=null}){
-  const state={body,epoch:start,timeZone,clock24,plate:plateKey,home,events:[],readout:flag?'flag':false};
+// Options as the browser's: readout ('flag', 'callout' or off; flag: true is
+// 'flag'), numerals (the callout's figures), zone ('utc' or 'body': the
+// margin's time), span ('day' or 'hour': QZSS's chart), clock24.
+export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,readout=flag?'flag':false,numerals='even',zone='utc',span='day',timeZone='UTC',clock24=true,home=null}){
+  const state={body,epoch:start,timeZone,clock24,plate:plateKey,home,events:[],readout:readout==='callout'?true:readout,numerals,zone,span};
   const r=new EnrouteRenderer(atlas,meters);r.render(state);
   const cam=r.camera,pal=PLATES[plateKey];
   if(cam.fuller)throw new Error('Rolling Fuller is not exported');
@@ -65,7 +70,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   const tintProbe=['#550000','#550055','#5500AA','#5500FF','#555500','#555555','#5555AA'];
   if(pal.tints)probe.tints=pal.tints.map(([l],k)=>[l,hex(tintProbe[k])]);
   if(pal.depths)probe.depths=pal.depths.map(([l],k)=>[l,hex(tintProbe[5+k])]);
-  const base=renderEnroute({camera:cam,ground:r.ground,relief:r.relief,light:r.light,plate:probe,epoch:start,timeZone,clock24,home:state.home,events:[],readout:state.readout,layers:'base'});
+  const base=renderEnroute({camera:cam,ground:r.ground,relief:r.relief,light:r.light,plate:probe,epoch:start,timeZone,clock24,home:state.home,events:[],readout:state.readout,numerals,zone,layers:'base'});
   const LAYER={[PROBE.grid]:6,[PROBE.route]:7,[PROBE.ink]:8,[PROBE.mark]:9,[PROBE.spaceInk]:10,[PROBE.space]:11};
   const key=i=>'#'+[0,1,2].map(k=>base.buf[i*3+k].toString(16).padStart(2,'0')).join('').toUpperCase();
   const classes=new Uint8Array(W*H);
@@ -89,7 +94,7 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   const g8=c=>c?0xC0|(c[0]/85)<<4|(c[1]/85)<<2|c[2]/85:0;
   for(const c of 'GTS3')u8(c.charCodeAt(0));
   u16(W);u16(H);
-  u8((pal.night==='zones'?1:0)|(pal.scan?2:0)|(pal.terminator?4:0)|(pal.nightDots?8:0)|(flag?16:0));
+  u8((pal.night==='zones'?1:0)|(pal.scan?2:0)|(pal.terminator?4:0)|(pal.nightDots?8:0)|(readout==='flag'?16:0)|(readout==='callout'?32:0));
   const kind=body==='sun'?0:body==='moon'?1:catalogEntry(body)?.symbol==='satellite'?2:3;u8(kind);
   const [s0,s1]=cam.stations,forward=Math.round(s1.x)>Math.round(s0.x);i8(forward?1:-1);u8(cam.world?1:cam.day?2:0);i32(Math.floor(start/1000));
   for(const k of ['water','land','coast','contour','shelf','grid','route','ink','mark'])for(let z=0;z<3;z++)u8(g8(pal[k][z]));
@@ -105,7 +110,11 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   const tape=base.tapeAt;for(const v of tape?[tape.x0,tape.x1,tape.baseline,tape.inner[0],tape.inner[1]]:[0,0,0,0,0])i16(v);
   const hm=base.home;for(const v of hm?[hm.x,hm.y,hm.box.x,hm.box.y,hm.box.w,hm.box.h]:[-1000,-1000,0,0,0,0])i16(v);
   const co=base.calloutAt;for(const v of co?[Math.floor(co.left),co.top,co.bottom]:[0,0,0])i16(v);
-  for(let k=0;k<3;k++)u8(co&&k<base.hour.length?base.hour.charCodeAt(k):0);
+  // The callout's hour, as its figures set it (two figures with 'even' on
+  // the 24-hour clock), and the figures' style.
+  const hh=numerals==='even'&&clock24?base.hour.padStart(2,'0'):base.hour;
+  for(let k=0;k<3;k++)u8(co&&k<hh.length?hh.charCodeAt(k):0);
+  u8(['colon','plain','even','mono','accent'].indexOf(numerals));
   u8(co?co.avoid.length:0);for(const b of co?co.avoid:[])for(const v of [b.x,b.y,b.w,b.h])i16(v);
   // Home's acquisition circle on the world band, which changes with the
   // satellite's height; minutes that plot the same pixels share one.
@@ -113,7 +122,9 @@ export function buildScene({atlas,meters,body,start,plate:plateKey,flag=false,ti
   for(let m=0;m<60;m++){
     const t=start+m*MINUTE,sun=position('sun',t).dir,b=position(body,t),p=cam.project(b.lat,b.lon),moon=moonLight(t),d=new Date(t);
     for(const v of sun)f64(v);f64(p.x);f64(p.y);f64(moon.fraction);u8(moon.waxing?1:0);
-    for(const c of `${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}Z`)u8(c.charCodeAt(0));
+    // The margin's time: Zulu, or the nautical zone's under the body.
+    const zoned=zone==='body'?nauticalZone(b.lon):{hours:0,letter:'Z'},z=new Date(t+zoned.hours*3600000);
+    for(const c of `${String(z.getUTCHours()).padStart(2,'0')}${String(z.getUTCMinutes()).padStart(2,'0')}${zoned.letter}`)u8(c.charCodeAt(0));
     for(const c of clockParts(t,timeZone).m)u8(c.charCodeAt(0));
     const top=body!=='sun'&&body!=='moon'&&state.home?passText(body,state.home,t,timeZone):'';
     for(let k=0;k<24;k++)u8(k<top.length?(top[k]==='°'?0x7f:top.charCodeAt(k)):0);

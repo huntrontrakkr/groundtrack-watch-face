@@ -23,7 +23,11 @@ typedef float enr_real;
 typedef double enr_real;
 #endif
 
-enum {ENR_NIGHT_ZONES=1,ENR_SCAN=2,ENR_TERMINATOR=4,ENR_NIGHT_DOTS=8,ENR_MINUTE_FLAG=16};
+enum {ENR_NIGHT_ZONES=1,ENR_SCAN=2,ENR_TERMINATOR=4,ENR_NIGHT_DOTS=8,ENR_MINUTE_FLAG=16,ENR_CALLOUT=32};
+// The time callout's figures: the hour, then a colon and smaller minutes;
+// smaller minutes; four figures, the minutes outlined; the minutes in
+// Departure Mono at double size; smaller minutes in the route's ink.
+enum {ENR_COLON,ENR_PLAIN,ENR_EVEN,ENR_MONO,ENR_ACCENT};
 enum {ENR_SUN,ENR_MOON,ENR_SATELLITE,ENR_STATION};
 // Keys of the zoned palette, each with a day, dusk and night color.
 enum {ENR_WATER,ENR_LAND,ENR_COAST,ENR_CONTOUR,ENR_SHELF,ENR_GRID,ENR_ROUTE,ENR_INK,ENR_MARK,ENR_ZONED};
@@ -80,8 +84,8 @@ typedef struct {
   // for, and its figures (loaded apart from the scene's blob).
   int16_t callout_left,callout_top,callout_bottom;
   char hour_text[3];
-  uint8_t avoid_count;
-  int16_t avoid[12][4];
+  uint8_t numerals,avoid_count;
+  int16_t avoid[24][4];
   EnrFigures figures[3];
   uint8_t *fig_bits;
   EnrMinute minutes[60];

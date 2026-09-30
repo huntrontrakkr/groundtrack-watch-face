@@ -102,13 +102,19 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});
     const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-29T22:30:00Z'),zone='America/New_York';
     const p=phone(bundle,now,{body:'moon',plate:'crt',flag:'0',timeZone:zone});
-    // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York.
+    // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
+    // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0]}]));
+    // The browser's other options, as set: a time callout in Departure Mono,
+    // the 12-hour clock, the nautical zone; QZSS on the hour chart.
+    const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
+    const set=r.messages[0].Settings;
+    assert.equal(JSON.stringify([set[2],set[3],set[17]>>1,set[21],set[22]]),JSON.stringify([2,0,0,3,1]));
     // A satellite: its catalog number, kind (a station, on the world band)
     // and code.
     const q=phone(bundle,now,{body:'sat:25544',plate:'crt',flag:'0',timeZone:zone});q.listeners.ready({});await q.quiet();
-    assert.equal(JSON.stringify(q.messages[0].Settings.slice(13)),JSON.stringify([25544&255,25544>>8,0,0,1|1<<1,...'ISS'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
+    assert.equal(JSON.stringify(q.messages[0].Settings.slice(13,21)),JSON.stringify([25544&255,25544>>8,0,0,1|1<<1,...'ISS'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
     // Asked from a day, the Sun and Moon to 45 days ahead, and home's rise
     // and set for 45 local dates.
     const today=Math.floor(now/86400000);p.messages.length=0;

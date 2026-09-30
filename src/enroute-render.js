@@ -551,6 +551,9 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     }else{hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);}
     letter(hourPixels,ink('ink'));letter(outline(nextSolid,2),ink('ink'));
     index={x:ix,y:c0.y};
+    // An optional time callout is the minute's: a base layer leaves it to
+    // the native renderer, with the lettering it steers round.
+    if(baseOnly)calloutAt={left:0,top:0,bottom:0,avoid:type.slice()};
     if(readout==='flag'){
       // Optional minute flag: a staff rising from the body into the space
       // between the route and the hour figures, flying a small pennant with

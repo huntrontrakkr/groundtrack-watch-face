@@ -11,13 +11,17 @@ enum {BODY_SUN,BODY_MOON,BODY_SATELLITE};
 // or the whole day (QZSS, not yet drawn here).
 enum {VIEW_HOUR,VIEW_WORLD,VIEW_DAY};
 typedef struct {
-  uint8_t version,body,plate,flag,clock24,home;
+  // readout: 0 none, 1 the minute flag, 2 a time callout.
+  uint8_t version,body,plate,readout,clock24,home;
   int32_t lat100,lon100;         // home in hundredths of a degree
   // A satellite: its catalog number, whether it is a crewed station (its
   // symbol), its view and its code ("ISS").
   int32_t norad;
   uint8_t station,view;
   char code[4];
+  // The callout's figures (ENR_COLON ... ENR_ACCENT), and the margin's time
+  // in the nautical zone under the body rather than Zulu.
+  uint8_t numerals,zone_body;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);
@@ -31,11 +35,11 @@ int32_t segments_missing(int32_t from,int days);
 // A satellite's segments (160 bytes each) and home's pass blocks, as the
 // phone sends them.
 void sat_segments_store(const uint8_t *bytes,size_t length);
-void pass_blocks_store(const uint8_t *bytes,size_t length);
+void pass_blocks_store(const uint8_t *bytes,size_t length,const WatchSettings *s);
 // The first second from `from` within `seconds` with no segment of the
 // satellite, or -1; and whether the pass block holding t is kept.
 int64_t sat_segments_missing(int32_t norad,int64_t from,int32_t seconds);
-bool pass_block_known(int64_t t);
+bool pass_block_known(int64_t t,const WatchSettings *s);
 // Whether home's rise and set are kept for a local date.
 bool rise_set_known(int32_t date);
 // The local day holding t: its midnight and the next (Unix seconds).
