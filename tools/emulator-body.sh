@@ -10,7 +10,8 @@ store="$HOME/.local/share/pebble-sdk/4.33.1/emery/localstorage/a0f61ba3-4580-4bf
 # simulator has gone, and the old one would be left running.
 for p in $(ps -eo pid,args | awk '/toolchain\/bin\/qemu-pebble |python -m pypkjs/ && !/awk/ {print $1}'); do kill "$p"; done
 sleep 2
-python3 - "$store" "$1" "${2:-crt}" "${3:-flag}" "${NUMERALS:-even}" "${MARGIN:-utc}" "${SPAN:-day}" "${CLOCK24:-1}" <<'PY'
+readout="${3:-flag}";[ "$readout" = noflag ] && readout=off
+python3 - "$store" "$1" "${2:-crt}" "$readout" "${NUMERALS:-even}" "${MARGIN:-utc}" "${SPAN:-day}" "${CLOCK24:-1}" <<'PY'
 import dbm.dumb,sys
 d=dbm.dumb.open(sys.argv[1],'w')
 for k,v in zip(['body','plate','readout','numerals','margin','span','clock24'],sys.argv[2:]):d[k.encode()]=v.encode()
