@@ -60,3 +60,21 @@ test('the watch computes sine, cosine, square roots and remainders to the same b
   // And within an ulp of the engine's own.
   for(const x of parsed.slice(0,2000))for(const [f,g] of [[sin,Math.sin],[cos,Math.cos]])assert.ok(Math.abs(f(x)-g(x))<=Math.abs(g(x))*2.3e-16+1e-300,String(x));
 });
+
+test('the watch evaluates satellite segments to the same bits',{skip:!cc&&'no C compiler'},async()=>{
+  const {registerElements,bodyId}=await import('../src/satellites.js');
+  const {satelliteSegmentFor,satelliteSegmentPosition,encodeSatelliteSegment}=await import('../src/segments.js');
+  const {fixtureTLE}=await import('./tle-fixture.mjs');
+  const bits=v=>{const d=new DataView(new ArrayBuffer(8));d.setFloat64(0,v);return d.getBigUint64(0).toString(16).padStart(16,'0');};
+  const now=Date.parse('2026-09-27T13:00:00Z'),lines=[],expected=[];
+  for(const norad of [25544,36585]){
+    registerElements(fixtureTLE(now,norad),'test');
+    for(let t=now-7200000;t<now+2*86400000;t+=3*3600000+17*60000+13000){
+      const s=Math.floor(t/1000),p=satelliteSegmentPosition(bodyId(norad),t);
+      lines.push(`sat ${Buffer.from(encodeSatelliteSegment(satelliteSegmentFor(bodyId(norad),t))).toString('hex')} ${s}`);
+      expected.push(`${bits(p.lat)} ${bits(p.lon)} ${bits(p.altitude)}`);
+    }
+  }
+  const got=execFileSync('native/host/segments_test',{input:lines.join('\n')+'\n'}).toString().trim().split('\n').map(l=>l.trim());
+  assert.deepEqual(got,expected);
+});

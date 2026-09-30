@@ -25,7 +25,12 @@ test('the watch builds the phone\'s scene, byte for byte',{skip:!cc&&'no C compi
       ['moon','2026-09-19T09:00:00Z','crt',true,'America/New_York'],
       ['moon','2026-03-10T05:00:00Z','red',false,'UTC'],
       ['moon','2025-12-06T02:30:00Z','plotboard',true,'Asia/Kolkata'],
-      ['sun','2026-03-20T11:00:00Z','plotboard',false,null]
+      ['sun','2026-03-20T11:00:00Z','plotboard',false,null],
+      // GPS on its nominal orbit: the slow orbit's camera, figures and
+      // ticks, and home's pass line through the hour.
+      ['sat:36585','2026-09-27T13:00:00Z','crt',true,'America/New_York'],
+      ['sat:36585','2026-09-27T19:00:00Z','enroute',true,'UTC'],
+      ['sat:36585','2026-09-28T02:00:00Z','sectional',false,'America/New_York']
     ];
     for(const [body,iso,plate,flag,zone] of cases){
       const start=Date.parse(iso),timeZone=zone||'UTC',home=zone?HOMES[zone]||null:null;

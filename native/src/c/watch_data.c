@@ -3,12 +3,15 @@
 #include "chart.h"
 #include "segments.h"
 #include "map_pack.h"
+#include "passes.h"
 
 #define SETTINGS_KEY 1
 #define SEGMENT_KEY 100        // + UTC day % 64
 #define RISE_SET_KEY 200       // + local date % 64
 #define RING 64
 #define RISE_SET_BYTES 12
+#define SAT_KEY 300            // + (start / span) % 64
+#define PASS_KEY 400           // + (block / 12 h) % 8
 
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
@@ -25,6 +28,35 @@ void segments_store(const uint8_t *b,size_t n){
 }
 void rise_sets_store(const uint8_t *b,size_t n){
   for(size_t at=0;at+RISE_SET_BYTES<=n;at+=RISE_SET_BYTES)persist_write_data(RISE_SET_KEY+ring(le32(b+at)),b+at,RISE_SET_BYTES);
+}
+void sat_segments_store(const uint8_t *b,size_t n){
+  for(size_t at=0;at+SAT_SEGMENT_BYTES<=n;at+=SAT_SEGMENT_BYTES){
+    const int32_t start=le32(b+at+4),span=le32(b+at+8);
+    if(span>0)persist_write_data(SAT_KEY+ring(start/span),b+at,SAT_SEGMENT_BYTES);
+  }
+}
+void pass_blocks_store(const uint8_t *b,size_t n){
+  if(n<5||n>256)return;
+  persist_write_data(PASS_KEY+(uint32_t)((le32(b)/PASS_BLOCK_SECONDS)%8),b,n);
+}
+// The segment holding t: satellites' segments span an hour or six.
+static bool sat_segment_load(int32_t norad,int64_t t,SatSegment *seg){
+  static const int32_t spans[2]={3600,21600};
+  for(int k=0;k<2;k++){
+    uint8_t b[SAT_SEGMENT_BYTES];const int32_t start=(int32_t)(t/spans[k]*spans[k]);
+    if(persist_read_data(SAT_KEY+ring(start/spans[k]),b,sizeof b)!=(int)sizeof b)continue;
+    if(le32(b)==norad&&le32(b+4)==start&&le32(b+8)==spans[k])return sat_segment_decode(b,seg);
+  }
+  return false;
+}
+int64_t sat_segments_missing(int32_t norad,int64_t from,int32_t seconds){
+  SatSegment seg;
+  for(int64_t t=from;t<from+seconds;){if(!sat_segment_load(norad,t,&seg))return t;t=seg.start+(int64_t)seg.span;}
+  return -1;
+}
+bool pass_block_known(int64_t t){
+  uint8_t b[4];const int64_t block=t/PASS_BLOCK_SECONDS*PASS_BLOCK_SECONDS;
+  return persist_read_data(PASS_KEY+(uint32_t)((block/PASS_BLOCK_SECONDS)%8),b,4)==4&&le32(b)==block;
 }
 static bool segment_load(int32_t day,Segment *seg){
   uint8_t b[SEG_WATCH_BYTES];
@@ -62,9 +94,15 @@ static void rise_text(const uint8_t *r,bool moon,char *left,char *right){
   }
 }
 
-// The segments a build needs, read once from storage.
-typedef struct {Segment seg[3];int n;} Days;
+// The segments and pass blocks a build needs, read once from storage.
+typedef struct {Segment seg[3];int n;SatSegment sat[4];int nsat;uint8_t pass[2][256];int pass_len[2];} Days;
 static const Segment *segment_for(void *ctx,int32_t day){Days *d=ctx;for(int i=0;i<d->n;i++)if(d->seg[i].day==day)return &d->seg[i];return NULL;}
+static const SatSegment *sat_for(void *ctx,int64_t t){Days *d=ctx;for(int i=0;i<d->nsat;i++)if(t>=d->sat[i].start&&t<d->sat[i].start+d->sat[i].span)return &d->sat[i];return NULL;}
+static void pass_for(void *ctx,int64_t t,char out[24]){
+  Days *d=ctx;
+  for(int i=0;i<2;i++)if(d->pass_len[i]>=5&&t>=le32(d->pass[i])&&t<le32(d->pass[i])+PASS_BLOCK_SECONDS){pass_line_from(d->pass[i],(size_t)d->pass_len[i],t,out);return;}
+  memset(out,0,24);
+}
 static size_t resource_read(void *source,uint32_t at,uint8_t *out,size_t n){
   const ResHandle h=*(ResHandle *)source;const size_t size=resource_size(h);
   if(at>=size)return 0;
@@ -72,24 +110,47 @@ static size_t resource_read(void *source,uint32_t at,uint8_t *out,size_t n){
   return resource_load_byte_range(h,at,out,n);
 }
 
+static Days *s_days;
+void local_chart_done(void){free(s_days);s_days=NULL;}
 ChartBuild *local_chart(time_t now,const WatchSettings *s){
-  if(s->body>BODY_MOON)return NULL;
+  if(s->body>BODY_SATELLITE)return NULL;
   const struct tm *lt=localtime(&now);
   ChartInput in;memset(&in,0,sizeof in);
   in.body=s->body;in.plate=s->plate;in.flag=s->flag;in.clock24=s->clock24;
   in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
   in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
-  if(s->home){
+  if(s->home&&s->body!=BODY_SATELLITE){
     uint8_t r[RISE_SET_BYTES];const int32_t date=civil_date(in.year,in.month,in.day);
     if(persist_read_data(RISE_SET_KEY+ring(date),r,sizeof r)==(int)sizeof r&&le32(r)==date)rise_text(r,s->body==BODY_MOON,in.rise_left,in.rise_right);
   }
-  static Days days;days.n=0;
-  for(int64_t d=(in.start-2400)/86400;d<=(in.start+6000)/86400&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else return NULL;
+  // Held on the heap while the build runs (local_chart_done frees it).
+  local_chart_done();
+  s_days=malloc(sizeof(Days));if(!s_days)return NULL;
+  Days *const d_=s_days;
+  #define days (*d_)
+  days.n=days.nsat=0;days.pass_len[0]=days.pass_len[1]=0;
+  for(int64_t d=(in.start-2400)/86400;d<=(in.start+6000)/86400&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
+  if(s->body==BODY_SATELLITE){
+    // GPS: its segments over the track, and home's passes for the hour.
+    for(int64_t t=in.start-2400;t<=in.start+6000&&days.nsat<4;){
+      if(!sat_segment_load(GPS_NORAD,t,&days.sat[days.nsat])){local_chart_done();return NULL;}
+      t=days.sat[days.nsat].start+(int64_t)days.sat[days.nsat].span;days.nsat++;
+    }
+    for(int k=0;k<2;k++){
+      const int64_t block=(in.start+k*3599)/PASS_BLOCK_SECONDS*PASS_BLOCK_SECONDS;
+      if(k&&block==le32(days.pass[0]))break;
+      const int n=persist_read_data(PASS_KEY+(uint32_t)((block/PASS_BLOCK_SECONDS)%8),days.pass[k],256);
+      if(n>=5&&le32(days.pass[k])==block)days.pass_len[k]=n;
+    }
+  }
   // The sources stay valid while the build runs.
   static ResHandle map,figures;map=resource_get_handle(RESOURCE_ID_MAP_PACK);figures=resource_get_handle(RESOURCE_ID_FIGURES);
-  const ChartSources src={resource_read,&map,resource_read,&figures,segment_for,&days,malloc,free};
+  const ChartSources src={.map=resource_read,.map_source=&map,.figures=resource_read,.figure_source=&figures,
+    .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,
+    .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free};
+  #undef days
   ChartBuild *build=chart_begin(&in,&src);
-  if(!build)APP_LOG(APP_LOG_LEVEL_ERROR,"No chart started (%u bytes free)",(unsigned)heap_bytes_free());
+  if(!build){APP_LOG(APP_LOG_LEVEL_ERROR,"No chart started (%u bytes free)",(unsigned)heap_bytes_free());local_chart_done();}
   return build;
 }

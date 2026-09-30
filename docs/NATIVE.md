@@ -1,17 +1,19 @@
 # Native: Groundtrack Enroute on the watch
 
-The Enroute face on Pebble Time 2 (`emery`, 200×228, 64 colours). `native/` is a Pebble SDK project. For the Sun and Moon the watch draws each hour's chart itself, from its own map and ephemeris, and needs the phone only now and then; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel. A satellite's chart (GPS so far) still comes from the phone, an hour at a time.
+The Enroute face on Pebble Time 2 (`emery`, 200×228, 64 colours). `native/` is a Pebble SDK project. For the Sun, the Moon and GPS the watch draws each hour's chart itself, from its own map and ephemeris, and needs the phone only now and then; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel.
 
 ## What runs where
 
 The expensive part of the face, the hour's chart, holds still for an hour; each minute only a few things move. The hour's chart is a **class plane**: for each pixel, the ground beneath (water, land, a height tint, space) in the low nibble, and what was drawn over it (contour, coast, shelf, grid, route, ink, mark or a knockout) in the high nibble, with the hour's per-minute data (the Sun's direction, the body's position, the Moon's phase, Zulu time, a satellite's pass line). Each minute the minute renderer (`native/src/c/enroute_core.c`) colours the plane with the plate and adds night (flat zones, the dot screen, scan lines, the drawn terminator, from the Sun's direction and per-row and per-column tables: the chart is equidistant cylindrical), the bold route behind the body, the body, the minute flag, Zulu time and the pass line.
 
-| | Sun and Moon | A satellite (GPS) |
+| | Sun and Moon | GPS |
 |---|---|---|
-| The hour's chart | built on the watch, each hour (`native/src/c/chart.c`) | rendered by the phone (`src/native-scene.js`) and sent, 22–31 KB |
-| From the phone | settings; the Sun and Moon for weeks ahead; home's rise and set | the hour's scene, and the next five minutes before the hour |
-| Without the phone | as long as the segments last (the phone sends 45 days) | the current hour |
-| Each minute | the minute renderer | the minute renderer |
+| The hour's chart | built on the watch, each hour (`native/src/c/chart.c`) | built on the watch, each hour |
+| From the phone | settings; the Sun and Moon for weeks ahead; home's rise and set | as for the Sun, plus the satellite's segments and home's passes for three days |
+| Without the phone | as long as the segments last (the phone sends 45 days) | as long as the satellite's segments last (three days from its elements' epoch) |
+| Each minute | the minute renderer, redrawing only what changed | the same |
+
+The phone can still render and send a whole scene (`src/native-scene.js`, 22–31 KB an hour); the watch uses that path only for a body it cannot build.
 
 ### The watch builds the hour
 
@@ -20,6 +22,8 @@ The expensive part of the face, the hour's chart, holds still for an hour; each 
 - **The camera and track:** the hour and forty minutes either side, a minute apart, from the Sun and Moon segments.
 - **The ground, streamed row by row** from the map pack: land from four bilinear samples of the atlas per pixel; the relief's bilinear sample and its three smoothing passes, as floats, exactly as the browser's `Float32Array`s; coast and waterline distances; contours, the shelf edge and height tints. Only three stages of three rows, a ring of smoothed rows and the map's columns under the chart are kept, never a full-frame array.
 - **The base layer**, in the renderer's order, writing layers instead of colours: the graticule, home and the tracking network, the route cased, dashed and graduated, the rose, the hour figures (Jost, from a resource), home's mark, the margins with home's rise and set.
+
+Each minute the face redraws only what changed: per row, the minute renderer knows which 16-pixel blocks lie wholly in day or in night, repaints the blocks the terminator crossed and the boxes of the moving things (body, route, flag, Zulu time, pass line), and leaves the rest of the frame buffer as it was. A full repaint happens only when the face comes back into focus.
 
 The build runs a slice at a time on short timers (about a second of work in pieces of at most 80 ms), so the firmware never sees the app stop answering; a single blocking second brings up its "not responding" dialog. It takes its memory in phases: about 76 KB at its peak (the class plane, the ground's rings, the map's decoder and rows), against 84 KB of heap free; nothing large is on the stack. The old hour's chart is dropped first; the screen keeps showing it until the new one is drawn.
 
@@ -39,6 +43,10 @@ The build runs a slice at a time on short timers (about a second of work in piec
 
 Astronomy Engine won't fit the watch: its C for the Sun and Moon alone is 85 KB, and an app's code and static data are capped at 64 KB. So the browser, the phone and the watch all take the Sun and Moon from **daily Chebyshev segments** (`src/segments.js`), fitted to Astronomy Engine: latitude and longitude of the sub-solar and sub-lunar points, the Moon's lit fraction and phase angle, as float32 coefficients. They are within 1e-6° in latitude and 2e-5° in longitude of Astronomy Engine (about 2 m on the ground); 228 bytes a day on the watch. The phone fits them; the watch evaluates them (`native/src/c/segments.c`) with the JavaScript's arithmetic.
 
+### Satellites: segments and passes
+
+SGP4 is too large for the watch, and its element set good for only about three days anyway, so a satellite is handled like the Sun: the phone runs SGP4 on CelesTrak's elements and fits **Chebyshev segments** to it (`src/segments.js`): an hour for a low orbit, six hours otherwise, with latitude and longitude (14 terms) and altitude (8), 156 bytes each. The browser draws from the same segments, so the two agree to the bit; they are within about 0.005° of SGP4 for GPS. Passes over home are found **deterministically** (`src/home.js`): in blocks of 12 hours from midnight UTC, sampled at absolute 20-second marks, so the phone and the browser find the same passes whenever they look; the watch stores the blocks and composes the chart's top line from them (`native/src/c/passes.c`).
+
 ### Same arithmetic, same bits
 
 Parity between the JavaScript and the C needs the same operations in the same order, and the same elementary functions:
@@ -57,8 +65,9 @@ Messages, all through one queue on the phone:
 | | |
 |---|---|
 | `Settings` (phone → watch) | body, plate, flag, 24-hour, home and its position in hundredths of a degree: on launch and when settings change |
-| `DataRequest` (watch → phone) | the first UTC day the watch lacks; asked on its minute ticks until the data arrives |
+| `DataRequest`, `DataBody` (watch → phone) | the first UTC day the watch lacks, and the satellite it needs, if any; asked on its minute ticks at most every few minutes until the data arrives |
 | `Segments`, `RiseSets` (phone → watch) | 45 days of segments from that day, eight to a message; home's rise and set for 45 local dates |
+| `SatSegments`, `Passes` (phone → watch) | three days of a satellite's segments, twelve to a message; home's pass blocks for them |
 | `SceneRequest`, `SceneTotal`, `SceneOffset`, `SceneChunk`, `SceneStatus` | a satellite's scene, in 2,000-byte chunks, and why there is none |
 
 Satellites' element sets are fetched from CelesTrak at most once every two hours each and used within three days of their epoch; GPS falls back to its nominal orbit. The app's settings page (`native/pkjs/config.html`, opened offline as a data URL) sets the body, plate, minute flag and home.
@@ -67,12 +76,12 @@ Satellites' element sets are fetched from CelesTrak at most once every two hours
 
 | | |
 |---|---|
-| The watch's scenes against the phone's (`tests/chart-native.test.mjs`) | byte for byte, across both bodies, all seven plates, homes, zones (with a half-hour one) and dates: 70 set cases and 120 random hours checked, 8 kept as tests |
+| The watch's scenes against the phone's (`tests/chart-native.test.mjs`) | byte for byte, across the Sun, the Moon and GPS, all seven plates, homes, zones (with a half-hour one) and dates: 70 set cases and 120 random hours checked, 8 kept as tests |
 | The map pack (`tests/map-pack.test.mjs`) | every cell exact, in JavaScript and C |
 | Segments, sine, cosine, square roots, remainders (`tests/segments.test.mjs`) | the C gives the JavaScript's bits |
 | The minute renderer against the browser (`tests/native.test.mjs`) | pixel-exact on every plate but Plotboard, whose inks change with night by anchor in the browser and by pixel here (≤0.1% of pixels) |
 | The phone side (`tests/pkjs.test.mjs`, `tests/config-browser.mjs`) | scenes, requests, retries, settings, segments, rise and set |
-| In the emery emulator (firmware 4.33.2, SDK 4.33.1) | the watch's own chart against the browser: 0 pixels differ; the hour turns with no phone |
+| In the emery emulator (firmware 4.33.2, SDK 4.33.1) | the watch's own chart against the browser: 0 pixels differ for the Sun after partial minute redraws, and for GPS from live CelesTrak elements; the hour turns with no phone |
 
 `npm run check:emulator` (`tools/emulator-check.mjs`) takes an emulator screenshot and compares it with the browser's frame, and the *Native watch app* workflow runs it on every change.
 
@@ -83,11 +92,14 @@ These are measurements of the code in the emulator and on the host, not of a wat
 | | |
 |---|---|
 | App code and static data | 47 KB of the 64 KB an app may have |
-| Heap free at launch | 84 KB; about 76 KB used at a build's peak; 60 KB free with the hour's chart |
+| Heap free at launch | 84 KB; about 76 KB used at a build's peak; 55–60 KB free with the hour's chart |
 | Building the hour, in the emulator | about 1 second of work, in slices of at most 80 ms |
 | Radio for the Sun and Moon | settings on launch; about 10 KB of segments every few weeks |
-| Radio for a satellite | one scene an hour, about 15 messages of 2,000 bytes |
-| Minute renderer, host CPU (a proxy only) | 0.6–0.9 ms; 2.5 ms with a drawn terminator |
+| Radio for GPS | about 2.5 KB of segments and passes every day or two |
+| Instructions for a minute change, in the emulator | 5.8 million, down from 24.2 million with full repaints (−76%) |
+| Instructions for a day (1,440 minutes and 24 builds) | 11.1 billion, down from 37.7 billion (−70.5%) |
+
+The instruction counts come from `tools/energy/` (after Dymaxion's), which traces QEMU's executed blocks in windows around a minute change, a build and an idle stretch; the *Measure watch work* workflow compares a change against its base. Details: [`docs/energy/minute-redraw.md`](energy/minute-redraw.md). They are instructions, not current: the display, flash and radio are not modelled.
 
 ## Building
 
@@ -109,8 +121,7 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 
 ## Open questions and next steps
 
-1. **Satellites on the watch.** GPS still comes from the phone each hour. SGP4 in C (satellite.js's algorithm) with the element set the phone already fetches (140 bytes, good for about three days) would make it the watch's too.
-2. **The other views:** the world band (fast satellites and their tape), the whole-day chart (QZSS) with its time callout, events, the time callout on the hour chart, Rolling Fuller, and Plotboard's per-anchor zones.
-3. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the 1.7 MB `.pbw`, are unchecked.
-4. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.
-5. **Energy.** Profile a day of minute updates and the hourly build in the emulator (Dymaxion's `tools/energy` counts instructions through QEMU's monitor), then measure on a watch, as `docs/ENERGY.md` sets out. No battery claim is made until then.
+1. **The other views:** the world band (fast satellites and their tape; their segments are ready), the whole-day chart (QZSS) with its time callout, events, the time callout on the hour chart, Rolling Fuller, and Plotboard's per-anchor zones.
+2. **A real watch and phone.** Everything so far runs in the emulator. The build's second in the emulator says little about the Pebble Time 2's CPU; the phone app's JavaScript engines on iOS and Android, and the store's limits for the 1.7 MB `.pbw`, are unchecked.
+3. **Quick View.** Timeline peeks cover the bottom of the screen; the face draws the whole frame regardless.
+4. **Energy on a watch.** The emulator's instruction counts guide the work; current is measured only on a watch, as `docs/ENERGY.md` sets out. No battery claim is made until then.

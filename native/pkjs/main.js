@@ -25,8 +25,8 @@ import {civilHour} from '../../src/chart-render.js';
 import {HOMES} from '../../src/home.js';
 import {PLATES} from '../../src/enroute-render.js';
 import {registerElements,viewOf,FRESH} from '../../src/satellites.js';
-import {segmentFor,encodeSegment,DAY} from '../../src/segments.js';
-import {riseSet} from '../../src/home.js';
+import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
+import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
 import {localDay,localDate} from '../../src/enroute-render.js';
 import {clockParts} from '../../src/render.js';
 import CONFIG_PAGE from './config.html';
@@ -137,6 +137,28 @@ function watchSettings(){
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
+// A satellite the watch draws itself (GPS): its segments from an hour ago to
+// three days ahead (as far as its elements reach), twelve to a message, and
+// home's passes by twelve-hour block.
+var SAT_DAYS=3;
+function sendSatellite(norad){
+  var body='sat:'+norad;
+  elements(body,function(problem,reason){
+    if(problem){console.log('No elements for '+body+': '+(reason||problem));status(problem);return;}
+    var span=satelliteSpan(body),now=Math.floor(Date.now()/1000),bytes=[],sent=0;
+    for(var t=Math.floor((now-3600)/span)*span;t<now+SAT_DAYS*86400;t+=span){
+      var seg;try{seg=encodeSatelliteSegment(satelliteSegmentFor(body,t*1000));}catch(error){break;}
+      for(var k=0;k<seg.length;k++)bytes.push(seg[k]);sent++;
+      if(bytes.length>=12*seg.length){enqueue({SatSegments:bytes});bytes=[];}
+    }
+    if(bytes.length)enqueue({SatSegments:bytes});
+    var timeZone=zone(),h=home(timeZone);
+    if(h)for(var b=Math.floor(Date.now()/PASS_BLOCK)*PASS_BLOCK;b<Date.now()+SAT_DAYS*DAY;b+=PASS_BLOCK){
+      try{enqueue({Passes:Array.prototype.slice.call(encodePassBlock(body,h,b,timeZone))});}catch(error){break;}
+    }
+    console.log('Satellite '+norad+': '+sent+' segments sent');
+  });
+}
 // The Sun and Moon segments from a UTC day to SEGMENT_DAYS ahead: positions
 // and phase only (228 bytes a day), eight to a message.
 var SEGMENT_DAYS=45,WATCH_SEGMENT=228;
@@ -278,5 +300,8 @@ Pebble.addEventListener('appmessage',function(e){
   if(at!==undefined)refresh(at>0?at*1000:Date.now());
   // Segments from a UTC day (days since 1970), and home's rise and set.
   var from=e.payload.DataRequest;
-  if(from!==undefined){sendSegments(from);sendRiseSets();}
+  if(from!==undefined){
+    sendSegments(from);
+    if(e.payload.DataBody)sendSatellite(e.payload.DataBody);else sendRiseSets();
+  }
 });

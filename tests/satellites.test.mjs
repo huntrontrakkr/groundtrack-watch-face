@@ -26,7 +26,13 @@ test('live elements propagate near their epoch and are refused when stale',()=>{
   // The fixture re-epochs the 2019 ISS orbit: the propagated state must match.
   const moved=satellitePosition(bodyId(20580),NOW-3600000+12*60000);
   assert.ok(moved.altitude>350&&moved.altitude<480&&Math.abs(moved.lat)<=52);
-  assert.deepEqual(position(bodyId(20580),NOW),satellitePosition(bodyId(20580),NOW));
+  // Drawn from segments fitted to SGP4 (segments.js), within a few
+  // hundredths of a degree of it.
+  for(let t=NOW-3000000;t<NOW+7200000;t+=137000){
+    const p=position(bodyId(20580),t),q=satellitePosition(bodyId(20580),t);
+    assert.ok(Math.abs(p.lat-q.lat)<0.05&&Math.abs(((p.lon-q.lon+540)%360)-180)<0.1&&Math.abs(p.altitude-q.altitude)<0.5,new Date(t).toISOString());
+    assert.equal(p.dir.length,3);
+  }
   assert.throws(()=>position(bodyId(20580),NOW+FRESH+3600000),/three days/);
   assert.throws(()=>position(bodyId(43013),NOW),/No elements/);
 });

@@ -23,7 +23,7 @@ typedef struct {uint8_t width,height;uint16_t first;} FigureGlyph;
 
 #define CHART_TRACK_MAX 141
 typedef struct {
-  int body;                  // 0 the Sun, 1 the Moon
+  int body;                  // 0 the Sun, 1 the Moon, 2 a satellite on the hour chart (GPS)
   int plate;                 // index into PLATES (src/enroute-render.js order)
   bool flag;                 // the minute flag
   bool clock24;
@@ -44,6 +44,10 @@ typedef struct {
   MapReadFn map;void *map_source;
   MapReadFn figures;void *figure_source;
   SegmentFn segment;void *segment_context;
+  // A satellite's segment for a time (in Unix seconds), and home's pass line
+  // at a time into out (24 characters, '°' as 0x7f; empty for none).
+  const SatSegment *(*satellite)(void *context,int64_t t);void *satellite_context;
+  void (*pass_line)(void *context,int64_t t,char out[24]);void *pass_context;
   void *(*alloc)(size_t);void (*release)(void *);
 } ChartSources;
 

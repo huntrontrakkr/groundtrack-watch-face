@@ -7,6 +7,8 @@
 #include "enroute_core.h"
 
 enum {BODY_SUN,BODY_MOON,BODY_SATELLITE};
+// The satellite the watch draws on the hour chart: GPS BIIF-1.
+#define GPS_NORAD 36585
 typedef struct {
   uint8_t version,body,plate,flag,clock24,home;
   int32_t lat100,lon100;         // home in hundredths of a degree
@@ -20,6 +22,14 @@ void segments_store(const uint8_t *bytes,size_t length);
 void rise_sets_store(const uint8_t *bytes,size_t length);
 // The first UTC day from `from` within `days` with no segment, or -1.
 int32_t segments_missing(int32_t from,int days);
+// A satellite's segments (156 bytes each) and home's pass blocks, as the
+// phone sends them.
+void sat_segments_store(const uint8_t *bytes,size_t length);
+void pass_blocks_store(const uint8_t *bytes,size_t length);
+// The first second from `from` within `seconds` with no segment of the
+// satellite, or -1; and whether the pass block holding t is kept.
+int64_t sat_segments_missing(int32_t norad,int64_t from,int32_t seconds);
+bool pass_block_known(int64_t t);
 // Whether home's rise and set are kept for a local date.
 bool rise_set_known(int32_t date);
 // The local calendar date as days since 1970-01-01.
@@ -28,3 +38,5 @@ int32_t civil_date(int year,int month,int day);
 // Starts building the local hour holding `now` for the Sun or Moon (see
 // chart.h: step it, then finish it). NULL without the segments or memory.
 struct ChartBuild *local_chart(time_t now,const WatchSettings *s);
+// Frees what a build read (once it has finished or been abandoned).
+void local_chart_done(void);

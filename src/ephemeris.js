@@ -1,8 +1,7 @@
 import {twoline2satrec,propagate,gstime,eciToGeodetic} from 'satellite.js';
 import iss from '../data/iss.json' with {type:'json'};
 import {direction,wrap,RAD} from './geometry.js';
-import {satellitePosition} from './satellites.js';
-import {segmentPosition,segmentMoonLight} from './segments.js';
+import {segmentPosition,segmentMoonLight,satelliteSegmentPosition} from './segments.js';
 const satrec=twoline2satrec(...iss.tle);
 export const MINUTE=60000;
 export const BODIES={
@@ -12,7 +11,13 @@ export const BODIES={
 };
 export function position(body,epoch){
   // Live satellites registered from element sets: see satellites.js.
-  if(typeof body==='string'&&body.startsWith('sat:')){if(!Number.isFinite(epoch))throw new RangeError('Invalid time');return satellitePosition(body,epoch);}
+  // Live satellites: from segments fitted to SGP4 (segments.js), as the
+  // watch draws them.
+  if(typeof body==='string'&&body.startsWith('sat:')){
+    if(!Number.isFinite(epoch))throw new RangeError('Invalid time');
+    const {lat,lon,altitude}=satelliteSegmentPosition(body,epoch);
+    return {lat,lon,dir:direction(lat,lon),altitude};
+  }
   if(!BODIES[body]||!Number.isFinite(epoch))throw new RangeError('Unknown body or invalid time');
   const date=new Date(epoch);
   if(body==='iss'){

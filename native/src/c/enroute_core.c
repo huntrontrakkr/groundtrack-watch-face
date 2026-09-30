@@ -259,18 +259,23 @@ static void draw_body(Ctx *c){
 // Lettering in Departure Mono, and the chart's knockout under it.
 typedef struct {int16_t x,y;} Px;
 // One shared list of pixels for lettering and leaders, drawn one at a time.
-static Px scratch[1024];
+// The longest list is a satellite's pass line: 24 characters of at most 24
+// pixels each.
+#define SCRATCH 640
+static Px scratch[SCRATCH];
 static const EnrGlyph *glyph(char ch){const char *p=strchr(ENR_FONT_CHARS,ch);return p&&ch?&ENR_FONT_GLYPHS[p-ENR_FONT_CHARS]:0;}
 static int text_width(const char *text,int n){int w=0;for(int i=0;i<n;i++){const EnrGlyph *g=glyph(text[i]);if(g)w+=g->advance;}return w;}
 static int text_pixels(const char *text,int n,int x,int baseline,Px *out){
   int count=0,cx=x;
+  #define PUT(px) do{if(count<SCRATCH-128)out[count++]=(px);}while(0)
   for(int i=0;i<n;i++){
     const EnrGlyph *g=glyph(text[i]);if(!g)continue;
-    for(int r=0;r<g->count;r++){const EnrRun *run=&ENR_FONT_RUNS[g->first+r];for(int k=0;k<run->n;k++)out[count++]=(Px){cx+g->left+run->x+k,baseline-g->top+run->y};}
+    for(int r=0;r<g->count;r++){const EnrRun *run=&ENR_FONT_RUNS[g->first+r];for(int k=0;k<run->n;k++)PUT(((Px){cx+g->left+run->x+k,baseline-g->top+run->y}));}
     cx+=g->advance;
   }
   return count;
 }
+#undef PUT
 // As the browser's letter(): clear a halo round every pixel, then ink.
 static void letter(Ctx *c,const Px *px,int n,int ink_key,int halo){
   for(int i=0;i<n;i++)for(int dy=-halo;dy<=halo;dy++)for(int dx=-halo;dx<=halo;dx++)clear(c,px[i].x+dx,px[i].y+dy);
@@ -304,7 +309,7 @@ static void draw_flag(Ctx *c){
   Px *px=scratch;int n=circuit(mx,my,sx,ny<=0?top:top+fh-1,8,px);
   for(int y=0;y<fh;y++){
     const int tip=js_round(point*(1-fabs((enr_real)(2*y-(fh-1)))/(fh-1)));
-    for(int x=0;x<fw+tip&&n<1024;x++)px[n++]=(Px){d>0?sx+1+x:sx-1-x,top+y};
+    for(int x=0;x<fw+tip&&n<SCRATCH;x++)px[n++]=(Px){d>0?sx+1+x:sx-1-x,top+y};
   }
   letter(c,px,n,ENR_ROUTE,1);
   Px digits[128];const int k=text_pixels(m->minute,2,d>0?sx+4:sx-fw+2,top+10,digits);

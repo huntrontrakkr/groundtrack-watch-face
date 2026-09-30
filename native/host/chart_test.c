@@ -5,6 +5,7 @@
 //   year, yday, home, lat, lon, rise, set) and "segment <hex>" lines.
 #define _POSIX_C_SOURCE 200809L
 #include "../src/c/chart.h"
+#include "../src/c/passes.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,16 @@ typedef struct {const uint8_t *data;size_t length;} Mem;
 static size_t mem_read(void *src,uint32_t at,uint8_t *out,size_t n){Mem *m=src;if(at>=m->length)return 0;if(at+n>m->length)n=m->length-at;memcpy(out,m->data+at,n);return n;}
 static Segment segs[8];static int nsegs;
 static const Segment *seg_for(void *ctx,int32_t day){for(int i=0;i<nsegs;i++)if(segs[i].day==day)return &segs[i];return 0;}
+// A satellite's segments, and its pass blocks.
+static SatSegment sats[64];static int nsats;
+static const SatSegment *sat_for(void *ctx,int64_t t){for(int i=0;i<nsats;i++)if(t>=sats[i].start&&t<sats[i].start+sats[i].span)return &sats[i];return 0;}
+static uint8_t blocks[4][2048];static size_t block_len[4];static int nblocks;
+static void pass_for(void *ctx,int64_t t,char out[24]){
+  for(int i=0;i<nblocks;i++){const uint8_t *b=blocks[i];const int32_t start=(int32_t)((uint32_t)b[0]|(uint32_t)b[1]<<8|(uint32_t)b[2]<<16|(uint32_t)b[3]<<24);
+    if(t>=start&&t<start+PASS_BLOCK_SECONDS){pass_line_from(b,block_len[i],t,out);return;}}
+  memset(out,0,24);
+}
+static size_t unhex(const char *hex,uint8_t *out,size_t max){size_t n=0;while(hex[0]&&hex[1]&&n<max){unsigned v;sscanf(hex,"%2x",&v);out[n++]=(uint8_t)v;hex+=2;}return n;}
 
 static FILE *out;
 static void u8(unsigned v){fputc(v&255,out);}
@@ -28,11 +39,14 @@ int main(int argc,char **argv){
   if(argc<4){fprintf(stderr,"usage: chart_test map.pack figures.bin out.scene < input\n");return 2;}
   size_t n;Mem m,f;m.data=slurp(argv[1],&n);m.length=n;f.data=slurp(argv[2],&n);f.length=n;if(!m.data||!f.data){fprintf(stderr,"no pack or figures\n");return 2;}
   ChartInput in;memset(&in,0,sizeof in);
-  char line[4096],key[32],value[2048];
+  char line[8192],key[32],value[8000];
   while(fgets(line,sizeof line,stdin)){
     line[strcspn(line,"\n")]=0;
-    if(sscanf(line,"%31s %2047[^\n]",key,value)<1)continue;
-    if(!strcmp(key,"segment")){uint8_t b[SEG_BYTES];for(int i=0;i<SEG_BYTES;i++){unsigned v;sscanf(value+2*i,"%2x",&v);b[i]=(uint8_t)v;}seg_decode(b,&segs[nsegs++]);}
+    value[0]=0;
+    if(sscanf(line,"%31s %7999[^\n]",key,value)<1)continue;
+    if(!strcmp(key,"satseg")){uint8_t b[SAT_SEGMENT_BYTES];unhex(value,b,sizeof b);sat_segment_decode(b,&sats[nsats++]);}
+    else if(!strcmp(key,"passes")){block_len[nblocks]=unhex(value,blocks[nblocks],sizeof blocks[0]);nblocks++;}
+    else if(!strcmp(key,"segment")){uint8_t b[SEG_BYTES];for(int i=0;i<SEG_BYTES;i++){unsigned v;sscanf(value+2*i,"%2x",&v);b[i]=(uint8_t)v;}seg_decode(b,&segs[nsegs++]);}
     else if(!strcmp(key,"body"))in.body=atoi(value);else if(!strcmp(key,"plate"))in.plate=atoi(value);
     else if(!strcmp(key,"flag"))in.flag=atoi(value);else if(!strcmp(key,"clock24"))in.clock24=atoi(value);
     else if(!strcmp(key,"start"))in.start=atoll(value);else if(!strcmp(key,"hour"))in.local_hour=atoi(value);
@@ -43,7 +57,8 @@ int main(int argc,char **argv){
     else if(!strcmp(key,"rise"))snprintf(in.rise_left,sizeof in.rise_left,"%s",value);
     else if(!strcmp(key,"set"))snprintf(in.rise_right,sizeof in.rise_right,"%s",value);
   }
-  const ChartSources src={mem_read,&m,mem_read,&f,seg_for,0,malloc,free};
+  const ChartSources src={.map=mem_read,.map_source=&m,.figures=mem_read,.figure_source=&f,.segment=seg_for,
+    .satellite=sat_for,.pass_line=pass_for,.alloc=malloc,.release=free};
   EnrScene *scene=chart_build(&in,&src);
   if(!scene){fprintf(stderr,"build failed\n");return 1;}
   const EnrScene s=*scene;

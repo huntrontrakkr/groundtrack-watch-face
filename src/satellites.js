@@ -50,6 +50,12 @@ export const elementsFor=body=>registry.get(body);
 export function satellitePosition(body,epoch){
   const e=registry.get(body);if(!e)throw new RangeError(`No elements loaded for ${body}`);
   if(Math.abs(epoch-e.epoch)>FRESH)throw new RangeError(`Elements for ${e.catalog?.code||body} are more than three days from this time`);
+  return propagatePosition(body,epoch);
+}
+// SGP4 at a time, without the freshness check (for fitting segments, whose
+// ends may lie a little past it).
+export function propagatePosition(body,epoch){
+  const e=registry.get(body);if(!e)throw new RangeError(`No elements loaded for ${body}`);
   const date=new Date(epoch),state=propagate(e.satrec,date);
   if(!state?.position)throw new Error('Propagation failed');
   const p=eciToGeodetic(state.position,gstime(date)),lat=p.latitude/RAD,lon=p.longitude/RAD;

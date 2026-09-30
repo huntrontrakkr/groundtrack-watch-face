@@ -10,6 +10,13 @@ int main(void){
   static char line[4096];
   while(fgets(line,sizeof line,stdin)){
     char hex[2*SEG_BYTES+2];long long seconds;
+    if(!strncmp(line,"sat ",4)){
+      if(sscanf(line+4,"%1100s %lld",hex,&seconds)!=2)continue;
+      uint8_t b[SAT_SEGMENT_BYTES];for(int i=0;i<SAT_SEGMENT_BYTES;i++){unsigned v;sscanf(hex+2*i,"%2x",&v);b[i]=(uint8_t)v;}
+      SatSegment g;sat_segment_decode(b,&g);double v[3];sat_segment_position(&g,seconds,&v[0],&v[1],&v[2]);
+      for(int i=0;i<3;i++){unsigned long long u;memcpy(&u,&v[i],8);printf("%016llx ",u);}
+      printf("\n");continue;
+    }
     if(sscanf(line,"%1100s %lld",hex,&seconds)!=2)continue;
     uint8_t b[SEG_BYTES];for(int i=0;i<SEG_BYTES;i++){unsigned v;sscanf(hex+2*i,"%2x",&v);b[i]=(uint8_t)v;}
     Segment s;seg_decode(b,&s);double a,o,c,d,f;bool w;

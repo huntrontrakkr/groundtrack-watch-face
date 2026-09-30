@@ -26,7 +26,7 @@ static double wrap(double lon){return f_fmod(f_fmod(lon+180,360)+360,360)-180;}
 
 // ---------------------------------------------------------------- camera
 // chartCamera(body, start, {span: SPAN}) for the Sun and Moon.
-typedef struct {double lat0,k,scale,lonMid,x0,y0;} Cam;
+typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow;double nx,ny;} Cam;
 static double sx(const Cam *c,double lon){return c->x0+(lon-c->lonMid)*c->k*c->scale;}
 static double sy(const Cam *c,double lat){return c->y0-(lat-c->lat0)*c->scale;}
 static double glat(const Cam *c,double y){return c->lat0+(c->y0-y)/c->scale;}
@@ -38,11 +38,17 @@ static void project(const Cam *c,double lat,double lon,double *x,double *y){
   *x=best;*y=sy(c,lat);
 }
 
-typedef struct {SegmentFn fn;void *ctx;} Segs;
-static bool body_position(const Segs *s,bool moon,int64_t t,double *lat,double *lon){
-  const Segment *seg=s->fn(s->ctx,(int32_t)(t/86400));
+// ephemeris.js position(): the Sun or Moon from their segment, a satellite
+// from its own.
+static bool body_position(const ChartSources *src,int body,int64_t t,double *lat,double *lon){
+  if(body>=2){
+    const SatSegment *seg=src->satellite?src->satellite(src->satellite_context,t):NULL;
+    if(!seg)return false;
+    double altitude;sat_segment_position(seg,t,lat,lon,&altitude);return true;
+  }
+  const Segment *seg=src->segment(src->segment_context,(int32_t)(t/86400));
   if(!seg)return false;
-  seg_position(seg,moon,t,lat,lon);return true;
+  seg_position(seg,body==1,t,lat,lon);return true;
 }
 
 // ---------------------------------------------------------------- map rows
@@ -373,13 +379,13 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   ChartBuild *b=src_->alloc(sizeof(ChartBuild));if(!b)return NULL;
   memset(b,0,sizeof *b);b->in=*in_;b->src=*src_;
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
-  const Plate *pal=&PLATES[in->plate];const Segs segs={src->segment,src->segment_context};const bool moon=in->body==1;
+  const Plate *pal=&PLATES[in->plate];
   void *(*const alloc)(size_t)=src->alloc;
   // chartCamera(): the hour and forty minutes either side, a minute apart.
   TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*CHART_TRACK_MAX);if(!track)goto fail;
   int count=0;double turn=0,prev=0;
   for(int64_t t=in->start-2400;t<=in->start+6000;t+=60){
-    double lat,lon;if(!body_position(&segs,moon,t,&lat,&lon))goto fail;
+    double lat,lon;if(!body_position(src,in->body,t,&lat,&lon))goto fail;
     if(count){const double d=lon-prev;if(d>180)turn-=360;else if(d<-180)turn+=360;}
     prev=lon;
     track[count].a=lat;track[count].b=lon+turn;track[count].t=(int32_t)(t-in->start);track[count].hour=t>=in->start&&t<=in->start+3600;count++;
@@ -393,10 +399,24 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     if(track[i].b>maxlon)maxlon=track[i].b;
     if(track[i].b<minlon)minlon=track[i].b;
   }
-  Cam cam;
-  cam.lat0=(maxlat+minlat)/2;cam.k=f_cos(cam.lat0*RAD);
-  {const double spread=(maxlon-minlon)*cam.k;cam.scale=CHART_SPAN/(spread>1?spread:1);}
-  cam.y0=CHART_TRACK_Y;cam.lonMid=(maxlon+minlon)/2;cam.x0=W/2;
+  Cam cam;memset(&cam,0,sizeof cam);
+  if(in->body<2){
+    cam.lat0=(maxlat+minlat)/2;cam.k=f_cos(cam.lat0*RAD);
+    {const double spread=(maxlon-minlon)*cam.k;cam.scale=CHART_SPAN/(spread>1?spread:1);}
+    cam.y0=CHART_TRACK_Y;cam.lonMid=(maxlon+minlon)/2;cam.x0=W/2;
+  }else{
+    // A slow orbit's hour runs any way: its two stations SPAN pixels apart
+    // along the route, north up, the route set off-centre away from the
+    // side its figures take (above, or beside a route that runs north-south).
+    const TrackPoint *a=&track[h0],*b=&track[h1];
+    cam.lat0=(a->a+b->a)/2;cam.k=f_cos(cam.lat0*RAD);cam.lonMid=(a->b+b->b)/2;
+    const double sx_=(b->b-a->b)*cam.k,sy_=-(b->a-a->a),l0=f_sqrt(sx_*sx_+sy_*sy_),len=l0?l0:1;cam.scale=CHART_SPAN/len;
+    double nx=sy_/len,ny=-sx_/len;
+    if(ny>0){nx=-nx;ny=-ny;}
+    if(fabs(ny)<.3&&nx>0){nx=-nx;ny=-ny;}
+    cam.slow=true;cam.nx=nx;cam.ny=ny;
+    cam.x0=W/2-nx*30;cam.y0=(14+H-16)/2+8-ny*30;
+  }
   for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
   b->count=count;b->h0=h0;b->h1=h1;b->cam=cam;
 
@@ -424,7 +444,7 @@ int chart_step(ChartBuild *b){
 EnrScene *chart_finish(ChartBuild *b){
   if(b->ground){chart_abort(b);return NULL;}
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
-  const Plate *pal=&PLATES[in->plate];const Segs segs={src->segment,src->segment_context};const bool moon=in->body==1;
+  const Plate *pal=&PLATES[in->plate];
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   TrackPoint *const track=b->track;const int count=b->count,h0=b->h0,h1=b->h1;const Cam cam=b->cam;
   uint8_t *const classes=b->classes;const int top=0,bottom=H;
@@ -489,7 +509,8 @@ EnrScene *chart_finish(ChartBuild *b){
     const int64_t since=(int64_t)track[i].t-track[h0].t;const int m=(int)js_round(since/60.0);
     if(since%60||m<=0||m>=60)continue;
     const double len0=f_sqrt((track[i+1].a-track[i-1].a)*(track[i+1].a-track[i-1].a)+(track[i+1].b-track[i-1].b)*(track[i+1].b-track[i-1].b)),len=len0?len0:1;
-    double nx=-(track[i+1].b-track[i-1].b)/len,ny=(track[i+1].a-track[i-1].a)/len;if(ny<0){nx=-nx;ny=-ny;}
+    double nx=-(track[i+1].b-track[i-1].b)/len,ny=(track[i+1].a-track[i-1].a)/len;
+    if(cam.slow?nx*cam.nx+ny*cam.ny>0:ny<0){nx=-nx;ny=-ny;}
     const int size=m%15==0?6:m%5==0?4:2;
     for(int s=1;s<=size;s++)plot(&cv,track[i].a+nx*s,track[i].b+ny*s,L_ROUTE);
     if(m%15==0){
@@ -513,8 +534,15 @@ EnrScene *chart_finish(ChartBuild *b){
   {const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
   #define PLACE(end,w) ({int v=(int)js_round((end)-(w)/2.0);v=v<W-4-(w)?v:W-4-(w);v>4?v:4;})
   int base;uint8_t *bits=load_figures(src,size,&base);if(!bits)goto fail;
-  FigureRun run;figure_run(hour,size,PLACE(c0x,hw),gy,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,0,L_INK);
-  figure_run(next,size,PLACE(c1x,nw),gy,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,2,L_INK);
+  int hx0=PLACE(c0x,hw),hy0=gy,nx0=PLACE(c1x,nw),ny0=gy;
+  if(cam.slow){
+    // Each figure stands off its station on the route's open side.
+    #define STAND(cx,cy,w,ox,oy) do{const double d=26+fabs(cam.nx)*(w)/2.0+fabs(cam.ny)*fh/2.0;int vx=(int)js_round((cx)+cam.nx*d-(w)/2.0),vy=(int)js_round((cy)+cam.ny*d-fh/2.0);vx=vx<W-4-(w)?vx:W-4-(w);ox=vx>4?vx:4;vy=vy<H-18-fh?vy:H-18-fh;oy=vy>4?vy:4;}while(0)
+    STAND(c0x,c0y,hw,hx0,hy0);STAND(c1x,c1y,nw,nx0,ny0);
+    #undef STAND
+  }
+  FigureRun run;figure_run(hour,size,hx0,hy0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,0,L_INK);
+  figure_run(next,size,nx0,ny0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,2,L_INK);
   release(bits);
   #undef PLACE
   }
@@ -551,17 +579,19 @@ EnrScene *chart_finish(ChartBuild *b){
   for(int k=0;k<2;k++)out->depths[k]=k<pal->depth_count?pal->depths[k]:0;
   for(int y=0;y<H;y++){const double lat=glat(&cam,y+.5)*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
   for(int x=0;x<W;x++){const double lon=glon(&cam,x+.5)*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}
-  out->c1x=(enr_real)track[h1].a;out->normal_x=0;out->normal_y=-1;out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;
+  out->c1x=(enr_real)track[h1].a;out->normal_x=cam.slow?(enr_real)cam.nx:0;out->normal_y=cam.slow?(enr_real)cam.ny:-1;out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;
   for(int m=0;m<60;m++){
     const int64_t t=in->start+m*60;EnrMinute *e=&out->minutes[m];
-    double lat,lon;if(!body_position(&segs,false,t,&lat,&lon))goto fail;
+    double lat,lon;if(!body_position(src,0,t,&lat,&lon))goto fail;
     e->sun[0]=(enr_real)(f_cos(lat*RAD)*f_cos(lon*RAD));e->sun[1]=(enr_real)(f_cos(lat*RAD)*f_sin(lon*RAD));e->sun[2]=(enr_real)f_sin(lat*RAD);
-    if(!body_position(&segs,moon,t,&lat,&lon))goto fail;
+    if(!body_position(src,in->body,t,&lat,&lon))goto fail;
     double mx,my;project(&cam,lat,lon,&mx,&my);e->mx=(enr_real)mx;e->my=(enr_real)my;
     const Segment *seg=src->segment(src->segment_context,(int32_t)(t/86400));bool waxing;double fraction;seg_moon_light(seg,t,&fraction,&waxing);e->moon_fraction=(enr_real)fraction;e->waxing=waxing;
     const int64_t day=t%86400;const int hh=(int)(day/3600),mm=(int)(day%3600/60);
     e->zulu[0]=(char)('0'+hh/10);e->zulu[1]=(char)('0'+hh%10);e->zulu[2]=(char)('0'+mm/10);e->zulu[3]=(char)('0'+mm%10);e->zulu[4]='Z';
     e->minute[0]=(char)('0'+mm/10);e->minute[1]=(char)('0'+mm%10);memset(e->top,0,sizeof e->top);
+    // A satellite's pass line, which can change within the hour.
+    if(in->body>=2&&in->home&&src->pass_line)src->pass_line(src->pass_context,t,e->top);
   }
   out->track_count=(uint16_t)count;out->track=points;points=NULL;
   for(int i=0;i<count;i++){out->track[i].x=(enr_real)track[i].a;out->track[i].y=(enr_real)track[i].b;out->track[i].seconds=track[i].t;out->track[i].hour=track[i].hour;}

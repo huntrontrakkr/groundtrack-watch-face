@@ -52,7 +52,9 @@ static bool s_tick_redraw;
 static uint32_t s_build_ms;        // time spent building it
 static time_t s_quiet_until;       // no requests before this, after a status
 
-static bool local(void){return s_settings.body<=BODY_MOON;}
+// The Sun, the Moon and GPS are drawn here; other satellites (not yet
+// native) come from the phone.
+static bool local(void){return s_settings.body<=BODY_SATELLITE;}
 static void chart_free(Chart *c){
   if(c->scene){enr_free(c->scene,free);free(c->scene);}
   free(c->blob);
@@ -84,10 +86,15 @@ static void request(time_t now,time_t when){
   if(now<s_quiet_until)return;
   if(send_int(MESSAGE_KEY_SceneRequest,(int32_t)when)){s_asked_at=now;s_asked_for=(int32_t)when;}
 }
-// Segments from the first missing day, at most once a RETRY_SECONDS.
+// Segments from the first missing day (and, for GPS, its own segments and
+// passes), at most once a RETRY_SECONDS.
 static void request_data(time_t now,int32_t day){
   if(s_data_asked_at&&now-s_data_asked_at<RETRY_SECONDS)return;
-  if(send_int(MESSAGE_KEY_DataRequest,day))s_data_asked_at=now;
+  DictionaryIterator *out;
+  if(app_message_outbox_begin(&out)!=APP_MSG_OK)return;
+  dict_write_int32(out,MESSAGE_KEY_DataRequest,day);
+  if(s_settings.body==BODY_SATELLITE)dict_write_int32(out,MESSAGE_KEY_DataBody,GPS_NORAD);
+  if(app_message_outbox_send()==APP_MSG_OK)s_data_asked_at=now;
 }
 
 // Segments a few days ahead and home's rise and set for today, asked for
@@ -99,12 +106,14 @@ static void need_data(time_t now){
   const int32_t today=(int32_t)(now/86400),missing=segments_missing(today,SEGMENT_DAYS);
   const struct tm *lt=localtime(&now);
   if(missing>=0)request_data(now,missing);
-  else if(s_settings.home&&!rise_set_known(civil_date(lt->tm_year+1900,lt->tm_mon+1,lt->tm_mday)))request_data(now,today);
+  else if(s_settings.body!=BODY_SATELLITE&&s_settings.home&&!rise_set_known(civil_date(lt->tm_year+1900,lt->tm_mon+1,lt->tm_mday)))request_data(now,today);
+  // GPS: its segments six hours ahead, and home's passes for now.
+  else if(s_settings.body==BODY_SATELLITE&&(sat_segments_missing(GPS_NORAD,now-now%3600-2400,6*3600)>=0||(s_settings.home&&!pass_block_known(now))))request_data(now,today);
   else s_data_ok_until=now-now%3600+3600;
 }
 static uint32_t now_ms(void){time_t t;uint16_t ms;time_ms(&t,&ms);return (uint32_t)t*1000+ms;}
 static void build_step(void *data);
-static void build_abort(void){if(s_build){chart_abort(s_build);s_build=NULL;}}
+static void build_abort(void){if(s_build){chart_abort(s_build);s_build=NULL;}local_chart_done();}
 // The Sun or Moon chart for this hour, built here a slice at a time, so the
 // watch keeps answering its events: about 80 ms of work, then a pause.
 static void build(time_t now){
@@ -123,7 +132,7 @@ static void build_step(void *data){
   if(r>0){app_timer_register(10,build_step,NULL);return;}
   if(r<0){build_abort();set_status("NO MAP");layer_mark_dirty(s_layer);return;}
   const uint32_t t1=now_ms();
-  EnrScene *scene=chart_finish(s_build);s_build=NULL;
+  EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
   if(scene){s_now.scene=scene;s_status[0]=0;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: %lu ms of work, the last step %lu ms; heap free %u",(unsigned long)s_build_ms,(unsigned long)(now_ms()-t1),(unsigned)heap_bytes_free());}
   else set_status("NO ROOM FOR THE CHART");
@@ -192,6 +201,22 @@ static void accept(uint8_t *blob,uint32_t size){
   layer_mark_dirty(s_layer);
 }
 
+// After data arrives: once the messages stop for a moment, check what is
+// still missing and draw the hour again if it needs it (or, with `changed`,
+// because the data changes what is drawn).
+static AppTimer *s_data_timer;static bool s_data_changed;
+static void data_settled(void *data){
+  s_data_timer=NULL;s_data_ok_until=0;
+  if(!local())return;
+  const time_t now=time(NULL);
+  if(s_data_changed&&(s_now.scene||s_build)){build_abort();chart_free(&s_now);}
+  s_data_changed=false;
+  check(now);layer_mark_dirty(s_layer);
+}
+static void data_arrived(bool changed){
+  s_data_changed|=changed;
+  if(s_data_timer)app_timer_reschedule(s_data_timer,1500);else s_data_timer=app_timer_register(1500,data_settled,NULL);
+}
 static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24);}
 // Settings as the phone packs them: body, plate, flag, clock24, home, then
 // home's latitude and longitude in hundredths of a degree (i32 each).
@@ -208,15 +233,13 @@ static void take_settings(const uint8_t *b,size_t n){
 static void inbox(DictionaryIterator *in,void *context){
   Tuple *t;
   if((t=dict_find(in,MESSAGE_KEY_Settings)))take_settings(t->value->data,t->length);
-  if((t=dict_find(in,MESSAGE_KEY_Segments))){
-    segments_store(t->value->data,t->length);s_data_asked_at=0;s_data_ok_until=0;
-    if(local()&&!covers(&s_now,time(NULL))){check(time(NULL));layer_mark_dirty(s_layer);}
-  }
-  if((t=dict_find(in,MESSAGE_KEY_RiseSets))){
-    rise_sets_store(t->value->data,t->length);s_data_ok_until=0;
-    // Home's rise and set may have changed: draw the hour again.
-    if(local()&&(s_now.scene||s_build)){build_abort();chart_free(&s_now);check(time(NULL));}
-  }
+  // Data for the watch's own charts. A reply comes in several messages: the
+  // hour is drawn again once, a moment after the last (redraw_soon).
+  if((t=dict_find(in,MESSAGE_KEY_Segments))){segments_store(t->value->data,t->length);data_arrived(false);}
+  if((t=dict_find(in,MESSAGE_KEY_SatSegments))){sat_segments_store(t->value->data,t->length);data_arrived(false);}
+  // Home's rise and set, or its passes, may have changed the hour's chart.
+  if((t=dict_find(in,MESSAGE_KEY_RiseSets))){rise_sets_store(t->value->data,t->length);data_arrived(true);}
+  if((t=dict_find(in,MESSAGE_KEY_Passes))){pass_blocks_store(t->value->data,t->length);data_arrived(true);}
   if((t=dict_find(in,MESSAGE_KEY_SceneStatus))){
     set_status(t->value->cstring);
     s_asked_at=0;s_quiet_until=time(NULL)+STATUS_QUIET_SECONDS;

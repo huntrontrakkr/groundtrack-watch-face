@@ -8,7 +8,8 @@
 // The settings must be the phone's (native/pkjs/main.js: sun, enroute and
 // the flag by default, in the phone's own time zone); home is the zone's
 // preset. The emulator must be running the app with its scene received.
-// PEBBLE names the pebble command (default: tools/emulator.sh).
+// PEBBLE names the pebble command (default: tools/emulator.sh). TLE_FILE
+// registers an element set first, the one the phone used for a satellite.
 import {execFileSync} from 'node:child_process';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
@@ -19,6 +20,8 @@ import {HOMES} from '../src/home.js';
 import {MINUTE} from '../src/ephemeris.js';
 import {W,H} from '../src/enroute-render.js';
 import {decodePNG,encodePNG} from './png.mjs';
+import {registerElements} from '../src/satellites.js';
+if(process.env.TLE_FILE)registerElements(readFileSync(process.env.TLE_FILE,'utf8'),'celestrak');
 
 const [outArg='test-results/emulator',body='sun',plate='enroute',flagArg='flag',zone=Intl.DateTimeFormat().resolvedOptions().timeZone]=process.argv.slice(2);
 const out=resolve(outArg);mkdirSync(out,{recursive:true});

@@ -29,3 +29,18 @@ double seg_wrap(double lon);
 void seg_position(const Segment *seg,bool moon,int64_t seconds,double *lat,double *lon);
 // The Moon's lit fraction, and whether it is waxing.
 void seg_moon_light(const Segment *seg,int64_t seconds,double *fraction,bool *waxing);
+
+// A satellite's segment (src/segments.js fitSatelliteSegment): its catalog
+// number, first second and span, then its latitude and unwrapped longitude
+// (14 terms each) and altitude in km (8), as the phone sends them.
+#define SAT_TERMS 14
+#define SAT_ALT_TERMS 8
+#define SAT_SEGMENT_BYTES (12+4*(2*SAT_TERMS+SAT_ALT_TERMS))
+typedef struct {
+  int32_t norad,start,span;
+  float lat[SAT_TERMS],lon[SAT_TERMS],altitude[SAT_ALT_TERMS];
+} SatSegment;
+bool sat_segment_decode(const uint8_t *bytes,SatSegment *seg);
+// Latitude, longitude (wrapped to -180..180) and altitude at a time in whole
+// Unix seconds within the segment.
+void sat_segment_position(const SatSegment *seg,int64_t seconds,double *lat,double *lon,double *altitude);

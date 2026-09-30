@@ -13,6 +13,7 @@
 // i32 day (days since 1970-01-01), then per series its coefficients as f32,
 // in SERIES order.
 import {Body,GeoVector,RotateVector,Rotation_EQJ_EQD,EquatorFromVector,SiderealTime,Illumination,MoonPhase} from 'astronomy-engine';
+import {elementsFor,propagatePosition,FRESH} from './satellites.js';
 
 export const DAY=86400000;
 export const SERIES=[['sunLat',10],['sunLon',10],['moonLat',10],['moonLon',10],['moonFraction',8],['moonPhase',8],['sunDistance',4],['moonDistance',8]];
@@ -86,4 +87,46 @@ export function segmentPosition(body,t){
 export function segmentMoonLight(t){
   const seg=segmentFor(t),u=dayU(seg,Math.floor(t/1000)),phase=chebyshev(seg.moonPhase,u);
   return {fraction:chebyshev(seg.moonFraction,u),waxing:((phase%360)+360)%360<180};
+}
+
+// Satellites the same way: their SGP4 positions from the phone's element
+// set as segments, which the browser draws from too, so the watch and the
+// browser agree to the bit. A segment spans an hour for a low orbit (a
+// period under 225 minutes, SGP4's own boundary) and six hours otherwise,
+// with the sub-satellite latitude and unwrapped longitude (14 terms each)
+// and the altitude in km (8). SGP4's geodetic latitude is itself only good to
+// about 5e-5°; the segments are within about 0.03° of it for the ISS and
+// 0.005° for GPS, a small fraction of a pixel on their charts.
+export const SAT_SERIES=[['lat',14],['lon',14],['altitude',8]];
+export const SAT_SEGMENT_BYTES=12+4*SAT_SERIES.reduce((n,[,k])=>n+k,0);
+export function satelliteSpan(body){return 2*Math.PI/elementsFor(body).satrec.no<225?3600:21600;}
+export function fitSatelliteSegment(body,start,span){
+  const m=22,nodes=[];
+  for(let k=0;k<m;k++){const u=Math.cos(Math.PI*(k+.5)/m),p=propagatePosition(body,(start+(u+1)/2*span)*1000);nodes.push({u,v:{lat:p.lat,lon:p.lon,altitude:p.altitude}});}
+  const inTime=[...nodes].sort((a,b)=>a.u-b.u);
+  for(let i=1;i<inTime.length;i++){const a=inTime[i-1].v.lon;let b=inTime[i].v.lon;while(b-a>180)b-=360;while(b-a<-180)b+=360;inTime[i].v.lon=b;}
+  const seg={body,start,span,epoch:elementsFor(body).epoch};
+  for(const [key,n] of SAT_SERIES)seg[key]=fit(nodes.map(q=>q.v[key]),n,m);
+  return seg;
+}
+export function encodeSatelliteSegment(seg){
+  const bytes=new Uint8Array(SAT_SEGMENT_BYTES),view=new DataView(bytes.buffer);let o=0;
+  view.setInt32(o,Number(seg.body.slice(4)),true);view.setInt32(o+4,seg.start,true);view.setInt32(o+8,seg.span,true);o=12;
+  for(const [key] of SAT_SERIES)for(const v of seg[key]){view.setFloat32(o,v,true);o+=4;}
+  return bytes;
+}
+const satellites=new Map();
+export function satelliteSegmentFor(body,t){
+  const span=satelliteSpan(body),start=Math.floor(t/1000/span)*span,key=`${body}/${elementsFor(body).epoch}/${start}`;
+  let seg=satellites.get(key);
+  if(!seg){seg=fitSatelliteSegment(body,start,span);satellites.set(key,seg);if(satellites.size>512)satellites.delete(satellites.keys().next().value);}
+  return seg;
+}
+// A satellite's position at t (milliseconds, whole seconds as the watch
+// asks), refused more than three days from its elements' epoch, as SGP4's.
+export function satelliteSegmentPosition(body,t){
+  const e=elementsFor(body);if(!e)throw new RangeError(`No elements loaded for ${body}`);
+  if(Math.abs(t-e.epoch)>FRESH)throw new RangeError(`Elements for ${e.catalog?.code||body} are more than three days from this time`);
+  const seg=satelliteSegmentFor(body,t),u=(Math.floor(t/1000)-seg.start)/(seg.span/2)-1;
+  return {lat:chebyshev(seg.lat,u),lon:wrap(chebyshev(seg.lon,u)),altitude:chebyshev(seg.altitude,u)};
 }
