@@ -13,7 +13,7 @@ import {rollCamera} from './roll.js';
 import numerals from '../data/enroute-font.json' with {type:'json'};
 import departure from '../data/departure-font.json' with {type:'json'};
 import network from '../data/tracking-stations.json' with {type:'json'};
-import {catalogEntry,elementsFor} from './satellites.js';
+import {catalogEntry,elementsFor,viewOf} from './satellites.js';
 import {riseSet,nextPass,reach} from './home.js';
 
 export {W,H};
@@ -74,6 +74,7 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // above a station's horizon (about 15.6 degrees of arc).
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(Math.acos(EARTH*Math.cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
+export const NUMERALS=['colon','plain','even','mono','accent'];
 export const FIGURE={scale:40,hour:80,hourTwo:72,minute:28,callout:28,calloutMinute:20};
 // The time scale registers with the route: its hour marks stand over the
 // two stations, 120 px apart on the zoomed charts, so each minute is exactly
@@ -83,7 +84,10 @@ export const SPAN=120,SCALE={x0:10,x1:190,baseline:46,panel:67};
 // Chart lettering: Departure Mono, drawn on the display's own pixel grid.
 const LABEL=departure.regular;
 
-function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];}
+// While a base layer is exported, every plotted pixel is marked, so the
+// native renderer can tell drawn symbols from untouched ground.
+let TRACE=null,EARLY=null,early=false;
+function plot(buf,x,y,c){x=Math.round(x);y=Math.round(y);if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;buf[i]=c[0];buf[i+1]=c[1];buf[i+2]=c[2];if(TRACE){TRACE[i/3]=1;EARLY[i/3]=early?1:0;}}
 function segment(a,b,fn){
   let x=Math.round(a.x),y=Math.round(a.y);const xx=Math.round(b.x),yy=Math.round(b.y);
   const dx=Math.abs(xx-x),sx=x<xx?1:-1,dy=-Math.abs(yy-y),sy=y<yy?1:-1;let err=dx+dy;
@@ -117,6 +121,17 @@ function figurePixels(text,size,x,y){
   for(const c of text){const g=glyph(size,c);for(let yy=0;yy<g.height;yy++)for(let xx=0;xx<g.width;xx++)if(g.rows[yy][xx]==='#')out.push([cx+xx,y+h-g.height+yy]);cx+=g.width+gapFor(size);}
   return out;
 }
+// Leaders are routed like circuit traces: a 45° run leaving the start,
+// then a straight horizontal or vertical run to the end, and no other
+// angle. The pixels within `clear` of the start (the body's knockout) are
+// left out.
+export function circuitPath(a,b,clearance=0){
+  const ax=Math.round(a.x),ay=Math.round(a.y),bx=Math.round(b.x),by=Math.round(b.y),dx=bx-ax,dy=by-ay,diag=Math.min(Math.abs(dx),Math.abs(dy)),sx=Math.sign(dx),sy=Math.sign(dy),out=[];
+  let x=ax,y=ay;out.push([x,y]);
+  for(let k=0;k<diag;k++){x+=sx;y+=sy;out.push([x,y]);}
+  while(x!==bx||y!==by){if(x!==bx)x+=sx;else y+=sy;out.push([x,y]);}
+  return out.filter(([px,py])=>Math.hypot(px-ax,py-ay)>=clearance);
+}
 const bounds=pixels=>{
   if(!pixels.length)return null;
   const xs=pixels.map(p=>p[0]),ys=pixels.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys);
@@ -149,12 +164,23 @@ export function contourLevel(relief,land,i,levels=CONTOURS){
   return 0;
 }
 
+// A compulsory reporting point: the filled triangle.
+const FIX=['....#....','...###...','...###...','..#####..','..#####..','.#######.','#########'];
 // An airport with services: a ring with four ticks, as on a sectional.
 const AIRPORT=['.....#.....','.....#.....','....###....','...#...#...','..#.....#..','###.....###','..#.....#..','...#...#...','....###....','.....#.....','.....#.....'];
 const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 const HEXAGON=['..###..','.#...#.','#.....#','.#...#.','..###..'],TRIANGLE=['....#....','...#.#...','...#.#...','..#...#..','..#...#..','.#.....#.','#########'];
-export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null}){
-  const pal=PLATES[plate],buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
+// layers:'base' renders only what stays fixed through the hour, for the
+// native watch renderer: no night, no body, no bold route behind it, no
+// minute readout and no Zulu time. It also returns each pixel's ground
+// class and what, if anything, was drawn over it.
+export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,timeZone,clock24,readout=false,home=null,events=[],tape='fixed',numerals='colon',zone='utc',layers='all'}){
+  const baseOnly=layers==='base';if(baseOnly){readout=false;}
+  // Pixels drawn before the route (early) may be covered by its bold line.
+  const trace=baseOnly?new Uint8Array(W*H):null,overlay=baseOnly?new Uint8Array(W*H):null,beforeRoute=baseOnly?new Uint8Array(W*H):null;TRACE=trace;EARLY=beforeRoute;early=true;
+  try{return drawEnroute();}finally{TRACE=null;EARLY=null;}
+  function drawEnroute(){
+  const pal=typeof plate==='string'?PLATES[plate]:plate,buf=new Uint8ClampedArray(W*H*3),mat=ground.material,sun=position('sun',Math.floor(epoch/MINUTE)*MINUTE).dir;
   const light=pal.night==='screen'?new Uint8Array(W*H):zones,land=mat.map(m=>m===LAND?1:0);
   const zoneAt=(x,y)=>light[Math.max(0,Math.min(H-1,Math.round(y)))*W+Math.max(0,Math.min(W-1,Math.round(x)))];
   const tint=(table,v)=>table.find(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit)[1];
@@ -177,17 +203,17 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const i=y*W+x,z=light[i];let c=base(i);
     if(mat[i]!==SPACE){
       const level=contourLevel(relief,land,i,levels);
-      if(level&&((level!==CONTOURS[0]&&!pal.dots)||((x+y)&1)===0))c=pal.contour[z];
-      else if(mat[i]===COAST)c=pal.coast[z];
-      else if(!sparse&&!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF))c=pal.shelf[z];
-      else if(shore&&!land[i]&&shore[i]>=2&&shore[i]<=5&&y%3===0)c=pal.waterline;
+      if(level&&((level!==CONTOURS[0]&&!pal.dots)||((x+y)&1)===0)){c=pal.contour[z];if(overlay)overlay[i]=1;}
+      else if(mat[i]===COAST){c=pal.coast[z];if(overlay)overlay[i]=2;}
+      else if(!sparse&&!land[i]&&relief[i]<SHELF&&((x+y)&1)===0&&[i-1,i+1,i-W,i+W].some(j=>j>=0&&j<W*H&&!land[j]&&relief[j]>=SHELF)){c=pal.shelf[z];if(overlay)overlay[i]=3;}
+      else if(shore&&!land[i]&&shore[i]>=2&&shore[i]<=5&&y%3===0){c=pal.waterline;if(overlay)overlay[i]=4;}
     }
     // Console night: dark scan lines, every other line by night and every
     // fourth through twilight.
-    if(pal.scan&&z&&y%(z===2?2:4)===1)c=pal.space;
+    if(!baseOnly&&pal.scan&&z&&y%(z===2?2:4)===1)c=pal.space;
     // The dark plates draw the terminator itself, as the plotboards did:
     // dashed where the Sun sets, dotted where twilight ends.
-    if(pal.terminator&&ground.dirs[i]){
+    if(!baseOnly&&pal.terminator&&ground.dirs[i]){
       // Traced from the Sun's height at each pixel, not the dithered zones.
       const h=dot(ground.dirs[i],sun),cross=level=>[x>0?i-1:-1,x<W-1?i+1:-1,i-W,y<H-1?i+W:-1].some(j=>j>=0&&ground.dirs[j]&&(dot(ground.dirs[j],sun)>=level)!==(h>=level));
       if(cross(SUNRISE_SINE)&&((x+y)>>1)%3!==2)c=pal.terminator;
@@ -199,20 +225,20 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   }
   // Paper plates show night as a regular dot tint, deepening through civil
   // twilight to a 25 percent screen, printed under every symbol.
-  if(pal.night==='screen')for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  if(!baseOnly&&pal.night==='screen')for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const d=ground.dirs[y*W+x];if(!d)continue;
     const t=Math.max(0,Math.min(1,(SUNRISE_SINE-dot(d,sun))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE)));
     if(t>0&&BAYER[(y&3)*4+(x&3)]<t*4)plot(buf,x,y,pal.screen);
   }
   // Knockouts clear to plain paper under lettering, as on a printed chart.
-  const clear=(x,y)=>{x=Math.round(x);y=Math.round(y);if(x>=0&&y>=0&&x<W&&y<H)plot(buf,x,y,base(y*W+x));};
+  const clear=(x,y)=>{x=Math.round(x);y=Math.round(y);if(x>=0&&y>=0&&x<W&&y<H){plot(buf,x,y,base(y*W+x));if(trace)trace[y*W+x]=2;}};
   const letter=(pixels,color,halo=1)=>{
     for(const [a,b] of pixels)for(let dy=-halo;dy<=halo;dy++)for(let dx=-halo;dx<=halo;dx++)clear(a+dx,b+dy);
     for(const [a,b] of pixels)plot(buf,a,b,mat[Math.max(0,Math.min(H-1,b))*W+Math.max(0,Math.min(W-1,a))]===SPACE?pal.spaceInk:color(a,b));
   };
   // Graticule: small crosses every five degrees (thirty on the world band)
   // and degree ticks along the edges of the map, like a chart's neatline.
-  const step=camera.world?30:5,minor=camera.world?10:1,{bottom}=camera.band,top=camera.band.top,inBand=y=>y>=top&&y<=bottom;
+  const step=camera.world?30:camera.wide?10:5,minor=camera.world?10:camera.wide?5:1,{bottom}=camera.band,top=camera.band.top,inBand=y=>y>=top&&y<=bottom;
   if(camera.fuller){
     // Rolling Fuller: the net's outline in ink, folds inside it dotted.
     for(const t of camera.tiles)for(const e of t.edges){
@@ -280,7 +306,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // The route, as the magenta line: bold behind the present, fine ahead,
   // dashed before and after the hour. Ticks every five minutes; the
   // quarter hours are longer and carry their minute, like a plotted track.
-  const track=camera.track,now=Math.floor(epoch/MINUTE)*MINUTE,[s0,s1]=camera.stations,jump=(a,b)=>Math.abs(b.x-a.x)>W/2;
+  const track=camera.track,now=baseOnly?-Infinity:Math.floor(epoch/MINUTE)*MINUTE,[s0,s1]=camera.stations,jump=(a,b)=>Math.abs(b.x-a.x)>W/2;
   // A one-ink plate cases the route in white, so it reads over waterlines.
   // On the Fuller sheets, where the route is small against busy faces, it
   // is also drawn heavier: two pixels ahead of the body, three behind.
@@ -289,6 +315,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     const a=track[i-1],b=track[i];if(jump(a,b)||!(a.hour&&b.hour))continue;
     segment(a,b,(x,y)=>{for(let dy=-casing-1;dy<=casing+1;dy++)for(let dx=-casing;dx<=casing;dx++)clear(x+dx,y+dy);});
   }
+  early=false;
   for(let i=1;i<track.length;i++){
     const a=track[i-1],b=track[i];if(jump(a,b))continue;
     const hour=a.hour&&b.hour,bold=hour&&b.epoch<=now,steep=Math.abs(b.y-a.y)>Math.abs(b.x-a.x);
@@ -303,17 +330,23 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // The world band keeps five-minute ties; its scale is in the panel above.
   // A whole-day strip is graduated in hours instead: a tick every hour,
   // longer and numbered every three, longest at the two midnights.
+  const dayLabels=[];
   if(camera.day)for(const p of camera.day.hours){
     const i=track.indexOf(p),a=track[Math.max(0,i-1)],b=track[Math.min(track.length-1,i+1)],len=Math.hypot(b.x-a.x,b.y-a.y)||1;
     let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
     const hr=Math.round((p.epoch-camera.day.start)/3600000),size=hr%24===0?7:hr%3===0?5:3;
     for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
-    if(hr%3===0){const hh=Number(clockParts(p.epoch,timeZone).h),label=String(clock24?(hr===24?24:hh):hh%12||12),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*9-lw/2)+1,Math.round(p.y+ny*9+9));type.push(bounds(q));letter(q,ink('route'),pal.mono?1:0);}
+    if(hr%3===0){
+      // Where a day's track crosses itself (QZSS's figure-8) two hours meet;
+      // the later label gives way.
+      const hh=Number(clockParts(p.epoch,timeZone).h),label=String(clock24?(hr===24?24:hh):hh%12||12),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*9-lw/2)+1,Math.round(p.y+ny*9+9)),box=bounds(q);
+      if(!dayLabels.some(o=>!(o.x+o.w+6<=box.x||box.x+box.w+6<=o.x||o.y+o.h+4<=box.y||box.y+box.h+4<=o.y))){dayLabels.push(box);type.push(box);letter(q,ink('route'),pal.mono?1:0);}
+    }
   }
   for(let i=1;i<track.length-1&&!camera.day;i++){
     const p=track[i];if(!p.hour)continue;const m=Math.round((p.epoch-s0.epoch)/MINUTE);
     if((p.epoch-s0.epoch)%MINUTE||m<=0||m>=60||(camera.world&&m%5))continue;
-    const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(ny<0){nx=-nx;ny=-ny;}
+    const a=track[i-1],b=track[i+1],len=Math.hypot(b.x-a.x,b.y-a.y)||1;let nx=-(b.y-a.y)/len,ny=(b.x-a.x)/len;if(camera.normal?nx*camera.normal.x+ny*camera.normal.y>0:ny<0){nx=-nx;ny=-ny;}
     const size=camera.world?(m%15===0?4:2):m%15===0?6:m%5===0?4:2;for(let s=1;s<=size;s++)plot(buf,p.x+nx*s,p.y+ny*s,ink('route')(p.x,p.y));
     if(!camera.world&&m%15===0){const label=String(m),lw=textWidth(LABEL,label),q=textPixels(LABEL,label,Math.round(p.x+nx*8-lw/2)+1,Math.round(p.y+ny*8+9));type.push(bounds(q));letter(q,ink('route'),pal.mono?1:0);}
   }
@@ -338,6 +371,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const body=position(camera.body,epoch),p=camera.project(body.lat,body.lon),mx=Math.round(p.x),my=Math.round(p.y);
   const disc=(cx,cy,r,fn)=>{const n=Math.ceil(r);for(let dy=-n;dy<=n;dy++)for(let dx=-n;dx<=n;dx++)if(dx*dx+dy*dy<=r*r)fn(cx+dx,cy+dy,dx,dy);};
   const mk=ink('mark')(mx,my);
+  if(!baseOnly){
   disc(mx,my,6.6,clear);
   if(camera.body==='sun'){disc(mx,my,5.2,(x,y,dx,dy)=>{if(dx*dx+dy*dy>3.6*3.6)plot(buf,x,y,mk);});disc(mx,my,1.5,(x,y)=>plot(buf,x,y,mk));}
   else if(camera.body==='moon'){
@@ -352,6 +386,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     for(let k=-5;k<=5;k++){plot(buf,mx+k,my,mk);if(Math.abs(k)>=3){plot(buf,mx+k,my-1,mk);plot(buf,mx+k,my+1,mk);}}
     for(let k=-2;k<=2;k++)for(let d=-1;d<=1;d++)plot(buf,mx+d,my+k,mk);
   }
+  }
   // The hour. On the zoomed charts the figures stand in the chart over their
   // stations, one size and one baseline: this hour solid, the next outlined,
   // and the body on the graduated route is the index. On the ISS world band
@@ -359,7 +394,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // instrument tape: minute graduations, tall hour marks under the figures
   // and a solid triangular index, running the way the route runs.
   const parts=clockParts(epoch,timeZone),h=Number(parts.h),hour=String(clock24?h:h%12||12),next=String(clock24?(h+1)%24:(h+1)%12||12);
-  const forward=c1.x>c0.x,X0=camera.world?SCALE.x0:Math.min(c0.x,c1.x),X1=camera.world?SCALE.x1:Math.max(c0.x,c1.x),at=m=>forward?X0+(X1-X0)*m/60:X1-(X1-X0)*m/60;
+  const forward=c1.x>c0.x,X0=camera.world?(tape==='fixed'?SCALE.x0:0):Math.min(c0.x,c1.x),X1=camera.world?(tape==='fixed'?SCALE.x1:W-1):Math.max(c0.x,c1.x),at=m=>forward?X0+(X1-X0)*m/60:X1-(X1-X0)*m/60;
   const minutes=Math.max(0,Math.min(60,(epoch-s0.epoch)/MINUTE)),ix=Math.round(at(Math.floor(minutes)));
   const outline=(solid,ring)=>{const inside=new Set(solid.map(([a,b])=>a+','+b)),near=[];for(let r=1;r<=ring;r++)near.push([r,0],[-r,0],[0,r],[0,-r]);return solid.filter(([a,b])=>near.some(([dx,dy])=>!inside.has((a+dx)+','+(b+dy))));};
   const place=(end,w)=>Math.max(4,Math.min(W-4-w,Math.round(end-w/2)));
@@ -369,25 +404,84 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // hung from a shoulder, the cartographer's elbow leader, that runs back
   // to the body. The leader is cased with a hairline of paper so it crosses
   // relief cleanly, and it breaks for lettering, as a printed line does.
-  const callout=({big,small,x:bx,y:by,up,reach})=>{
-    const gap=gapFor(big),colon=gapFor(big)+1,hw=runWidth(hour,big),cw=glyph(small,':').width,mw=runWidth(parts.m,small),fw=hw+colon+cw+colon+mw;
-    const fh=runHeight(big),sh=runHeight(small),sy=up?by-reach:by+reach;
+  // The callout's time, in one of the styles under study: 'colon' (the
+  // hour, a colon and smaller minutes), 'plain' (no colon), 'even' (four
+  // figures at one size, the minutes outlined like the next hour's
+  // figure), 'mono' (minutes in double-size Departure Mono) and 'accent'
+  // (smaller minutes in the route's ink). Pixels are relative to the top
+  // left of the hour figure; every style shares its baseline.
+  const timeFigure=(big,small)=>{
+    const fh=runHeight(big),gap=gapFor(big),hh=numerals==='even'&&clock24?hour.padStart(2,'0'):hour,solid=figurePixels(hh,big,0,0),hollow=[],accent=[];
+    let x=runWidth(hh,big);const sh=runHeight(small),add=(px,to)=>{for(const q of px)to.push(q);};
+    if(numerals==='colon'){x+=gap+1;add(figurePixels(':',small,x,fh-sh),solid);x+=glyph(small,':').width+gap+1;add(figurePixels(parts.m,small,x,fh-sh),solid);x+=runWidth(parts.m,small);}
+    else if(numerals==='even'){x+=gap+3;add(outline(figurePixels(parts.m,big,x,0),1),hollow);x+=runWidth(parts.m,big);}
+    else if(numerals==='mono'){x+=gap+3;add(textPixels(departure.double,parts.m,x,fh),solid);x+=textWidth(departure.double,parts.m)-2;}
+    else{x+=gap+3;add(figurePixels(parts.m,small,x,fh-sh),numerals==='accent'?accent:solid);x+=runWidth(parts.m,small);}
+    return {solid,hollow,accent,w:x,h:fh};
+  };
+  const setTime=(t,fx,fy)=>{
+    const at=px=>px.map(([a,b])=>[a+fx,b+fy]),solid=at(t.solid),hollow=at(t.hollow),accent=at(t.accent);
+    letter([...solid,...hollow],ink('ink'));if(accent.length)letter(accent,ink('route'));
+    return [...solid,...hollow,...accent];
+  };
+  const calloutWidth=(big,small)=>timeFigure(big,small).w;
+  const callout=({big,small,x:bx,y:by,up,reach,aside=null})=>{
+    const t=timeFigure(big,small),fw=t.w,fh=t.h,sy=up?by-reach:by+reach;
     const open=([x,y])=>!type.some(b=>x>=b.x-2&&x<b.x+b.w+2&&y>=b.y-2&&y<b.y+b.h+2);
+    if(aside){
+      // Set aside in open map beside the track: the figure level with the
+      // body, the shoulder ruled under it, and the leader run across to
+      // the body from the shoulder's near end.
+      const fx=aside.x,fy=Math.max(aside.top,Math.min(aside.bottom-fh-3,by-fh)),y=fy+fh+3,end={x:fx+fw+1,y},d=Math.hypot(end.x-bx,end.y-by)||1,line=[];
+      line.push(...circuitPath({x:bx,y:by},end,9));segment({x:fx-1,y},end,(x,y)=>line.push([x,y]));
+      letter(line.filter(open),ink('ink'));const figure=setTime(t,fx,fy);
+      return {figure,box:bounds(figure)};
+    }
     // Hang the time on whichever side keeps it on the face and its leader
     // clearest of lettering, toward the middle of the face if both do.
     const layout=side=>{
       const sx=bx+side*10,fx=Math.max(4,Math.min(W-4-fw,side>0?sx+2:sx-2-fw)),d=Math.hypot(sx-bx,sy-by),line=[];
-      segment({x:bx+(sx-bx)/d*9,y:by+(sy-by)/d*9},{x:sx,y:sy},(x,y)=>line.push([x,y]));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
+      line.push(...circuitPath({x:bx,y:by},{x:sx,y:sy},9));segment({x:sx,y:sy},{x:side>0?fx+fw:fx-1,y:sy},(x,y)=>line.push([x,y]));
       const shown=line.filter(open),fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
       return {fx,shown,score:(fits?0:1000)+(line.length-shown.length)*10+(side===(bx<W/2?1:-1)?0:1)};
     };
     const {fx,shown}=[layout(1),layout(-1)].sort((a,b)=>a.score-b.score)[0];
-    const fy=up?sy-3-fh:sy+3,mx0=fx+hw+colon;
-    const figure=[...figurePixels(hour,big,fx,fy),...figurePixels(':',small,mx0,fy+fh-sh),...figurePixels(parts.m,small,mx0+cw+colon,fy+fh-sh)];
-    letter(shown,ink('ink'));letter(figure,ink('ink'));
+    const fy=up?sy-3-fh:sy+3;
+    letter(shown,ink('ink'));const figure=setTime(t,fx,fy);
     return {figure,box:bounds(figure)};
   };
-  if(camera.world){
+  if(camera.world&&tape!=='fixed'){
+    // The sliding tape: the index stands still in the middle and the tape
+    // runs past it, three pixels a minute, future to the right, as a date
+    // or heading tape scrolls behind its lubber line. Hour figures ride the
+    // tape on their marks, this hour solid and the next outlined, and are
+    // cut off at the edges like any tape. With 'slide', the world scrolls
+    // too, and the index line runs on down through the map to the body.
+    const {baseline:B,panel:P}=SCALE,sc=()=>pal.spaceInk,fill=pal.route[0],IX=W/2,PX=3,now=Math.floor(minutes);
+    for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);
+    for(let x=0;x<W;x++){plot(buf,x,P-1,sc());plot(buf,x,B,sc());if(x<=IX)plot(buf,x,B+1,fill);}
+    const hourAt=m=>{const q=Number(clockParts(s0.epoch+m*MINUTE,timeZone).h);return String(clock24?q:q%12||12);};
+    for(let m=now-Math.ceil(IX/PX)-12;m<=now+Math.ceil(IX/PX)+12;m++){
+      const x=IX+(m-now)*PX,mm=((m%60)+60)%60,len=mm===0?12:mm%15===0?6:mm%5===0?4:2;
+      for(let d=1;d<=len;d++)plot(buf,x,B+d,sc());
+      if(mm===0)for(let d=1;d<=6;d++)plot(buf,x,B-d,sc());
+      else if(mm%15===0){const label=String(mm),lw=textWidth(LABEL,label);for(const [a,b] of textPixels(LABEL,label,x-Math.floor(lw/2)+1,B+17))plot(buf,a,b,sc());}
+    }
+    // This hour's figure rides its mark until the mark leaves the left edge,
+    // then stays pinned there, as a tape's sticky label, until the next
+    // hour's figure arrives and pushes it off.
+    const m0=now-((now%60)+60)%60,size=FIGURE.scale,cur=hourAt(m0),nxt=hourAt(m0+60),cw=runWidth(cur,size),nw=runWidth(nxt,size);
+    const nx=Math.round(IX+(m0+60-now)*PX-nw/2),cx=Math.min(Math.max(Math.round(IX+(m0-now)*PX-cw/2),4),nx-cw-8);
+    const onTape=px=>px.filter(([a])=>a>=0&&a<W);hourPixels=onTape(figurePixels(cur,size,cx,4));nextSolid=onTape(figurePixels(nxt,size,nx,4));
+    for(const [a,b] of hourPixels)plot(buf,a,b,sc());for(const [a,b] of outline(nextSolid,1))plot(buf,a,b,sc());
+    // The index: a hairline in the route's ink through the whole tape, and
+    // the solid pointer on the baseline.
+    for(let y=0;y<P-1;y++)plot(buf,IX,y,fill);
+    for(let k=0;k<6;k++)for(let d=-k;d<=k;d++)plot(buf,IX+d,B-7+k,pal.space);
+    for(let k=0;k<5;k++)for(let d=-k;d<=k;d++)plot(buf,IX+d,B-6+k,sc());
+    if(tape==='slide')for(let y=top;y<my-8;y++)if(((y-top)>>1)%2===0)plot(buf,IX,y,ink('route')(IX,y));
+    index={x:IX,y:B};
+  }else if(camera.world){
     const {baseline:B,panel:P}=SCALE,sc=()=>pal.spaceInk,fill=pal.route[0];
     for(let y=0;y<P;y++)for(let x=0;x<W;x++)plot(buf,x,y,pal.space);
     for(let x=0;x<W;x++)plot(buf,x,P-1,sc());
@@ -412,19 +506,66 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // A whole day is too long a scale to read minutes from, so the strip
     // carries a time callout, in the open paper above the net where there
     // is room, otherwise below the body.
-    const fh=runHeight(FIGURE.scale),head=home?14:0,netTop=Math.max(0,Math.min(...camera.tiles.map(t=>t.box[1]))),room=netTop-head>=fh+16,up=room||my-26-fh>=4+head;
+    const fh=runHeight(FIGURE.scale),head=home?14:0,netTop=camera.tiles?Math.max(0,Math.min(...camera.tiles.map(t=>t.box[1]))):-1,room=netTop-head>=fh+16,up=room||my-26-fh>=4+head;
     const reach=room?my-(head+Math.round((netTop-head-fh)/2)+fh+3):26;
-    const c=callout({big:FIGURE.scale,small:FIGURE.minute,x:mx,y:my,up,reach});
+    // On a north-up day chart there is no open paper above a net: the
+    // callout takes whichever side of the body crosses less of the track.
+    // A north-up day chart sets its track to the right, and the callout
+    // stands aside in the open map to its left.
+    let c;
+    if(!camera.tiles){
+      const left=Math.min(...track.map(q=>q.x))-8,big=calloutWidth(FIGURE.scale,FIGURE.minute)<=left-6;
+      c=callout({big:big?FIGURE.scale:FIGURE.callout,small:big?FIGURE.minute:FIGURE.calloutMinute,x:mx,y:my,aside:{x:6,top:4+head,bottom:H-18}});
+    }else c=callout({big:FIGURE.scale,small:FIGURE.minute,x:mx,y:my,up,reach});
     hourPixels=c.figure;nextSolid=[];index={x:mx,y:my};
   }else{
-    const size=hour.length>1||next.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,size),nw=runWidth(next,size),gy=c0.y-26-runHeight(size);
-    hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);
+    const size=hour.length>1||next.length>1?FIGURE.hourTwo:FIGURE.hour,hw=runWidth(hour,size),nw=runWidth(next,size),fh=runHeight(size),gy=c0.y-26-fh;
+    if(camera.normal){
+      // A slow orbit's route runs any way: each figure stands off its
+      // station on the route's open side, clear of the rose.
+      const n=camera.normal,stand=(c,w)=>{const d=26+Math.abs(n.x)*w/2+Math.abs(n.y)*fh/2;return [Math.max(4,Math.min(W-4-w,Math.round(c.x+n.x*d-w/2))),Math.max(4,Math.min(H-18-fh,Math.round(c.y+n.y*d-fh/2)))];};
+      hourPixels=figurePixels(hour,size,...stand(c0,hw));nextSolid=figurePixels(next,size,...stand(c1,nw));
+    }else{hourPixels=figurePixels(hour,size,place(c0.x,hw),gy);nextSolid=figurePixels(next,size,place(c1.x,nw),gy);}
     letter(hourPixels,ink('ink'));letter(outline(nextSolid,2),ink('ink'));
     index={x:ix,y:c0.y};
-    if(readout){
+    if(readout==='flag'){
+      // Optional minute flag: a staff rising from the body into the space
+      // between the route and the hour figures, flying a small pennant with
+      // the minutes reversed out of the route's ink in the chart's
+      // lettering. It flies ahead, toward the next hour, and turns back as
+      // the next station comes near.
+      // On a slow orbit's steep route the staff leans out on the figures'
+      // side instead, and the flag flies away from the route.
+      const n=camera.normal||{x:0,y:-1},tw=textWidth(LABEL,parts.m)-1,fh2=11,fw=tw+6,point=6,ahead=forward?1:-1,room=forward?c1.x-mx:mx-c1.x;
+      const sx=Math.round(mx+n.x*20),top=Math.round(my+n.y*20)-(n.y<=0?4:0)-(n.y>0?fh2-4:0);
+      const d=Math.abs(n.x)>.5?Math.sign(n.x):room<fw+point+8?-ahead:ahead,staff=[],flag=[];
+      staff.push(...circuitPath({x:mx,y:my},{x:sx,y:n.y<=0?top:top+fh2-1},8));
+      for(let y=0;y<fh2;y++){const tip=Math.round(point*(1-Math.abs(2*y-(fh2-1))/(fh2-1)));for(let x=0;x<fw+tip;x++)flag.push([d>0?sx+1+x:sx-1-x,top+y]);}
+      const digits=textPixels(LABEL,parts.m,d>0?sx+4:sx-fw+2,top+10);
+      letter([...staff,...flag],ink('route'),1);for(const [a,b] of digits)clear(a,b);
+      minuteBox=bounds(flag);
+    }else if(readout){
       // Optional time callout, under the route, clear of the hour figures.
       minuteBox=callout({big:FIGURE.callout,small:FIGURE.calloutMinute,x:mx,y:my,up:false,reach:26}).box;
     }
+  }
+  // Events are compulsory reporting points: a filled triangle on the route
+  // at the event's minute, where the open triangle is the next hour's
+  // optional one, with its name set above. The name gives way to the hour
+  // figures, the callout and the network; the triangle always shows.
+  const fixes=[];
+  for(const e of events){
+    const i=track.findIndex((q,k)=>k>0&&track[k-1].epoch<=e.epoch&&q.epoch>=e.epoch);if(i<0)continue;
+    const a=track[i-1],b=track[i];if(jump(a,b))continue;
+    const f=(e.epoch-a.epoch)/((b.epoch-a.epoch)||1),x=Math.round(a.x+(b.x-a.x)*f),y=Math.round(a.y+(b.y-a.y)*f);
+    if(x<5||x>W-6||y<top+8||y>bottom-4||camera.outside?.(x,y))continue;
+    const col=ink('ink');
+    FIX.forEach((row,dy)=>[...row].forEach((v,dx)=>{const px=x+dx-4,py=y+dy-4;if(v==='#')plot(buf,px,py,col(x,y));else if(row.indexOf('#')<dx&&dx<row.lastIndexOf('#'))clear(px,py);}));
+    const name=e.label,lw=textWidth(LABEL,name),lx=Math.max(4,Math.min(W-4-lw,x-Math.floor(lw/2))),text=textPixels(LABEL,name,lx,y-7),box=bounds(text);
+    const clearOf=[...taken,...type,...fixes.map(q=>q.box).filter(Boolean),hourPixels.length?bounds(hourPixels):null,nextSolid.length?bounds(nextSolid):null,minuteBox].filter(Boolean);
+    const free=box.y>=(home?14:2)&&!clearOf.some(o=>!(o.x+o.w+1<=box.x||box.x+box.w+1<=o.x||o.y+o.h+1<=box.y||box.y+box.h+1<=o.y));
+    if(free)letter(text,col);
+    fixes.push({label:name,epoch:e.epoch,x,y,box:free?box:null});
   }
   // Home on top of the route and figures, on its own knockout.
   if(homeMark){
@@ -441,10 +582,13 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   const margin=(l,r,y,color,middle='')=>{
     const a=textPixels(LABEL,l,6,y),b=textPixels(LABEL,r,W-6-textWidth(LABEL,r),y),left=6+textWidth(LABEL,l),right=W-6-textWidth(LABEL,r);
     letter(a,color,1);letter(b,color,1);margins.push(...[a,b].filter(q=>q.length).map(bounds));
-    if(middle){const c=textPixels(LABEL,middle,Math.round((left+right-textWidth(LABEL,middle))/2),y);letter(c,color,1);zulu={text:middle,box:bounds(c)};}
+    if(middle){const mx0=Math.round((left+right-textWidth(LABEL,middle))/2);zuluAt={x:mx0,baseline:y};if(!baseOnly){const c=textPixels(LABEL,middle,mx0,y);letter(c,color,1);zulu={text:middle,box:bounds(c)};}}
   };
   // Zulu: the same moment in UTC, as pilots and mission control keep it.
-  const utc=new Date(epoch),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}Z`;let zulu=null;
+  // With zone 'body', the margin shows instead the time in the nautical
+  // time zone under the body, with the zone's letter: Z at Greenwich, R for
+  // US Eastern, I for Japan. The Sun's is always near noon.
+  const zoned=zone==='body'?nauticalZone(body.lon):{hours:0,letter:'Z'},utc=new Date(epoch+zoned.hours*3600000),Z=`${String(utc.getUTCHours()).padStart(2,'0')}${String(utc.getUTCMinutes()).padStart(2,'0')}${zoned.letter}`;let zulu=null,zuluAt=null;
   const MONTHS='JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
   if(camera.world){
     // Satellites say where their numbers come from: the 2019 archive, or
@@ -462,10 +606,26 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     margin(`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,`DAY ${String(d.dayOfYear).padStart(3,'0')}`,H-5,ink('ink'),Z);
     // Over the chart, home's next satellite pass, or the day's rise and
     // set of the Sun or Moon there, in local time.
-    if(home){const [l,r]=camera.body==='sun'||camera.body==='moon'?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
+    // A satellite's pass line can change within the hour, so a base layer
+    // leaves it to the native renderer, which sets it each minute.
+    const risen=camera.body==='sun'||camera.body==='moon';
+    if(home&&(risen||!baseOnly)){const [l,r]=risen?riseText(camera.body,home,epoch,timeZone):[passText(camera.body,home,epoch,timeZone),''];margin(l,r,11,ink('ink'));}
   }
-  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,
-    figure:{hour,minute:parts.m,next,time:camera.day||readout?`${hour}:${parts.m}`:null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+  if(baseOnly){
+    const tintIndex=(table,v)=>table.findIndex(([limit])=>table[0][0]<table.at(-1)[0]?v<limit:v>=limit);
+    const baseClass=new Uint8Array(W*H);
+    for(let i=0;i<W*H;i++)baseClass[i]=mat[i]===SPACE?2:pal.tints&&land[i]?3+tintIndex(pal.tints,relief[i]):pal.depths&&!land[i]?8+tintIndex(pal.depths,relief[i]):land[i]?1:0;
+    return {buf,trace,overlay,baseClass,beforeRoute,marker:{x:p.x,y:p.y},zuluAt};
+  }
+  return {buf,marker:{x:p.x,y:p.y,lat:body.lat,lon:body.lon},stations,home:homeMark,zulu,margins,events:fixes,
+    figure:{hour,minute:parts.m,next,time:camera.day||readout===true?(numerals==='colon'?`${hour}:${parts.m}`:`${numerals==='even'&&clock24?hour.padStart(2,'0'):hour}${parts.m}`):null,box:bounds(hourPixels),nextBox:bounds(nextSolid),index,scale:{x0:X0,x1:X1},readout:minuteBox},rose:camera.world?null:{...c0,r:20}};
+  }
+}
+// Nautical time zones: 15° wide, centred on multiples of 15°, lettered A–M
+// east of Greenwich (no J), N–Y west, Z at Greenwich.
+export function nauticalZone(lon){
+  const hours=Math.max(-12,Math.min(12,Math.round((((lon+540)%360)-180)/15)));
+  return {hours,letter:hours===0?'Z':hours>0?'ABCDEFGHIKLM'[hours-1]:'NOPQRSTUVWXY'[-hours-1]};
 }
 // Local clock time in the chart's four figures, 24-hour, no colon.
 const hhmm=(t,timeZone)=>{const q=clockParts(t,timeZone);return `${String(q.h).padStart(2,'0')}${String(q.m).padStart(2,'0')}`;};
@@ -491,15 +651,15 @@ export function localDate(epoch,timeZone){
 export class EnrouteRenderer{
   constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24,plate}=state,readout=!!state.readout,home=state.home||null,start=civilHour(epoch,timeZone);
-    const projection=state.projection==='fuller'?'fuller':'chart',geometryKey=`${projection}/${body}/${start}/${timeZone}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
+    const {body,epoch,timeZone,clock24,plate}=state,readout=state.readout==='flag'?'flag':!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',numerals=NUMERALS.includes(state.numerals)?state.numerals:'colon',zone=state.zone==='body'?'body':'utc',start=civilHour(epoch,timeZone);
+    const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body)==='day'&&state.span==='hour'?'hour':viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${view}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
-      this.camera=projection==='fuller'?(body==='sun'||body==='moon'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):chartCamera(body,start,{span:SPAN});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
+      this.camera=projection==='fuller'?(body==='sun'||body==='moon'||view==='day'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):view==='day'?chartCamera(body,start,{day:localDay(epoch,timeZone)}):chartCamera(body,start,{span:SPAN,center:slide?minute:null});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}
-    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${home?`${home.code}${home.lat},${home.lon}`:''}`;if(this.sceneKey===sceneKey)return this.last;
-    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home});
+    const sceneKey=`${lightKey}/${timeZone}/${clock24}/${plate}/${readout}/${tape}/${numerals}/${zone}/${home?`${home.code}${home.lat},${home.lon}`:''}/${events.map(e=>`${e.epoch}${e.label}`).join('|')}`;if(this.sceneKey===sceneKey)return this.last;
+    const out=renderEnroute({camera:this.camera,ground:this.ground,relief:this.relief,light:this.light,plate,epoch,timeZone,clock24,readout,home,events,tape,numerals,zone});
     const zones=[0,0,0];for(const z of this.light)zones[z]++;
     this.sceneKey=sceneKey;this.stats.renders++;
     const rgba=new Uint8ClampedArray(W*H*4);for(let i=0;i<W*H;i++){rgba.set(out.buf.subarray(i*3,i*3+3),i*4);rgba[i*4+3]=255;}
