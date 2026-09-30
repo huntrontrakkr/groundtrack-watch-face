@@ -11,12 +11,17 @@
 //   zone, if any)
 // The settings page (config.html) sets body, plate, flag and home.
 //   sceneServer: fetch scenes from tools/scene-server.mjs instead, for development
+//   elementsUrl: where to fetch element sets (default CelesTrak's GP query),
+//   for development against a mirror
+// Satellites' element sets are fetched from CelesTrak at most once every two
+// hours each (as CelesTrak asks) and kept, under tle-<catalog number>.
 import {inflateSync} from 'fflate';
 import {buildScene} from '../../src/native-scene.js';
 import {decodeRelief} from '../../src/relief.js';
 import {civilHour} from '../../src/chart-render.js';
 import {HOMES} from '../../src/home.js';
 import {PLATES} from '../../src/enroute-render.js';
+import {registerElements,viewOf,FRESH} from '../../src/satellites.js';
 import CONFIG_PAGE from './config.html';
 import {LAND,RELIEF} from 'groundtrack:data';
 
@@ -66,17 +71,17 @@ function renderScene(start,done){
   done(scene);
 }
 
-function fetchScene(server,start,done){
+function fetchScene(server,start,done,failed){
   var url=server+'/scene?body='+encodeURIComponent(setting('body','sun'))+'&plate='+encodeURIComponent(setting('plate','enroute'))+
     '&flag='+setting('flag','1')+'&zone='+encodeURIComponent(zone())+'&at='+start;
   var request=new XMLHttpRequest();
   request.open('GET',url);
   request.responseType='arraybuffer';
   request.onload=function(){
-    if(request.status!==200){console.log('Scene server answered '+request.status);return;}
+    if(request.status!==200)return failed('NO CHART','Scene server answered '+request.status);
     done(new Uint8Array(request.response));
   };
-  request.onerror=function(){console.log('Scene server unreachable at '+url);};
+  request.onerror=function(){failed('NO CHART','Scene server unreachable at '+url);};
   request.send();
 }
 
@@ -98,27 +103,73 @@ function sendScene(bytes,finished){
   next();
 }
 
+// A satellite's elements: kept ones if younger than two hours, otherwise
+// fetched from CelesTrak, otherwise kept ones still within three days of
+// their epoch. GPS and QZSS fall back to their nominal orbits, as the study
+// does; other satellites have none, and the watch is told so.
+var ELEMENTS_AGE=2*3600000;
+function elements(body,done){
+  if(body.indexOf('sat:')!==0)return done(null);
+  var norad=body.slice(4),key='tle-'+norad,kept=null;
+  try{kept=JSON.parse(localStorage.getItem(key));}catch(error){}
+  function use(text,source){try{registerElements(text,source);return true;}catch(error){console.log('Elements for '+norad+' refused: '+error.message);return false;}}
+  function fallback(reason){
+    if(kept&&Date.now()-kept.epoch<FRESH&&use(kept.text,'celestrak'))return done(null);
+    done(viewOf(body)==='world'?'NO ELEMENTS':null,reason);
+  }
+  if(kept&&Date.now()-kept.fetched<ELEMENTS_AGE&&use(kept.text,'celestrak'))return done(null);
+  // After a failed request, wait a while before the next.
+  var tried=Number(localStorage.getItem('tle-tried-'+norad))||0;
+  if(Date.now()-tried<15*60000)return fallback('Tried CelesTrak '+Math.round((Date.now()-tried)/60000)+' min ago');
+  try{localStorage.setItem('tle-tried-'+norad,String(Date.now()));}catch(error){}
+  var request=new XMLHttpRequest();
+  request.open('GET',setting('elementsUrl','https://celestrak.org/NORAD/elements/gp.php')+'?CATNR='+norad+'&FORMAT=TLE');
+  request.onload=function(){
+    if(request.status!==200)return fallback('CelesTrak answered '+request.status);
+    var text=request.responseText;
+    try{var e=registerElements(text,'celestrak');}catch(error){return fallback(error.message);}
+    try{localStorage.setItem(key,JSON.stringify({text:text,fetched:Date.now(),epoch:e.epoch}));localStorage.removeItem('tle-tried-'+norad);}catch(error){}
+    console.log('Elements for '+norad+' from CelesTrak, epoch '+new Date(e.epoch).toISOString());
+    done(null);
+  };
+  request.onerror=function(){fallback('CelesTrak unreachable');};
+  request.send();
+}
+
+// When the phone can't draw the hour, the watch says why instead of waiting.
+function status(text){
+  console.log('Status to the watch: '+text);
+  Pebble.sendAppMessage({SceneStatus:text},function(){},function(){});
+}
+
 // The scene for the civil hour holding `when` (milliseconds). The last
 // scene is kept, so a request the watch repeats (a transfer it lost) is sent
 // again without rendering it again. A request that arrives while that same
-// hour is being sent (the watch asking as the phone side starts) is already
-// answered.
+// hour is being prepared or sent (the watch asking as the phone side
+// starts) is already answered.
 function refresh(when){
   var start=civilHour(when,zone());
   if(sending){waiting=start;return;}
-  function send(bytes){
-    last={start:start,key:settingsKey(),bytes:bytes};sending=true;
-    sendScene(bytes,function(ok){
-      sending=false;
-      var w=waiting;waiting=null;
-      if(w!==null&&!(ok&&w===start))refresh(w);
-    });
+  sending=true;
+  function finish(ok){
+    sending=false;
+    var w=waiting;waiting=null;
+    if(w!==null&&!(ok&&w===start))refresh(w);
   }
-  try{
-    var server=setting('sceneServer',null);
-    if(last&&last.start===start&&last.key===settingsKey())send(last.bytes);
-    else if(server)fetchScene(server,start,send);else renderScene(start,send);
-  }catch(error){console.log('No scene: '+(error&&error.message||error));}
+  function send(bytes){
+    last={start:start,key:settingsKey(),bytes:bytes};
+    sendScene(bytes,finish);
+  }
+  function fail(text,error){console.log('No scene: '+(error&&error.message||error||text));status(text);finish(false);}
+  if(last&&last.start===start&&last.key===settingsKey())return send(last.bytes);
+  var server=setting('sceneServer',null),body=setting('body','sun');
+  if(server)return fetchScene(server,start,send,fail);
+  if(viewOf(body)!=='hour')return fail('VIEW NOT YET ON WATCH');
+  elements(body,function(problem,reason){
+    if(problem)return fail(problem,reason);
+    try{renderScene(start,send);}
+    catch(error){fail(/three days/.test(error.message)?'ELEMENTS TOO OLD':'NO CHART',error);}
+  });
 }
 function settingsKey(){return [setting('body','sun'),setting('plate','enroute'),setting('flag','1'),zone(),setting('home','')].join('|');}
 

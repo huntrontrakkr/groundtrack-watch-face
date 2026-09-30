@@ -12,7 +12,7 @@
     "enableMultiJS": true,
     "targetPlatforms": ["emery"],
     "watchapp": {"watchface": true},
-    "messageKeys": ["SceneTotal", "SceneOffset", "SceneChunk", "SceneRequest"],
+    "messageKeys": ["SceneTotal", "SceneOffset", "SceneChunk", "SceneRequest", "SceneStatus"],
     "resources": {"media": []}
   }
 }

@@ -14,6 +14,8 @@
 // Ask again when a request has gone unanswered this long. Requests are only
 // made on the minute tick, so this also bounds them to one a minute.
 #define RETRY_SECONDS 50
+// After the phone says it can't draw the hour, wait this long to ask again.
+#define STATUS_QUIET_SECONDS 600
 // A scene arrives in chunks of at most 2,000 bytes; this leaves room for
 // the chunk's offset and the dictionary's own framing.
 #define INBOX_SIZE 2100
@@ -30,6 +32,8 @@ static uint8_t *s_incoming;        // a scene being received
 static uint32_t s_incoming_size,s_received;
 static time_t s_asked_at;          // when a request was last sent, 0 if none is pending
 static int32_t s_asked_for;        // the time whose hour it asked for
+static char s_status[32];          // why the phone has no chart, if it said
+static time_t s_quiet_until;       // no requests before this, after a status
 
 static void chart_free(Chart *c){
   if(c->scene){enr_free(c->scene,free);free(c->scene);}
@@ -52,6 +56,7 @@ static void advance(time_t now){
 // the last has been answered or has waited RETRY_SECONDS.
 static void request(time_t now,time_t when){
   if(s_asked_at&&now-s_asked_at<RETRY_SECONDS)return;
+  if(now<s_quiet_until)return;
   DictionaryIterator *out;
   if(app_message_outbox_begin(&out)!=APP_MSG_OK)return;
   dict_write_int32(out,MESSAGE_KEY_SceneRequest,(int32_t)when);
@@ -74,7 +79,7 @@ static void update(Layer *layer,GContext *ctx){
     graphics_context_set_fill_color(ctx,GColorBlack);
     graphics_fill_rect(ctx,layer_get_bounds(layer),0,GCornerNone);
     graphics_context_set_text_color(ctx,GColorWhite);
-    graphics_draw_text(ctx,s_incoming?"RECEIVING CHART":"AWAITING CHART",fonts_get_system_font(FONT_KEY_GOTHIC_14),
+    graphics_draw_text(ctx,s_incoming?"RECEIVING CHART":s_status[0]?s_status:"AWAITING CHART",fonts_get_system_font(FONT_KEY_GOTHIC_14),
       GRect(0,100,ENR_W,20),GTextOverflowModeTrailingEllipsis,GTextAlignmentCenter,NULL);
     return;
   }
@@ -102,6 +107,7 @@ static void accept(uint8_t *blob,uint32_t size){
     return;
   }
   const time_t now=time(NULL);
+  s_status[0]=0;s_quiet_until=0;
   APP_LOG(APP_LOG_LEVEL_INFO,"Scene for %ld: %lu bytes",(long)c.scene->hour_start,(unsigned long)size);
   if(covers(&c,now)){chart_free(&s_now);chart_free(&s_next);s_now=c;}
   else if(c.scene->hour_start>now&&c.scene->hour_start<=now+3600){chart_free(&s_next);s_next=c;}
@@ -119,6 +125,12 @@ static void accept(uint8_t *blob,uint32_t size){
 // and the next request starts over.
 static void inbox(DictionaryIterator *in,void *context){
   Tuple *total=dict_find(in,MESSAGE_KEY_SceneTotal),*offset=dict_find(in,MESSAGE_KEY_SceneOffset),*chunk=dict_find(in,MESSAGE_KEY_SceneChunk);
+  Tuple *status=dict_find(in,MESSAGE_KEY_SceneStatus);
+  if(status){
+    strncpy(s_status,status->value->cstring,sizeof s_status-1);s_status[sizeof s_status-1]=0;
+    s_asked_at=0;s_quiet_until=time(NULL)+STATUS_QUIET_SECONDS;
+    layer_mark_dirty(s_layer);
+  }
   if(total){
     // Room first: a new scene is either the next hour, which the watch asks
     // for only when it holds none, or this hour's, which replaces the next.
