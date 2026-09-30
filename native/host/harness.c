@@ -44,7 +44,8 @@ int main(int argc,char **argv){
       if(m-step<0)continue;
       enr_render(scene,m-step,frame,ENR_W);drawn+=enr_render_update(scene,m-step,m,frame,ENR_W);updates++;
       enr_render(scene,m,whole,ENR_W);
-      for(int i=0;i<ENR_W*ENR_H;i++)if(frame[i]!=whole[i])differ++;
+      // HARNESS_VERBOSE: each differing pixel, its minute, step and colours.
+      for(int i=0;i<ENR_W*ENR_H;i++)if(frame[i]!=whole[i]){differ++;if(getenv("HARNESS_VERBOSE"))fprintf(stderr,"minute %d step %d (%d,%d) update %02x whole %02x\n",m,step,i%ENR_W,i/ENR_W,frame[i],whole[i]);}
     }
     printf("{\"differ\":%ld,\"drawn\":%ld}\n",differ,drawn/updates);
     return 0;

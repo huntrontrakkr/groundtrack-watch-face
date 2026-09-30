@@ -976,7 +976,7 @@ static bool finish_draw(ChartBuild *b){
   // The tracking stations, circled, with their codes; on the world band
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
-  int16_t shown[32][2];int nshown=0;
+  int16_t shown[32][2];uint8_t shown_table[32];int nshown=0;
   const bool ringed=world||(rolled&&cam.wide);
   if(ringed&&FACE_CHART)bearings(5,draw->sb,draw->cb);
   for(unsigned s=0;s<(day?0:TABLE_STATIONS);s++){
@@ -989,7 +989,7 @@ static bool finish_draw(ChartBuild *b){
     const int w=text_width(st.code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
     if(overlaps(taken,taken_n,box))continue;
     if(taken_n<TAKEN)taken[taken_n++]=box;
-    if(nshown<32){shown[nshown][0]=(int16_t)x;shown[nshown][1]=(int16_t)y;nshown++;}
+    if(nshown<32){shown[nshown][0]=(int16_t)x;shown[nshown][1]=(int16_t)y;shown_table[nshown]=(uint8_t)s;nshown++;}
     if(ringed){const int n=circle_pixels(&cam,st.lat,st.lon,acquisition,5,FACE_CHART?draw->sb:NULL,FACE_CHART?draw->cb:NULL,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++){const int r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(&cv,x+dx,y+dy,L_INK);}
     plot(&cv,x,y,L_INK);
@@ -1336,7 +1336,8 @@ static bool finish_draw(ChartBuild *b){
     if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
   }
   out->c0[0]=(int16_t)c0x;out->c0[1]=(int16_t)c0y;out->c1[0]=(int16_t)c1x;out->c1[1]=(int16_t)c1y;
-  out->station_count=(uint8_t)nshown;memcpy(out->stations,shown,sizeof(int16_t)*2*nshown);
+  out->station_count=(uint8_t)nshown;memcpy(out->stations,shown,sizeof(int16_t)*2*nshown);memcpy(out->station_table,shown_table,nshown);
+  for(int k=0;k<nfigs&&k<2;k++){out->fig_box[k][0]=(int16_t)figs[k].x;out->fig_box[k][1]=(int16_t)figs[k].y;out->fig_box[k][2]=(int16_t)figs[k].w;out->fig_box[k][3]=(int16_t)figs[k].h;}
   if(!world){
     // The time callout's place, hour and the lettering it breaks for; its
     // figures, when it is drawn.

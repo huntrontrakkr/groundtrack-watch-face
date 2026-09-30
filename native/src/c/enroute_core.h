@@ -87,6 +87,9 @@ typedef struct {
   uint8_t *tile_runs;
   // Each grid point's direction in its face's frame (n, u, v), x 16384.
   int16_t *dirs;
+  // How far (Q30) a height along a row's run on one tile can lie beyond
+  // the run's end pixels' heights (enr_ready).
+  int32_t slack;
 } EnrFuller;
 // Figures of one size for the day's time callout (Jost digits: 20, 28 and
 // 40 px): per digit its width, height and first byte in the scene's
@@ -127,6 +130,10 @@ typedef struct {
   int16_t c0[2],c1[2];
   uint8_t station_count;
   int16_t stations[32][2];
+  // Which network stations those are (their table indices), and the hour
+  // figures' boxes (x, y, w, h; empty on a day chart), for the study.
+  uint8_t station_table[32];
+  int16_t fig_box[2][4];
   // The world band's sliding tape: this hour's figures and the next's.
   char tape_hour[3],tape_next[3];
   // With the world sliding, the one minute the scene is for (255 otherwise).
@@ -157,6 +164,8 @@ typedef struct {
   // The rows' cosines and sines, and night's thresholds, in 2^30 fixed
   // point, for the minute renderer's fast night.
   int32_t row_q[ENR_TRIG_H][2],night_q[34];
+  // Whether a class's colour differs between night's zones (enr_ready).
+  uint8_t zone_matters[256];
 } EnrScene;
 
 // Parse a scene blob as src/native-scene.js writes it (host only:
