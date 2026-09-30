@@ -115,10 +115,16 @@ export function groundLayer(camera,atlas){
   }
   // The coast is a sea-side outline. One waterline repeats it offshore, as
   // on engraved charts. Both are graphic devices, not measured depth.
+  return {material:materialOf(land,space),dirs};
+}
+export function materialOf(land,space){
   const dist=seaDistance(land),material=new Uint8Array(W*H);
   for(let i=0;i<W*H;i++)material[i]=space[i]?SPACE:land[i]?LAND:dist[i]<=1?COAST:dist[i]===4?WAVE:SEA;
-  return {material,dirs};
+  return material;
 }
+// The Sun's height (the sine of its altitude) at a pixel, or null off the
+// map. A Fuller sheet's ground gives its own (fuller-ground.js).
+export const sunHeight=(ground,i,sun)=>ground.height?ground.height(i,sun):ground.dirs[i]?dot(ground.dirs[i],sun):null;
 // Chessboard distance, in pixels, from each sea pixel to the nearest land.
 function seaDistance(land){
   const d=new Uint16Array(W*H).fill(999);
@@ -139,8 +145,7 @@ const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 export function lightLayer(ground,epoch){
   const sun=sunAt(epoch),light=new Uint8Array(W*H);
   for(let i=0;i<W*H;i++){
-    const d=ground.dirs[i];if(!d){light[i]=DAY;continue;}
-    const a=dot(d,sun);
+    const a=sunHeight(ground,i,sun);if(a===null){light[i]=DAY;continue;}
     if(a>=SUNRISE_SINE)light[i]=DAY;
     else if(a<CIVIL_TWILIGHT_SINE)light[i]=NIGHT;
     else{

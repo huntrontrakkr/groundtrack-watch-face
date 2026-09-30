@@ -8,7 +8,8 @@ import {position,moonLight,MINUTE} from './ephemeris.js';
 import {dot,RAD,direction} from './geometry.js';
 import {clockParts} from './render.js';
 import {SUNRISE_SINE,CIVIL_TWILIGHT_SINE} from './solar.js';
-import {chartCamera,groundLayer,lightLayer,civilHour,LAND,SPACE,COAST,W,H} from './chart-render.js';
+import {chartCamera,groundLayer,lightLayer,civilHour,materialOf,sunHeight,LAND,SPACE,COAST,W,H} from './chart-render.js';
+import {fullerGround} from './fuller-ground.js';
 import {reliefAt} from './relief.js';
 import {rollCamera} from './roll.js';
 import numerals from '../data/enroute-font.json' with {type:'json'};
@@ -161,8 +162,12 @@ export function homeCircle(camera,home,altitude){
 // Height for each pixel, smoothed three times so contours read as drawn,
 // generalized lines rather than the atlas's quarter-degree cells.
 export function reliefLayer(camera,meters){
-  let e=new Float32Array(W*H);
+  const e=new Float32Array(W*H);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const g=camera.toGround(x+.5,y+.5);e[y*W+x]=Math.abs(g.lat)<=90?reliefAt(meters,g.lat,g.lon):0;}
+  return smoothRelief(e);
+}
+// Three passes of a three-tap box, across then down.
+export function smoothRelief(e){
   for(let pass=0;pass<3;pass++){
     const t=new Float32Array(W*H);
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){let s=0,n=0;for(let d=-1;d<=1;d++){const xx=x+d;if(xx>=0&&xx<W){s+=e[y*W+xx];n++;}}t[y*W+x]=s/n;}
@@ -228,9 +233,9 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     if(!baseOnly&&pal.scan&&z&&y%(z===2?2:4)===1)c=pal.space;
     // The dark plates draw the terminator itself, as the plotboards did:
     // dashed where the Sun sets, dotted where twilight ends.
-    if(!baseOnly&&pal.terminator&&ground.dirs[i]){
+    if(!baseOnly&&pal.terminator&&sunHeight(ground,i,sun)!==null){
       // Traced from the Sun's height at each pixel, not the dithered zones.
-      const h=dot(ground.dirs[i],sun),cross=level=>[x>0?i-1:-1,x<W-1?i+1:-1,i-W,y<H-1?i+W:-1].some(j=>j>=0&&ground.dirs[j]&&(dot(ground.dirs[j],sun)>=level)!==(h>=level));
+      const h=sunHeight(ground,i,sun),cross=level=>[x>0?i-1:-1,x<W-1?i+1:-1,i-W,y<H-1?i+W:-1].some(j=>{if(j<0)return false;const g=sunHeight(ground,j,sun);return g!==null&&(g>=level)!==(h>=level);});
       if(cross(SUNRISE_SINE)&&((x+y)>>1)%3!==2)c=pal.terminator;
       else if(cross(CIVIL_TWILIGHT_SINE)&&(x+y)%3===0)c=pal.terminator;
       // Outline plates tint the night side with a sparse dot screen.
@@ -241,8 +246,8 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
   // Paper plates show night as a regular dot tint, deepening through civil
   // twilight to a 25 percent screen, printed under every symbol.
   if(!baseOnly&&pal.night==='screen')for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const d=ground.dirs[y*W+x];if(!d)continue;
-    const t=Math.max(0,Math.min(1,(SUNRISE_SINE-dot(d,sun))/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE)));
+    const g=sunHeight(ground,y*W+x,sun);if(g===null)continue;
+    const t=Math.max(0,Math.min(1,(SUNRISE_SINE-g)/(SUNRISE_SINE-CIVIL_TWILIGHT_SINE)));
     if(t>0&&BAYER[(y&3)*4+(x&3)]<t*4)plot(buf,x,y,pal.screen);
   }
   // Knockouts clear to plain paper under lettering, as on a printed chart.
@@ -372,7 +377,7 @@ export function renderEnroute({camera,ground,relief,light:zones,plate,epoch,time
     // The rose turns to true north at the station; north is up on the
     // cylindrical charts, and anywhere on a rolled Fuller sheet.
     const R=16,g=s0,q0=camera.project(g.lat,g.lon),q1=camera.project(Math.min(89.9,g.lat+.5),g.lon),nl=hypot(q1.x-q0.x,q1.y-q0.y)||1;
-    const north=camera.fuller?Math.atan2((q1.x-q0.x)/nl,-(q1.y-q0.y)/nl):0,at=(t,r)=>[c0.x+Math.round(sin(t+north)*r),c0.y-Math.round(cos(t+north)*r)];
+    const north=camera.fuller?atan2((q1.x-q0.x)/nl,-(q1.y-q0.y)/nl):0,at=(t,r)=>[c0.x+Math.round(sin(t+north)*r),c0.y-Math.round(cos(t+north)*r)];
     for(let a=0;a<720;a++){const [x,y]=at(a*Math.PI/360,R);plot(buf,x,y,col(c0.x,c0.y));}
     for(let a=0;a<360;a+=30){const len=a%90===0?5:3;for(let r=R-len;r<R;r++){const [x,y]=at(a*RAD,r);plot(buf,x,y,col(c0.x,c0.y));}}
     for(let k=0;k<3;k++)for(let d=-k;d<=k;d++){const r=R+4-k,x=c0.x+Math.round(sin(north)*r+cos(north)*d),y=c0.y-Math.round(cos(north)*r-sin(north)*d);plot(buf,x,y,col(c0.x,c0.y));}
@@ -713,12 +718,17 @@ export function localDate(epoch,timeZone){
 
 // Caches follow the clock: map and relief by the hour, light by the minute.
 export class EnrouteRenderer{
-  constructor(atlas,meters){this.atlas=atlas;this.meters=meters;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
+  // fuller: the faces' grids (decodeFullerPack), for the Fuller sheets.
+  constructor(atlas,meters,fuller=null){this.atlas=atlas;this.meters=meters;this.fuller=fuller;this.stats={geometryBuilds:0,lightBuilds:0,renders:0};}
   render(state){
     const {body,epoch,timeZone,clock24,plate}=state,readout=state.readout==='flag'?'flag':!!state.readout,home=state.home||null,events=state.events||[],tape=['tape','slide'].includes(state.tape)?state.tape:'fixed',numerals=NUMERALS.includes(state.numerals)?state.numerals:'colon',zone=state.zone==='body'?'body':'utc',start=civilHour(epoch,timeZone);
     const projection=state.projection==='fuller'?'fuller':'chart',view=viewOf(body)==='day'&&state.span==='hour'?'hour':viewOf(body),slide=tape==='slide'&&projection==='chart'&&view==='world',minute=Math.floor(epoch/MINUTE)*MINUTE,geometryKey=`${projection}/${view}/${body}/${start}/${timeZone}${slide?`/${minute}`:''}`,lightKey=`${geometryKey}/${Math.floor(epoch/MINUTE)}`;
     if(this.geometryKey!==geometryKey){
-      this.camera=projection==='fuller'?(body==='sun'||body==='moon'||view==='day'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):view==='day'?chartCamera(body,start,{day:localDay(epoch,timeZone)}):chartCamera(body,start,{span:SPAN,center:slide?minute:null});this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);
+      this.camera=projection==='fuller'?(body==='sun'||body==='moon'||view==='day'?rollCamera(body,start,{span:192,day:localDay(epoch,timeZone)}):rollCamera(body,start,{span:180})):view==='day'?chartCamera(body,start,{day:localDay(epoch,timeZone)}):chartCamera(body,start,{span:SPAN,center:slide?minute:null});
+      if(this.camera.fuller){
+        if(!this.fuller)throw new Error('The Fuller sheets need the faces\' grids (public/fuller.bin)');
+        const g=fullerGround(this.camera,this.fuller,this.atlas);this.ground={material:materialOf(g.land,Uint8Array.from(g.tile,t=>t<0?1:0)),dirs:null,height:g.height};this.relief=smoothRelief(g.relief);
+      }else{this.ground=groundLayer(this.camera,this.atlas);this.relief=reliefLayer(this.camera,this.meters);}
       this.geometryKey=geometryKey;this.stats.geometryBuilds++;
     }
     if(this.lightKey!==lightKey){this.light=lightLayer(this.ground,epoch);this.lightKey=lightKey;this.stats.lightBuilds++;}

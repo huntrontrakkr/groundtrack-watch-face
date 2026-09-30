@@ -7,6 +7,7 @@ import {EnrouteRenderer,PLATES} from '../src/enroute-render.js';
 import {decodeRelief} from '../src/relief.js';
 import {civilHour} from '../src/chart-render.js';
 import {angularDistance,direction} from '../src/geometry.js';
+import {decodeFullerPack} from '../src/fuller-ground.js';
 
 const ISS=Date.parse('2019-06-05T12:24:00Z'),SUN=Date.parse('2026-09-27T08:24:00Z');
 
@@ -41,9 +42,9 @@ test('the hour runs left to right, on a floating net with no cuts',()=>{
 });
 
 test('the Enroute renderer draws a Fuller sheet in native colors, rose turned to north',()=>{
-  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
+  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin'))),fuller=decodeFullerPack(new Uint8Array(readFileSync('public/fuller.bin')));
   for(const [body,epoch] of [['iss',ISS],['sun',SUN]]){
-    const out=new EnrouteRenderer(atlas,meters).render({body,epoch,timeZone:'UTC',clock24:false,plate:'console',projection:'fuller'});
+    const out=new EnrouteRenderer(atlas,meters,fuller).render({body,epoch,timeZone:'UTC',clock24:false,plate:'console',projection:'fuller'});
     for(let i=0;i<out.buf.length;i++)assert.equal(out.buf[i]%85,0);
     assert.ok(out.figure.index.x>=out.figure.scale.x0&&out.figure.index.x<=out.figure.scale.x1);
     assert.ok(out.figure.scale.x1>out.figure.scale.x0);
@@ -69,9 +70,9 @@ test('the Sun and Moon roll out a whole local day, midnight to midnight, on scre
 });
 
 test('the day strip carries a time callout, hours and minutes, clear of the strip',()=>{
-  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
+  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin'))),fuller=decodeFullerPack(new Uint8Array(readFileSync('public/fuller.bin')));
   for(const [body,t,tz,clock24,time] of [['sun','2026-09-27T08:24:00Z','America/New_York',false,'4:24'],['moon','2026-09-15T12:24:00Z','UTC',true,'12:24'],['sun','2026-09-27T08:07:00Z','UTC',false,'8:07']]){
-    const r=new EnrouteRenderer(atlas,meters),out=r.render({body,epoch:Date.parse(t),timeZone:tz,clock24,plate:'enroute',projection:'fuller'});
+    const r=new EnrouteRenderer(atlas,meters,fuller),out=r.render({body,epoch:Date.parse(t),timeZone:tz,clock24,plate:'enroute',projection:'fuller'});
     assert.equal(out.figure.time,time);
     const {box}=out.figure;assert.ok(box.x>=4&&box.x+box.w<=196&&box.y>=0);
     // The figure never lands on the rolled route.

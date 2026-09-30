@@ -12,6 +12,7 @@ import {sampleTrack,MINUTE} from './ephemeris.js';
 import {F,EDGES,NEIGHBORS,TEMPLATE,BASES,faceOf,forwardFace,inverseFace,flatPoint,barycentric} from './fuller.js';
 import {across} from './unfold.js';
 import {dot,lonLat,direction} from './geometry.js';
+import {hypot} from './fmath.js';
 
 export const W=200,H=228;
 const centre=tri=>[0,1].map(k=>tri.reduce((s,p)=>s+p[k]/3,0));
@@ -45,7 +46,7 @@ export function rollCamera(body,start,{span=180,trackY=140,rings=2,day=null}={})
   const i0=flat.findIndex(p=>p.epoch===start),i1=flat.findIndex(p=>p.epoch===start+60*MINUTE),a=flat[day?0:i0].xy,b=flat[day?flat.length-1:i1].xy;
   // Similarity transform: this hour's stations on a horizontal line, SPAN
   // pixels apart, time running left to right.
-  const len=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/len,uy=(b[1]-a[1])/len;let scale=span/len,mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  const len=hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/len,uy=(b[1]-a[1])/len;let scale=span/len,mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
   if(day){
     // A path far from the equator unrolls as an arc, as a cone flattens into
     // a fan. Fit the whole day's arc, not just its chord, and centre it.
@@ -70,7 +71,7 @@ export function rollCamera(body,start,{span=180,trackY=140,rings=2,day=null}={})
   for(let ring=0;ring<rings;ring++){
     const candidates=[];
     for(const t of frontier)for(let e=0;e<3;e++){const n=across(t,e);if(!cells.has(n.key)&&!printed.has(n.face)&&onScreen(n.tri))candidates.push(n);}
-    const mid=toScreenXY([(a[0]+b[0])/2,(a[1]+b[1])/2]),dist=n=>{const c=toScreenXY(centre(n.tri));return Math.hypot(c.x-mid.x,c.y-mid.y);};
+    const mid=toScreenXY([(a[0]+b[0])/2,(a[1]+b[1])/2]),dist=n=>{const c=toScreenXY(centre(n.tri));return hypot(c.x-mid.x,c.y-mid.y);};
     candidates.sort((p,q)=>dist(p)-dist(q));
     const added=[];
     for(const n of candidates){
@@ -100,10 +101,13 @@ export function rollCamera(body,start,{span=180,trackY=140,rings=2,day=null}={})
   // nearest the route's middle.
   const project=(lat,lon)=>{
     const dir=direction(lat,lon),face=faceOf(dir),w=forwardFace(face,dir);let best=null;
-    for(const t of tiles)if(t.face===face){const q=toScreenXY(flatPoint(w,t.tri)),d=Math.hypot(q.x-W/2,q.y-trackY);if(!best||d<best.d)best={...q,d};}
+    for(const t of tiles)if(t.face===face){const q=toScreenXY(flatPoint(w,t.tri)),d=hypot(q.x-W/2,q.y-trackY);if(!best||d<best.d)best={...q,d};}
     return best||{x:-999,y:-999};
   };
   const track=flat.map(p=>({...p,...toScreenXY(p.xy)}));
-  return {body,start,world:false,fuller:true,wide:world||!!day,outside:(x,y)=>!locate(x,y),track,scale,band:{top:0,bottom:H},tiles,toScreen:project,toGround,project,
+  // The tile holding a screen point (its index in tiles), or -1; and the
+  // plane under a screen point (fuller-ground.js places the faces' grids).
+  const tileAt=(x,y)=>{const hit=locate(x,y);return hit?tiles.indexOf(hit.tile):-1;};
+  return {body,start,world:false,fuller:true,tileAt,toPlane,wide:world||!!day,outside:(x,y)=>!locate(x,y),track,scale,band:{top:0,bottom:H},tiles,toScreen:project,toGround,project,
     stations:[track[i0],track[i1]],day:day?{...day,hours:track.filter(p=>(p.epoch-day.start)%(60*MINUTE)===0)}:null,key:`fuller/${body}/${day?day.start:start}/${span}`};
 }

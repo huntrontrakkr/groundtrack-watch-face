@@ -8,11 +8,12 @@ import {position,MINUTE} from '../src/ephemeris.js';
 import {dot} from '../src/geometry.js';
 import {SUNRISE_SINE,CIVIL_TWILIGHT_SINE} from '../src/solar.js';
 import meta from '../data/relief.json' with {type:'json'};
+import {decodeFullerPack} from '../src/fuller-ground.js';
 
-const atlas=new Uint8Array(readFileSync('public/land.bin')),bytes=new Uint8Array(readFileSync('public/relief.bin')),meters=decodeRelief(bytes);
+const atlas=new Uint8Array(readFileSync('public/land.bin')),bytes=new Uint8Array(readFileSync('public/relief.bin')),meters=decodeRelief(bytes),fuller=decodeFullerPack(new Uint8Array(readFileSync('public/fuller.bin')));
 const SUN=Date.parse('2026-09-27T08:24:00Z'),MOON_DAY=Date.parse('2026-09-15T12:24:00Z'),MOON_DUSK=Date.parse('2026-09-19T09:24:00Z'),ISS=Date.parse('2019-06-05T12:24:00Z');
 const scene=(body,epoch,extra={})=>({body,epoch,timeZone:'America/New_York',clock24:false,plate:'enroute',...extra});
-const draw=state=>{const r=new EnrouteRenderer(atlas,meters);return {r,out:r.render(state)};};
+const draw=state=>{const r=new EnrouteRenderer(atlas,meters,fuller);return {r,out:r.render(state)};};
 const disjoint=(a,b)=>a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y;
 
 test('the relief grid is public-domain ETOPO1 and GMTED2010, aligned with the coastline atlas',()=>{
@@ -56,7 +57,7 @@ test('every pixel is a native RGB222 color, on every plate, body and clock forma
 
 test('the time figure reads the hour and minute for a whole day and clears the rose and route',()=>{
   for(const clock24 of [false,true]){
-    const r=new EnrouteRenderer(atlas,meters);
+    const r=new EnrouteRenderer(atlas,meters,fuller);
     for(let hour=0;hour<24;hour++)for(const minute of [0,7,38,59]){
       const epoch=Date.parse('2026-09-21T00:00:00Z')+hour*3600000+minute*60000,out=r.render(scene('sun',epoch,{timeZone:'UTC',clock24}));
       const name=h=>String(clock24?h%24:h%12||12);
@@ -70,7 +71,7 @@ test('the time figure reads the hour and minute for a whole day and clears the r
 
 test('the time scale reads like an instrument tape, running the way the route runs',()=>{
   for(const [body,epoch] of [['sun',SUN],['moon',MOON_DUSK],['iss',ISS]]){
-    const r=new EnrouteRenderer(atlas,meters),start=civilHour(epoch,'America/New_York');let last=null;
+    const r=new EnrouteRenderer(atlas,meters,fuller),start=civilHour(epoch,'America/New_York');let last=null;
     for(let m=0;m<60;m++){
       const out=r.render(scene(body,start+m*MINUTE)),{index}=out.figure,[s0,s1]=out.stationsOnRoute,forward=s1.x>s0.x;
       // Even graduations from this hour's end: two pixels a minute over the
@@ -111,7 +112,7 @@ test('the margin date is local, with the day of the year',()=>{
 
 test('the marker travels from this hour toward the next',()=>{
   for(const [body,epoch] of [['sun',SUN],['moon',MOON_DUSK],['iss',ISS]]){
-    const r=new EnrouteRenderer(atlas,meters),start=civilHour(epoch,'America/New_York');let last=-1;
+    const r=new EnrouteRenderer(atlas,meters,fuller),start=civilHour(epoch,'America/New_York');let last=-1;
     for(let m=0;m<60;m++){
       const out=r.render(scene(body,start+m*MINUTE)),route=r.camera.track.filter(p=>p.hour);
       const index=route.reduce((best,p,i)=>Math.hypot(p.x-out.marker.x,p.y-out.marker.y)<Math.hypot(route[best].x-out.marker.x,route[best].y-out.marker.y)?i:best,0);
@@ -155,7 +156,7 @@ test('the ISS gets the world band, with its archive noted',()=>{
 });
 
 test('caches follow the clock: chart by the hour, light by the minute, plate last',()=>{
-  const r=new EnrouteRenderer(atlas,meters),state=scene('moon',MOON_DUSK);r.render(state);const first={...r.stats};
+  const r=new EnrouteRenderer(atlas,meters,fuller),state=scene('moon',MOON_DUSK);r.render(state);const first={...r.stats};
   r.render(state);assert.deepEqual(r.stats,first);
   r.render({...state,epoch:state.epoch+MINUTE});assert.equal(r.stats.geometryBuilds,first.geometryBuilds);assert.equal(r.stats.lightBuilds,first.lightBuilds+1);
   const minute={...r.stats};r.render({...state,epoch:state.epoch+MINUTE,plate:'console'});assert.equal(r.stats.lightBuilds,minute.lightBuilds);assert.equal(r.stats.renders,minute.renders+1);
@@ -163,7 +164,7 @@ test('caches follow the clock: chart by the hour, light by the minute, plate las
   // A standalone render of the cached layers matches the renderer.
   const camera=chartCamera('moon',civilHour(state.epoch,state.timeZone),{span:SPAN}),ground=groundLayer(camera,atlas);
   const direct=renderEnroute({camera,ground,relief:reliefLayer(camera,meters),light:lightLayer(ground,state.epoch),plate:'enroute',epoch:state.epoch,timeZone:state.timeZone,clock24:false});
-  assert.deepEqual(direct.buf,new EnrouteRenderer(atlas,meters).render(state).buf);
+  assert.deepEqual(direct.buf,new EnrouteRenderer(atlas,meters,fuller).render(state).buf);
 });
 
 test('the dark plates draw the terminator: dashed at sunset, dotted where twilight ends',()=>{
@@ -183,7 +184,7 @@ test('the dark plates draw the terminator: dashed at sunset, dotted where twilig
 test('Zulu time sits in the bottom margin, clear of the date and the pass',async()=>{
   const {HOMES}=await import('../src/home.js');
   for(const [body,epoch,projection,home] of [['sun',SUN,'chart',null],['moon',MOON_DUSK,'fuller',HOMES.UTC],['iss',ISS,'chart',HOMES['Europe/London']],['iss',ISS,'chart',null],['iss',ISS+3600000,'fuller',HOMES['America/New_York']]]){
-    const r=new EnrouteRenderer(atlas,meters),out=r.render({body,epoch,timeZone:'Asia/Kolkata',clock24:false,plate:'enroute',projection,home});
+    const r=new EnrouteRenderer(atlas,meters,fuller),out=r.render({body,epoch,timeZone:'Asia/Kolkata',clock24:false,plate:'enroute',projection,home});
     const d=new Date(epoch);assert.equal(out.zulu.text,`${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}Z`);
     const z=out.zulu.box;assert.ok(z.y>=H-14&&z.y+z.h<=H&&z.x>=6&&z.x+z.w<=W-6,`${body} ${projection}`);
     for(const b of out.margins)assert.ok(disjoint(z,{x:b.x-3,y:b.y,w:b.w+6,h:b.h}),`${body} ${projection}: Zulu touches the margin`);

@@ -9,10 +9,11 @@ import {decodeRelief} from '../src/relief.js';
 import {registerElements} from '../src/satellites.js';
 import {HOMES} from '../src/home.js';
 import {encodePNG} from './png.mjs';
+import {decodeFullerPack} from '../src/fuller-ground.js';
 
 const lines=readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').trim().split('\n');
 for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','fixture');
-const r=new EnrouteRenderer(new Uint8Array(readFileSync('public/land.bin')),decodeRelief(new Uint8Array(readFileSync('public/relief.bin'))));
+const r=new EnrouteRenderer(new Uint8Array(readFileSync('public/land.bin')),decodeRelief(new Uint8Array(readFileSync('public/relief.bin'))),decodeFullerPack(new Uint8Array(readFileSync('public/fuller.bin'))));
 const hours=[['sat:25544','2026-09-30T13:24:00Z','crt'],['sat:43013','2026-09-30T17:24:00Z','enroute'],['sat:49260','2026-10-01T09:40:00Z','red']];
 const styles=['off','vernier','comb','chevrons'],gap=12,sheetW=styles.length*(W+gap)-gap,sheetH=hours.length*(H+gap)-gap;
 const sheet=Buffer.alloc(sheetW*sheetH*3,255);

@@ -6,6 +6,7 @@ import {EnrouteRenderer,localDay,riseText,passText,ACQUISITION,PLATES,W,H} from 
 import {decodeRelief} from '../src/relief.js';
 import {position,MINUTE} from '../src/ephemeris.js';
 import {direction} from '../src/geometry.js';
+import {decodeFullerPack} from '../src/fuller-ground.js';
 
 const NY=HOMES['America/New_York'],LONDON=HOMES['Europe/London'],ISS=Date.parse('2019-06-05T12:24:00Z');
 
@@ -44,8 +45,8 @@ test('passes over home rise above the mask and set below it again',()=>{
 });
 
 test('home is drawn as an airport, clear of the margins and the network',()=>{
-  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
-  const r=new EnrouteRenderer(atlas,meters);
+  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin'))),fuller=decodeFullerPack(new Uint8Array(readFileSync('public/fuller.bin')));
+  const r=new EnrouteRenderer(atlas,meters,fuller);
   const cases=[['iss',ISS+2*3600000,'chart',LONDON],['moon',Date.parse('2026-09-15T12:24:00Z'),'fuller',NY],['sun',Date.parse('2026-09-27T08:24:00Z'),'fuller',NY],['iss',ISS+3600000,'fuller',LONDON]];
   let drawn=0;
   for(const [body,epoch,projection,home] of cases){

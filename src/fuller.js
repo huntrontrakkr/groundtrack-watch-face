@@ -2,6 +2,7 @@
 // implementation (2018). See NOTICE and docs/STUDY-03.md. This is the
 // nonlinear Fuller transform, not gnomonic barycentric interpolation.
 import {dot,norm,cross} from './geometry.js';
+import {atan2} from './fmath.js';
 const S3=Math.sqrt(3),Z=Math.sqrt(5+2*Math.sqrt(5))/Math.sqrt(15);
 const EL=Math.sqrt(8)/Math.sqrt(5+Math.sqrt(5));
 const DVE=Math.sqrt(3+Math.sqrt(5))/Math.sqrt(5+Math.sqrt(5));
@@ -14,10 +15,12 @@ export const V=[pole,...ring,...[3,4,5,1,2,0].map(i=>(i===0?pole:ring[i-1]).map(
 export const F=[[1,3,2],[1,4,3],[1,5,4],[1,6,5],[1,2,6],[2,3,8],[3,9,8],[3,4,9],[4,10,9],[4,5,10],[5,11,10],[5,6,11],[6,7,11],[2,7,6],[2,8,7],[8,9,12],[9,10,12],[10,11,12],[11,7,12],[8,12,7]].map(f=>f.map(v=>v-1));
 export const TEMPLATE=[[0,1/S3],[.5,-1/(2*S3)],[-.5,-1/(2*S3)]];
 function raw(x,y){
-  const a=Math.atan2(2*y/S3-EL/6,DVE),b=Math.atan2(x-y/S3-EL/6,DVE),c=Math.atan2(-x-y/S3-EL/6,DVE);
+  const a=atan2(2*y/S3-EL/6,DVE),b=atan2(x-y/S3-EL/6,DVE),c=atan2(-x-y/S3-EL/6,DVE);
   return [S3*(b-c),2*a-b-c];
 }
 const RAW_EDGE=raw(0,EL/S3)[1]*S3;
+// The constants as the watch reads them (tools/fuller-pack.mjs).
+export const CONSTANTS={S3,Z,EL,DVE,RAW_EDGE};
 export const BASES=F.map(f=>{
   const [a,b,c]=f.map(i=>V[i]),n=norm(a.map((v,k)=>v+b[k]+c[k]));
   return {n,u:norm(b.map((v,k)=>v-c[k])),v:norm(a.map((v,k)=>v-dot(a,n)*n[k]))};

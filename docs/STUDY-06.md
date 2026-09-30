@@ -65,6 +65,9 @@ It suits satellites best. On the Gray–Fuller faces great circles are nearly st
 
 ![Rolling Fuller spike proofs](screenshots/study-06-fuller-contact-sheet.png)
 
+The ground is **pre-projected**, as Dymaxion pre-projects its net. Every sheet is made of the same 20 faces, each placed by a rotation, scale and shift, so each face is sampled once, offline, on a triangular grid of 64 steps an edge (`tools/fuller-pack.mjs`, `public/fuller.bin`, about 100 KB). Each grid point keeps its direction in the face's frame, its land coverage and its relief, averaged over its cell. A pixel's place on its face's grid is an affine function of the pixel, kept in fixed point, and its land, relief and the Sun's height are interpolated between the three nearest points in integers (`src/fuller-ground.js`). Nothing inverts the projection per pixel, so the watch can build a sheet cheaply and draw the same pixels. Against the exact projection, 1 to 2 percent of pixels differ, a coastline or contour one pixel over. GPS's hour zooms in far enough (a face 500 px across) that the grid is too coarse for coastlines, so there land comes from the quarter-degree `land.bin` at the grid's interpolated directions; its relief tints stay the grid's, a little smoother than the exact projection's.
+
+
 Tests check the following:
 - The rolled route never jumps.
 - The hour runs horizontally left to right.

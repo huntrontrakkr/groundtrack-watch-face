@@ -7,6 +7,7 @@ import {HOMES} from './home.js';
 import {STUDY_ORBITS,registerNominal} from './nominal.js';
 import {localDay} from './enroute-render.js';
 import {STUDY_EVENTS,uniqueCode,atLocal} from './events.js';
+import {decodeFullerPack,FULLER_BYTES} from './fuller-ground.js';
 const $=id=>document.getElementById(id);
 // Frozen study moments; Moonlight is one Moon over three evenings.
 export const OBSERVATIONS={day:Date.parse('2026-09-15T12:24:00Z'),dusk:Date.parse('2026-09-19T09:24:00Z'),night:Date.parse('2026-09-20T10:24:00Z')};
@@ -110,8 +111,8 @@ async function track(norad){
   }catch(error){$('sat-status').textContent=`Could not track ${c.name}: ${error.message}. The 2019 ISS archive remains available offline.`;}
 }
 try{
-  const [land,relief]=await Promise.all([load('land.bin',129600),load('relief.bin',RELIEF_BYTES)]);
-  main=new EnrouteRenderer(land,decodeRelief(relief));
+  const [land,relief,fuller]=await Promise.all([load('land.bin',129600),load('relief.bin',RELIEF_BYTES),load('fuller.bin',FULLER_BYTES)]);
+  main=new EnrouteRenderer(land,decodeRelief(relief),decodeFullerPack(fuller));
   document.querySelectorAll('[data-body]').forEach(b=>b.addEventListener('click',()=>{
     state.body=b.dataset.body;registerNominal();state.epoch=state.body==='moon'?OBSERVATIONS[state.observation]:DEMOS[state.body];studyEpoch=state.epoch;render();
   }));
