@@ -3,10 +3,12 @@
 // contact sheet per study and a 2x enlargement of each default face.
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {ChartRenderer,CHARTS,W,H} from '../src/chart-render.js';
-import {EnrouteRenderer,PLATES} from '../src/enroute-render.js';
+import {EnrouteRenderer,PLATES,NUMERALS} from '../src/enroute-render.js';
 import {decodeRelief} from '../src/relief.js';
 import {encodePNG} from './png.mjs';
 import {HOMES} from '../src/home.js';
+import {registerNominal} from '../src/nominal.js';
+registerNominal();
 import {STUDY_EVENTS as events} from '../src/events.js';
 import fonts from '../data/draft-font.json' with {type:'json'};
 
@@ -45,7 +47,7 @@ const enroute=contactSheet('study-06',[
   {name:'moon-day',caption:'MOON BY DAY / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z')},
   {name:'moon-dusk',caption:'MOON AT NIGHTFALL / 05:24',body:'moon',epoch:Date.parse('2026-09-19T09:24:00Z')},
   {name:'iss',caption:'ISS ARCHIVE / 08:24',body:'iss',epoch:Date.parse('2019-06-05T12:24:00Z')}
-],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate,home,events}).buf);
+],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,home,events}).buf);
 
 // Spike: the same faces on a rolling Fuller sheet.
 const fuller=contactSheet('study-06-fuller',[
@@ -53,6 +55,34 @@ const fuller=contactSheet('study-06-fuller',[
   {name:'iss-later',caption:'ISS ARCHIVE / 09:24',body:'iss',epoch:Date.parse('2019-06-05T13:24:00Z')},
   {name:'sun',caption:'SUN / 04:24',body:'sun',epoch:Date.parse('2026-09-27T08:24:00Z')},
   {name:'moon-day',caption:'MOON BY DAY / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z')}
-],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:false,plate,projection:'fuller',home,events}).buf);
+],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,projection:'fuller',home,events}).buf);
 
-console.log(`Wrote ${chart} Study 05, ${enroute} Study 06 and ${fuller} rolling-Fuller native proofs, three contact sheets and three 2x enlargements.`);
+// Experiment: the satellite scale as a sliding tape, the world sliding too.
+const tape=contactSheet('study-06-tape',[
+  {name:'05',caption:'ISS / 08:05',body:'iss',epoch:Date.parse('2019-06-05T12:05:00Z')},
+  {name:'24',caption:'ISS / 08:24',body:'iss',epoch:Date.parse('2019-06-05T12:24:00Z')},
+  {name:'47',caption:'ISS / 08:47',body:'iss',epoch:Date.parse('2019-06-05T12:47:00Z')},
+  {name:'58',caption:'ISS / 08:58',body:'iss',epoch:Date.parse('2019-06-05T12:58:00Z')}
+],['enroute','plotboard','crt'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,home,events,tape:'slide'}).buf);
+
+// Slow orbits: nominal GPS on the hour chart, nominal QZSS's day.
+const gnss=contactSheet('study-06-gnss',[
+  {name:'gps',caption:'GPS / 09:24',body:'sat:36585',epoch:Date.parse('2026-09-27T13:24:00Z')},
+  {name:'gps-later',caption:'GPS / 12:24',body:'sat:36585',epoch:Date.parse('2026-09-27T16:24:00Z')},
+  {name:'qzss',caption:'QZSS DAY / 01:24',body:'sat:42738',epoch:Date.parse('2026-09-27T05:24:00Z')},
+  {name:'qzss-later',caption:'QZSS DAY / 10:24',body:'sat:42738',epoch:Date.parse('2026-09-27T14:24:00Z')}
+],['enroute','plotboard','crt'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,home,events}).buf);
+
+// Workshop: the callout's time in each style, 24-hour.
+const NAMES={colon:'colon',plain:'no colon',even:'four figures',mono:'departure',accent:'route ink'};
+const numerals=contactSheet('study-06-numerals',[
+  {name:'sun-day',caption:'SUN DAY / 14:24',body:'sun',epoch:Date.parse('2026-09-27T18:24:00Z'),projection:'fuller',plate:'enroute'},
+  {name:'qzss',caption:'QZSS DAY / 14:24 JST',body:'sat:42738',epoch:Date.parse('2026-09-27T05:24:00Z'),plate:'plotboard',timeZone:'Asia/Tokyo'},
+  {name:'moon',caption:'MOON / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z'),plate:'sectional',readout:true}
+],NUMERALS.map(k=>[k,NAMES[k]]),(scene,style)=>new EnrouteRenderer(atlas,meters).render({timeZone:zone,clock24:true,home,events,...scene,numerals:style}).buf);
+
+// The minute flag across the hour.
+const flag=contactSheet('study-06-flag',[4,24,44,58].map(m=>({name:`m${m}`,caption:`SUN / 04:${String(m).padStart(2,'0')}`,body:'sun',epoch:Date.parse('2026-09-27T08:00:00Z')+m*60000})),
+  ['enroute','plotboard','red'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new EnrouteRenderer(atlas,meters).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,plate,home,events,readout:'flag'}).buf);
+
+console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape, ${gnss} GPS/QZSS, ${numerals} numeral and ${flag} flag native proofs, seven contact sheets and seven 2x enlargements.`);
