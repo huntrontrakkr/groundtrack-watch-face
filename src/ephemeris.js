@@ -1,8 +1,8 @@
-import {Body,GeoVector,RotateVector,Rotation_EQJ_EQD,EquatorFromVector,SiderealTime,Illumination,MoonPhase} from 'astronomy-engine';
 import {twoline2satrec,propagate,gstime,eciToGeodetic} from 'satellite.js';
 import iss from '../data/iss.json' with {type:'json'};
 import {direction,wrap,RAD} from './geometry.js';
 import {satellitePosition} from './satellites.js';
+import {segmentPosition,segmentMoonLight} from './segments.js';
 const satrec=twoline2satrec(...iss.tle);
 export const MINUTE=60000;
 export const BODIES={
@@ -24,14 +24,14 @@ export function position(body,epoch){
     const lat=p.latitude/RAD,lon=p.longitude/RAD;
     return {lat,lon,dir:direction(lat,lon),altitude:p.height};
   }
-  const target=body==='sun'?Body.Sun:Body.Moon;
-  const vector=RotateVector(Rotation_EQJ_EQD(date),GeoVector(target,date,true));
-  const eq=EquatorFromVector(vector),lat=eq.dec,lon=wrap((eq.ra-SiderealTime(date))*15);
-  return {lat,lon,dir:direction(lat,lon),altitude:eq.dist*149597870.7-6371};
+  // The Sun and Moon come from daily Chebyshev segments fitted to Astronomy
+  // Engine (segments.js), the same ones the watch evaluates.
+  const {lat,lon,distance}=segmentPosition(body,epoch);
+  return {lat,lon,dir:direction(lat,lon),altitude:distance-6371};
 }
 export function moonLight(epoch){
-  const date=new Date(epoch),fraction=Illumination(Body.Moon,date).phase_fraction;
-  return {fraction,waxing:MoonPhase(date)<180};
+  if(!Number.isFinite(epoch))throw new RangeError('Invalid time');
+  return segmentMoonLight(epoch);
 }
 export function sampleTrack(body,start,end,step=MINUTE){
   if(step<=0||!Number.isFinite(step)||end<start||!Number.isFinite(start)||!Number.isFinite(end))throw new RangeError('Invalid sample interval');

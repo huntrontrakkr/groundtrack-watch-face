@@ -12,8 +12,8 @@
       "stepMinutes": 2,
       "hours": 6,
       "bytes": 1106,
-      "maxDegrees": 0.001315,
-      "maxProjectedPixelsUpperBound": 0.009182,
+      "maxDegrees": 0.001313,
+      "maxProjectedPixelsUpperBound": 0.009167,
       "radius": 400
     },
     {
@@ -21,8 +21,8 @@
       "stepMinutes": 5,
       "hours": 6,
       "bytes": 458,
-      "maxDegrees": 0.001086,
-      "maxProjectedPixelsUpperBound": 0.007582,
+      "maxDegrees": 0.001088,
+      "maxProjectedPixelsUpperBound": 0.007596,
       "radius": 400
     },
     {
@@ -30,8 +30,8 @@
       "stepMinutes": 10,
       "hours": 6,
       "bytes": 242,
-      "maxDegrees": 0.001018,
-      "maxProjectedPixelsUpperBound": 0.007107,
+      "maxDegrees": 0.001017,
+      "maxProjectedPixelsUpperBound": 0.007099,
       "radius": 400
     },
     {
@@ -39,8 +39,8 @@
       "stepMinutes": 2,
       "hours": 6,
       "bytes": 1106,
-      "maxDegrees": 0.001228,
-      "maxProjectedPixelsUpperBound": 0.008572,
+      "maxDegrees": 0.001229,
+      "maxProjectedPixelsUpperBound": 0.008578,
       "radius": 400
     },
     {
@@ -49,7 +49,7 @@
       "hours": 6,
       "bytes": 458,
       "maxDegrees": 0.001353,
-      "maxProjectedPixelsUpperBound": 0.009446,
+      "maxProjectedPixelsUpperBound": 0.009445,
       "radius": 400
     },
     {
@@ -58,7 +58,7 @@
       "hours": 6,
       "bytes": 242,
       "maxDegrees": 0.003357,
-      "maxProjectedPixelsUpperBound": 0.023439,
+      "maxProjectedPixelsUpperBound": 0.02344,
       "radius": 400
     },
     {
@@ -95,8 +95,8 @@
       "stepMinutes": 10,
       "hours": 6,
       "bytes": 242,
-      "maxDegrees": 0.001018,
-      "maxProjectedPixelsUpperBound": 0.007107,
+      "maxDegrees": 0.001017,
+      "maxProjectedPixelsUpperBound": 0.007099,
       "radius": 400
     },
     {
@@ -105,7 +105,7 @@
       "hours": 6,
       "bytes": 242,
       "maxDegrees": 0.003357,
-      "maxProjectedPixelsUpperBound": 0.023439,
+      "maxProjectedPixelsUpperBound": 0.02344,
       "radius": 400
     },
     {
