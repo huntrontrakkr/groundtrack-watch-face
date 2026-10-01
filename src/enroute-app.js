@@ -17,7 +17,7 @@ const NOTES={
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
   iss:'An archived orbit from 5 June 2019. The station laps most of the world in an hour, so the whole world is the chart.'
 };
-const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',figures:'michroma',zone:'utc',span:'day'};
+const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',figures:'michroma',corner:'day',zone:'utc',span:'day'};
 let main,studyEpoch=state.epoch;
 const proofs={};
 function paint(canvas,buf){
@@ -151,6 +151,8 @@ try{
   for(const [key,name,note] of FIGURE_SETS){const o=document.createElement('option');o.value=key;o.textContent=name;o.title=note;$('enroute-figures').appendChild(o);}
   $('enroute-figures').value=state.figures;
   $('enroute-figures').addEventListener('change',()=>{state.figures=$('enroute-figures').value;render();});
+  $('enroute-corner').value=state.corner;
+  $('enroute-corner').addEventListener('change',()=>{state.corner=$('enroute-corner').value;render();});
   $('enroute-margin-zone').addEventListener('change',()=>{state.zone=$('enroute-margin-zone').value;render();});
   $('enroute-readout').addEventListener('change',()=>{const v=$('enroute-readout').value;state.readout=v==='callout'?true:v==='flag'?'flag':false;render();});
   render();window.groundtrackEnroute={ready:true,state,main,render,track,demos:DEMOS,observations:OBSERVATIONS,events:STUDY_EVENTS};

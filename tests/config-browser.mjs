@@ -48,6 +48,8 @@ try{
   assert.deepEqual(await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value)),['sun','moon','sat:36585','sat:42738']);
   assert.equal(await page.locator('input[name=readout]:checked').getAttribute('value'),'flag');
   assert.equal(await page.locator('input[name=numerals]:checked').getAttribute('value'),'even');
+  // The corner, the day of the year chosen (and on Enroute no height).
+  assert.equal(await page.locator('input[name=corner]:checked').getAttribute('value'),'day');
   // The figure sets, Michroma (the default) chosen.
   assert.equal(await page.locator('input[name=figures]').count(),4);
   assert.equal(await page.locator('input[name=figures]:checked').getAttribute('value'),'michroma');
@@ -66,7 +68,7 @@ try{
   // Choose the Moon on the Sectional, no flag, and a home of one's own.
   await page.check('input[name=body][value=moon]');
   await page.check('input[name=plate][value=sectional]');
-  await page.check('input[name=readout][value=callout]');await page.check('input[name=numerals][value=accent]');await page.check('input[name=figures][value=orbitron]');
+  await page.check('input[name=readout][value=callout]');await page.check('input[name=numerals][value=accent]');await page.check('input[name=figures][value=orbitron]');await page.check('input[name=corner][value=point]');
   await page.check('input[name=margin][value=body]');await page.uncheck('input[name=clock24]');
   // An event, named by the phone.
   await page.fill('input[name=date]','2026-09-27');await page.fill('input[name=time]','14:30');await page.fill('input[name=title]','Dinner with Sam');await page.click('#add');
@@ -90,10 +92,10 @@ try{
   // again in them, with home's rise and set for the new home.
   listeners.webviewclosed({response});
   for(let i=0;i<200&&!messages.some(m=>m.RiseSets);i++)await new Promise(r=>setTimeout(r,20));
-  assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
-    {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
+  assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
+    {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3]));
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1]));
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
   const saved=JSON.parse(stored.events);
   assert.deepEqual(saved.map(e=>[e.title,e.label]),[['Dinner with Sam','DINNR']]);

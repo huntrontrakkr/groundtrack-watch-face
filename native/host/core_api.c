@@ -56,7 +56,7 @@ int core_build(const char *text,size_t length,int slot){
     else if(!strcmp(key,"flag"))in.flag=atoi(value);else if(!strcmp(key,"readout"))in.readout=atoi(value);
     else if(!strcmp(key,"numerals"))in.numerals=atoi(value);else if(!strcmp(key,"zonebody"))in.zone_body=atoi(value);
     else if(!strcmp(key,"tape"))in.tape=atoi(value);
-    else if(!strcmp(key,"transfer"))in.transfer=atoi(value);else if(!strcmp(key,"figures"))in.figures=atoi(value);
+    else if(!strcmp(key,"transfer"))in.transfer=atoi(value);else if(!strcmp(key,"figures"))in.figures=atoi(value);else if(!strcmp(key,"corner"))in.corner=atoi(value);else if(!strcmp(key,"wday"))in.weekday=atoi(value);
     else if(!strcmp(key,"event")&&in.event_count<16){char name[8]={0};long long t=0;sscanf(value,"%lld %7s",&t,name);in.events[in.event_count].t=t;snprintf(in.events[in.event_count].name,6,"%s",name);in.event_count++;}
     else if(!strcmp(key,"clock24"))in.clock24=atoi(value);
     else if(!strcmp(key,"start"))in.start=atoll(value);else if(!strcmp(key,"hour"))in.local_hour=atoi(value);
@@ -88,7 +88,7 @@ int core_layout(int32_t *out,int max){
     offsetof(EnrScene,c0),offsetof(EnrScene,c1),offsetof(EnrScene,station_count),offsetof(EnrScene,stations),offsetof(EnrScene,station_table),offsetof(EnrScene,fig_box),
     offsetof(EnrScene,tape_hour),offsetof(EnrScene,tape_next),
     offsetof(EnrScene,event_count),offsetof(EnrScene,events),(int32_t)sizeof(s_scene[0]->events[0]),
-    offsetof(EnrScene,minutes),offsetof(EnrMinute,mx),offsetof(EnrMinute,my),offsetof(EnrMinute,zulu),offsetof(EnrMinute,minute),offsetof(EnrMinute,top),offsetof(EnrMinute,index),offsetof(EnrMinute,height),
+    offsetof(EnrScene,minutes),offsetof(EnrMinute,mx),offsetof(EnrMinute,my),offsetof(EnrMinute,zulu),offsetof(EnrMinute,minute),offsetof(EnrMinute,top),offsetof(EnrMinute,index),offsetof(EnrMinute,corner),
     offsetof(EnrScene,track_count),offsetof(EnrScene,track_t0),offsetof(EnrScene,track_step),offsetof(EnrScene,track),
     (int32_t)sizeof(enr_real),offsetof(EnrFuller,tile_count),offsetof(EnrFuller,tile_face)};
   const int n=(int)(sizeof v/sizeof v[0]);
@@ -97,6 +97,7 @@ int core_layout(int32_t *out,int max){
 }
 void core_measure(int slot,int minute,int part,int16_t *out){const EnrScene *s=core_scene(slot);if(s)enr_measure(s,minute,part,out);else out[0]=out[1]=out[2]=out[3]=0;}
 void core_text_box(const char *text,int n,int x,int baseline,int16_t *out){enr_text_box(text,n,x,baseline,out);}
+void core_status(const char *text,int n){char t[8];int k=0;for(;k<n&&k<7;k++)t[k]=text[k];t[k]=0;enr_status(t);}
 int core_text_width(const char *text,int n){return enr_text_width(text,n);}
 int core_class(int slot,int x,int y){const EnrScene *s=core_scene(slot);return s?enr_class(s,x,y):-1;}
 int core_zone(int slot,int minute,int x,int y){const EnrScene *s=core_scene(slot);return s?enr_zone(s,minute,x,y):-1;}

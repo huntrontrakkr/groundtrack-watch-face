@@ -105,7 +105,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
     // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2]},{Events:[0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0]},{Events:[0]}]));
     // The browser's other options, as set: a time callout in Departure Mono,
     // the 12-hour clock, the nautical zone; QZSS on the hour chart.
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
@@ -156,10 +156,16 @@ test('Groundtrack Plotboard\'s phone side: the fast satellites, the ISS first, t
     // How the tape's minutes fall on the route: the settings' 25th byte.
     for(const [transfer,code] of [['vernier',1],['comb',2],['chevrons',3],['wavy',0]]){
       const p=phone(bundle,now,{timeZone:'UTC',transfer});p.listeners.ready({});await p.quiet();
-      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,26);assert.equal(set[24],code);
+      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,27);assert.equal(set[24],code);
     }
-    // The figure set: the last byte, Michroma (the default) for one the
+    // The margins' corner: the last byte, the day of the year for one the
     // phone doesn't know.
+    for(const [corner,code] of [['day',0],['point',1],['light',2],['clock',0]]){
+      const p=phone(bundle,now,{timeZone:'UTC',corner});p.listeners.ready({});await p.quiet();
+      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set[26],code);
+    }
+    // The figure set: byte 25, Michroma (the default) for one the phone
+    // doesn't know.
     for(const [figures,code] of [['jost',0],['b612',1],['orbitron',3],['comic',2]]){
       const p=phone(bundle,now,{timeZone:'UTC',figures});p.listeners.ready({});await p.quiet();
       const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set[25],code);

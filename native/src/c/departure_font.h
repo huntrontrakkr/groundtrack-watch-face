@@ -4,6 +4,6 @@
 #include <stdint.h>
 typedef struct {uint8_t x,y,n;} EnrRun;
 typedef struct {int8_t advance,left,top;uint16_t first,count;} EnrGlyph;
-extern const char ENR_FONT_CHARS[40];
-extern const EnrGlyph ENR_FONT_GLYPHS[39];
-extern const EnrRun ENR_FONT_RUNS[437];
+extern const char ENR_FONT_CHARS[41];
+extern const EnrGlyph ENR_FONT_GLYPHS[40];
+extern const EnrRun ENR_FONT_RUNS[453];

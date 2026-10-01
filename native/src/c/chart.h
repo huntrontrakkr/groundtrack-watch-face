@@ -54,6 +54,11 @@ typedef struct {
   int64_t start;             // the hour's first second (Unix time)
   int local_hour;            // the local clock's hour at start, 0-23
   int day,month,year,day_of_year;   // the local date at start
+  int weekday;               // its day of the week, 0 Sunday
+  // The corner of the margins (the bottom right; on the world band the
+  // right of the line over it): 0 the day of the year (the world band: the
+  // satellite's height), 1 the body's ground point, 2 the Moon's light.
+  int corner;
   bool home;double home_lat,home_lon;
   char rise_left[24],rise_right[24];  // home's rise and set line ("HOM SR 0650", "SS 1841"), or empty
 } ChartInput;

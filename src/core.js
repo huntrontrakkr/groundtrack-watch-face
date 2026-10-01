@@ -16,7 +16,7 @@ export const W=200,H=228,SLOTS=16;
 const LAYOUT=['scene_size','point_size','minute_size','flags','body','view','forward','hour_start','heavy','fuller','zulu_x','zulu_baseline','top_x','top_baseline','height_right','height_baseline',
   'tape_x0','tape_x1','tape_baseline','tape_lo','tape_hi','home_x','home_y','home_box','mark_count','callout_left','callout_top','callout_bottom','hour_text','numerals',
   'c0','c1','station_count','stations','station_table','fig_box','tape_hour','tape_next','event_count','events','event_size',
-  'minutes','m_mx','m_my','m_zulu','m_minute','m_top','m_index','m_height','track_count','track_t0','track_step','track','real_size','f_tile_count','f_tile_face'];
+  'minutes','m_mx','m_my','m_zulu','m_minute','m_top','m_index','m_corner','track_count','track_t0','track_step','track','real_size','f_tile_count','f_tile_face'];
 // Pebble's GColor8 (0b11rrggbb) to the study's RGB.
 const RGB=Array.from({length:256},(_,c)=>[(c>>4&3)*85,(c>>2&3)*85,(c&3)*85]);
 
@@ -72,7 +72,7 @@ export class Core{
     const track=[];for(let k=0;k<count;k++){const p=tp+k*L.point_size;track.push({x:d.getInt16(p,true),y:d.getInt16(p+2,true),flags:d.getUint8(p+4),seconds:t0+k*step});}
     const stations=[];for(let k=0;k<u8(L.station_count);k++)stations.push({x:i16(L.stations+4*k),y:i16(L.stations+4*k+2),code:network.stations[u8(L.station_table+k)].code});
     const events=[];for(let k=0;k<u8(L.event_count);k++){const e=s+L.events+k*L.event_size;events.push({x:d.getInt16(e,true),y:d.getInt16(e+2,true),lx:d.getInt16(e+4,true),box:{x:d.getInt16(e+6,true),y:d.getInt16(e+8,true),w:d.getInt16(e+10,true),h:d.getInt16(e+12,true)},clear:!!d.getUint8(e+14),label:this.string(e+15,5)});}
-    const minutes=[];for(let m=0;m<60;m++){const b=s+L.minutes+m*L.minute_size;minutes.push({x:real(b,L.m_mx),y:real(b,L.m_my),zulu:this.string(b+L.m_zulu,5),minute:this.string(b+L.m_minute,2),top:this.string(b+L.m_top,24),index:d.getInt16(b+L.m_index,true),height:this.string(b+L.m_height,8)});}
+    const minutes=[];for(let m=0;m<60;m++){const b=s+L.minutes+m*L.minute_size;minutes.push({x:real(b,L.m_mx),y:real(b,L.m_my),zulu:this.string(b+L.m_zulu,5),minute:this.string(b+L.m_minute,2),top:this.string(b+L.m_top,24),index:d.getInt16(b+L.m_index,true),corner:this.string(b+L.m_corner,14)});}
     const hx=i16(L.home_x),fp=i32(L.fuller);
     const tiles=fp?Array.from({length:d.getUint8(fp+L.f_tile_count)},(_,k)=>({face:d.getUint8(fp+L.f_tile_face+k)})):[];
     return {flags:u8(L.flags),body:u8(L.body),view:u8(L.view),forward:i8(L.forward),hourStart:i32(L.hour_start),heavy:!!u8(L.heavy),fuller:i32(L.fuller)!==0,
@@ -88,6 +88,8 @@ export class Core{
   measure(slot,minute,part){const at=this.x.core_alloc(8);this.x.core_measure(slot,minute,part,at);const b=new Int16Array(this.mem(),at,4),box=b[2]?{x:b[0],y:b[1],w:b[2],h:b[3]}:null;this.x.core_free(at);return box;}
   textBox(text,x,baseline){const bytes=new TextEncoder().encode(text),at=this.x.core_alloc(bytes.length),out=this.x.core_alloc(8);new Uint8Array(this.mem(),at,bytes.length).set(bytes);this.x.core_text_box(at,bytes.length,x,baseline,out);const b=new Int16Array(this.mem(),out,4),box=b[2]?{x:b[0],y:b[1],w:b[2],h:b[3]}:null;this.x.core_free(at);this.x.core_free(out);return box;}
   textWidth(text){const bytes=new TextEncoder().encode(text),at=this.x.core_alloc(bytes.length);new Uint8Array(this.mem(),at,bytes.length).set(bytes);const w=this.x.core_text_width(at,bytes.length);this.x.core_free(at);return w;}
+  // The watch's own state in the margins' corner (NO LINK, BAT 18; '' for none).
+  status(text){const bytes=new TextEncoder().encode(text||''),at=this.x.core_alloc(bytes.length||1);new Uint8Array(this.mem(),at,bytes.length).set(bytes);this.x.core_status(at,bytes.length);this.x.core_free(at);}
   classAt(slot,x,y){return this.x.core_class(slot,x,y);}
   zoneAt(slot,minute,x,y){return this.x.core_zone(slot,minute,x,y);}
   // A minute's frame as GColor8 bytes (a copy), or drawn over `frame` as the
@@ -105,7 +107,7 @@ export class CoreRenderer{
   render(state){
     const {body,epoch,timeZone,clock24}=state,start=civilHour(epoch,timeZone),minute=Math.floor((epoch-start)/MINUTE);
     const text=chartInput({body,start,plate:state.plate,readout:state.readout===true?'callout':state.readout||false,numerals:state.numerals||'colon',margin:state.zone||'utc',
-      span:state.span||'day',tape:state.tape||'fixed',transfer:state.transfer||'off',figures:state.figures||'michroma',events:state.events||[],clock24,zone:timeZone,home:state.home||null,projection:state.projection||'chart'});
+      span:state.span||'day',tape:state.tape||'fixed',transfer:state.transfer||'off',figures:state.figures||'michroma',corner:state.corner||'day',events:state.events||[],clock24,zone:timeZone,home:state.home||null,projection:state.projection||'chart'});
     const held=this.core.sceneFor(text);if(held.built)this.stats.geometryBuilds++;this.scene=held.scene;
     const frame=this.core.render(minute,held.slot),buf=new Uint8ClampedArray(W*H*3),rgba=new Uint8ClampedArray(W*H*4);
     for(let i=0;i<W*H;i++){const c=RGB[frame[i]];buf[i*3]=c[0];buf[i*3+1]=c[1];buf[i*3+2]=c[2];rgba[i*4]=c[0];rgba[i*4+1]=c[1];rgba[i*4+2]=c[2];rgba[i*4+3]=255;}
@@ -135,8 +137,9 @@ export class CoreRenderer{
     // Lettering's boxes: the stations' codes, the margins and Zulu time.
     const stations=s.stations.map(st=>{const w=core.textWidth(st.code),right=st.x+5+w<W-3;return {...st,x:turned(st.x),box:turnedBox({x:right?st.x-3:st.x-6-w,y:st.y-5,w:w+9,h:11})};});
     const margins=[];
-    if(!world){const d=localDate(start,timeZone),MONTHS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'],left=`${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]} ${d.year}`,right=`DAY ${String(d.dayOfYear).padStart(3,'0')}`;
-      for(const b of [core.textBox(left,6,H-5),core.textBox(right,W-6-core.textWidth(right),H-5)])if(b)margins.push(b);}
+    if(!world){const d=localDate(start,timeZone),MONTHS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'],WEEKDAYS=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+      const left=`${WEEKDAYS[new Date(Date.UTC(d.year,d.month-1,d.day)).getUTCDay()]} ${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]}`,right=m.corner;
+      for(const b of [core.textBox(left,6,H-5),right&&core.textBox(right,W-6-core.textWidth(right),H-5)])if(b)margins.push(b);}
     const zuluBox=core.textBox(m.zulu,s.zulu.x,s.zulu.baseline);
     this.last={buf,rgba,frame,start,time:parts.text,world,day,fuller:s.fuller,scene:s,slot,minute,zulu:{text:m.zulu,box:zuluBox},margins,
       marker:{x:turned(m.x),y:m.y,lat:b.lat,lon:b.lon},stations,events:s.events.map(e=>({...e,x:turned(e.x),lx:turned(e.lx),box:e.clear?turnedBox(e.box):null})),home:s.home&&{...s.home,x:turned(s.home.x),box:turnedBox(s.home.box)},rose:world||day?null:{x:s.c0.x,y:s.c0.y,r:20},

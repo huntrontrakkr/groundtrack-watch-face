@@ -591,6 +591,9 @@ static uint8_t on_ink(const EnrScene *s,uint8_t ink){
   if(abs(p-l)>=12)return s->space;
   return l>=15?0xC0:0xFF;
 }
+// The watch's state for the margins' corner (enr_status).
+static char s_status[8];
+void enr_status(const char *text){int n=0;for(;text&&text[n]&&n<7;n++)s_status[n]=text[n];s_status[n]=0;}
 static void draw_flag(Ctx *c){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
   const int mx=js_round(m->mx),my=js_round(m->my);
@@ -1002,7 +1005,8 @@ static void draw_moving(Ctx *c,int part){
   if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
   if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
   const int off=slide_offset(s,m);
-  if(world&&(!part||part==PART_HEIGHT))draw_text(c,m->height,sizeof m->height,0,s->height_right+off,s->height_baseline);
+  // The margins' corner, or in its place the watch's state.
+  if(s->height_right&&(!part||part==PART_HEIGHT))draw_text(c,s_status[0]?s_status:m->corner,s_status[0]?(int)sizeof s_status:(int)sizeof m->corner,0,s->height_right+off,s->height_baseline);
   if(world&&off&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint64_t *mask,const uint64_t *nmask,const Night *from){

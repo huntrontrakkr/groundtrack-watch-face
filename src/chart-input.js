@@ -15,7 +15,7 @@ import issArchive from '../data/iss.json' with {type:'json'};
 // ('chart' or 'fuller').
 // Bytes as hex (the browser has no Buffer).
 const hex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
-export function chartInput({body,start,plate,flag,readout=flag?'flag':false,numerals='even',margin='utc',span='day',tape='fixed',transfer='off',figures='michroma',events=[],clock24=true,zone,home,projection='chart'}){
+export function chartInput({body,start,plate,flag,readout=flag?'flag':false,numerals='even',margin='utc',span='day',tape='fixed',transfer='off',figures='michroma',corner='day',events=[],clock24=true,zone,home,projection='chart'}){
   // The study's archived 2019 ISS orbit is the ISS on its archived elements.
   if(body==='iss'){if(elementsFor('sat:25544')?.source!=='archive')registerElements(issArchive.tle.join('\n')+'\n','archive');body='sat:25544';}
   const d=localDate(start,zone),[rise,set]=home&&!body.startsWith('sat:')?riseText(body,home,start,zone):['',''],days=new Set();
@@ -35,7 +35,7 @@ export function chartInput({body,start,plate,flag,readout=flag?'flag':false,nume
   const dayLines=day?[`daystart ${day.start/1000}`,`dayend ${day.end/1000}`,`dayhours ${Array.from({length:27},(_,k)=>Number(clockParts(day.start+k*3600e3,zone).h)).join(' ')}`]:[];
   return [`body ${body==='moon'?1:sat?(entry?.symbol==='station'?3:2):0}`,`view ${world&&!fuller?1:dayView?2:0}`,`fuller ${fuller?1:0}`,...(entry?[`code ${entry.code}`]:[]),...dayLines,`plate ${Object.keys(PLATES).indexOf(plate)}`,`flag ${readoutCode===1?1:0}`,`readout ${readoutCode}`,
     `numerals ${['colon','plain','even','mono','accent'].indexOf(numerals)}`,`zonebody ${margin==='body'?1:0}`,`tape ${['fixed','tape','slide','clock'].indexOf(tape)}`,`transfer ${['off','vernier','comb','chevrons'].indexOf(transfer)}`,`figures ${Math.max(0,FIGURE_SETS.findIndex(f=>f[0]===figures))}`,...events.map(e=>`event ${e.epoch/1000} ${e.label}`),`clock24 ${clock24?1:0}`,`start ${start/1000}`,
-    `hour ${Number(clockParts(start,zone).h)}`,`day ${d.day}`,`month ${d.month}`,`year ${d.year}`,`yday ${d.dayOfYear}`,`home ${home?1:0}`,
+    `hour ${Number(clockParts(start,zone).h)}`,`day ${d.day}`,`month ${d.month}`,`year ${d.year}`,`yday ${d.dayOfYear}`,`wday ${new Date(Date.UTC(d.year,d.month-1,d.day)).getUTCDay()}`,`corner ${Math.max(0,['day','point','light'].indexOf(corner))}`,`home ${home?1:0}`,
     ...(home?[`lat ${home.lat}`,`lon ${home.lon}`,`rise ${rise}`,`set ${set}`]:[]),
     ...[...days].map(day=>`segment ${hex(encodeSegment(segmentFor(day*86400000)))}`),
     ...[...satsegs.values()].map(g=>`satseg ${hex(encodeSatelliteSegment(g))}`),

@@ -47,10 +47,14 @@ typedef struct {
   // A satellite's pass line (over the hour chart, under the world band),
   // which can change within the hour; empty for none.
   char top[24];
-  // The world band: the tape's index, the satellite's height ("412 KM") and
-  // home's acquisition circle (an index into the scene's, or 255).
+  // The world band's tape index, and home's acquisition circle (an index
+  // into the scene's, or 255).
   int16_t index;
-  char height[8];
+  // The margins' corner, set right to (height_right, height_baseline): the
+  // day of the year, the body's ground point or the Moon's light ("DAY
+  // 270", "23N 045E", "87% WAX"; the world band: "ISS 412 KM", "ISS 12S
+  // 140W"), or for old elements "EL OLD" ("EL OLD 412 KM").
+  char corner[14];
   uint8_t circle;
 } EnrMinute;
 
@@ -212,6 +216,10 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
 // hour figure and next hour's figure, and the tape's index.
 enum {ENR_MEASURE_BODY,ENR_MEASURE_FLAG,ENR_MEASURE_CALLOUT,ENR_MEASURE_TAPE_HOUR,ENR_MEASURE_TAPE_NEXT,ENR_MEASURE_INDEX};
 void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
+// The watch's own state, shown in the margins' corner in place of its
+// text until cleared: "NO LINK", "BAT 18" (at most 7 characters; "" for
+// none).
+void enr_status(const char *text);
 // Lettering's box, set at x on a baseline; its width.
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]);
 int enr_text_width(const char *text,int n);

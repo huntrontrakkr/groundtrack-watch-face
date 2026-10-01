@@ -619,6 +619,9 @@ static void symbol(Canvas *cv,const char *const *rows,int count,int cx,int cy){
   }
 }
 
+// The widest the margins' corner is: its centre-placed Zulu time keeps clear.
+#define CORNER_WIDEST "00N 000E"
+static const char *const WEEKDAYS[7]={"SUN","MON","TUE","WED","THU","FRI","SAT"};
 static const char *const MONTHS[12]={"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
 // Integer to decimal, zero-padded to `width`.
 static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char)('0'+v%10);v/=10;}while(v);while(n<width)d[n++]='0';while(n)*p++=d[--n];*p=0;return p;}
@@ -1065,12 +1068,6 @@ int chart_step(ChartBuild *b){
   }
   return b->minute<60?1:0;
 }
-// civil date of a day count (days since 1970-01-01), after Howard Hinnant.
-static void civil_from_days(int32_t z,int *y,int *m,int *d){
-  z+=719468;const int32_t era=(z>=0?z:z-146096)/146097;const unsigned doe=(unsigned)(z-era*146097);
-  const unsigned yoe=(doe-doe/1460+doe/36524-doe/146096)/365,doy=doe-(365*yoe+yoe/4-yoe/100),mp=(5*doy+2)/153;
-  *d=(int)(doy-(153*mp+2)/5+1);*m=(int)(mp<10?mp+3:mp-9);*y=(int)yoe+era*400+(*m<=2);
-}
 // The world band's instrument tape (SCALE in enroute-render.js).
 #define TAPE_X0 10
 #define TAPE_X1 190
@@ -1407,27 +1404,27 @@ static bool finish_draw(ChartBuild *b){
   }
   int16_t top_x=6,top_baseline=11,height_right=0,height_baseline=0;
   if(world){
-    // Over the band, where the satellite's numbers come from: its elements'
-    // epoch; its height at the right is the minute's. Under it, the pass
-    // line and Zulu time.
-    const SatSegment *seg=src->satellite?src->satellite(src->satellite_context,in->start):NULL;if(!seg)FAIL;
-    int y,mo,d;const int32_t e=seg->epoch,day=(int32_t)((e>=0?e:e-86399)/86400),sec=e-day*86400;civil_from_days(day,&y,&mo,&d);
-    char source[24],*p=source;
-    for(const char *c=in->code[0]?in->code:"SAT";*c;c++)*p++=*c;
-    memcpy(p," EL ",4);p+=4;p=put_int(p,d,2);*p++=' ';memcpy(p,MONTHS[mo-1],3);p+=3;*p++=' ';p=put_int(p,sec/3600,2);p=put_int(p,sec%3600/60,2);*p++='Z';*p=0;
+    // Over the band, the local date; at its right the minute's corner (the
+    // satellite's height or ground point). Under it, the pass line and
+    // Zulu time.
+    char source[24];
+    {char *p=source;memcpy(p,WEEKDAYS[in->weekday%7],3);p+=3;*p++=' ';p=put_int(p,in->day,2);*p++=' ';memcpy(p,MONTHS[in->month-1],3);p[3]=0;}
     if(cv.wrap)memcpy(b->source,source,sizeof b->source);
     else{const int n=text_pixels(source,6,top-6,scratch);letter(&cv,scratch,n,L_INK,1);}
     zulu_x=(int16_t)(W-6-text_width("0000Z"));zulu_baseline=H-1;top_baseline=H-1;height_right=W-6;height_baseline=(int16_t)(top-6);
   }else{
-    // Margins: the local date and day of the year, Zulu time between them;
-    // over the chart, home's rise and set.
-    char left[24],right_[24];
-    {char *p=put_int(left,in->day,2);*p++=' ';memcpy(p,MONTHS[in->month-1],3);p+=3;*p++=' ';put_int(p,in->year,1);
-    memcpy(right_,"DAY ",4);put_int(right_+4,in->day_of_year,3);}
-    {const int y=H-5,lw=text_width(left),rw=text_width(right_);
+    // Margins: the local date and day of the week, the minute's corner (the
+    // day of the year, the body's ground point or the Moon's light), Zulu
+    // time between them, centred as for the widest corner; over the chart,
+    // home's rise and set.
+    char left[24];
+    {char *p=left;memcpy(p,WEEKDAYS[in->weekday%7],3);p+=3;*p++=' ';p=put_int(p,in->day,2);*p++=' ';memcpy(p,MONTHS[in->month-1],3);p[3]=0;}
+    {const int y=H-5,lw=text_width(left),rw=text_width(CORNER_WIDEST);
     int n=text_pixels(left,6,y,scratch);letter(&cv,scratch,n,L_INK,1);
-    n=text_pixels(right_,W-6-rw,y,scratch);letter(&cv,scratch,n,L_INK,1);
-    const int l=6+lw,r=W-6-rw;zulu_x=(int16_t)js_round((l+r-text_width("0000Z"))/2.0);zulu_baseline=(int16_t)y;}
+    // The corner is lettered each minute: the callout's leader breaks for it.
+    n=text_pixels(CORNER_WIDEST,W-6-rw,y,scratch);AVOID(bounds_of(scratch,n));
+    const int l=6+lw,r=W-6-rw;zulu_x=(int16_t)js_round((l+r-text_width("0000Z"))/2.0);zulu_baseline=(int16_t)y;
+    height_right=W-6;height_baseline=(int16_t)y;}
     if(in->home&&in->rise_left[0]){
       const int y=11,rw=text_width(in->rise_right);
       int n=text_pixels(in->rise_left,6,y,scratch);letter(&cv,scratch,n,L_INK,1);
@@ -1565,7 +1562,21 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     e->minute[0]=(char)('0'+m/10);e->minute[1]=(char)('0'+m%10);memset(e->top,0,sizeof e->top);
     // A satellite's pass line, which can change within the hour.
     if(in->body>=2&&in->home&&src->pass_line)src->pass_line(src->pass_context,t,e->top);
-    memset(e->height,0,sizeof e->height);e->circle=255;e->index=0;
+    memset(e->corner,0,sizeof e->corner);e->circle=255;e->index=0;
+    // The margins' corner: old elements noted, else the chosen text.
+    {const SatSegment *ss=in->body>=2&&src->satellite?src->satellite(src->satellite_context,t):NULL;
+    const bool old=ss&&t-(int64_t)ss->epoch>2*86400;char *p=e->corner;
+    // (On the world band led by the satellite's code, but for old elements.)
+    if(world&&!old){for(const char *k=in->code[0]?in->code:"SAT";*k;k++)*p++=*k;*p++=' ';}
+    if(old){memcpy(p,"EL OLD",6);p+=6;if(world){*p++=' ';p=put_int(p,(int)js_round(altitude),1);memcpy(p," KM",3);}}
+    else if(in->corner==1){
+      // The ground point, to the degree: 23N 045E.
+      const double wl=wrap(lon);
+      p=put_int(p,(int)js_round(fabs(lat)),2);*p++=lat<0?'S':'N';*p++=' ';p=put_int(p,(int)js_round(fabs(wl)),3);*p++=wl<0?'W':'E';
+    }
+    else if(world){p=put_int(p,(int)js_round(altitude),1);memcpy(p," KM",3);}
+    else if(in->corner==2&&in->body==1){p=put_int(p,(int)js_round(fraction*100),1);memcpy(p,waxing?"% WAX":"% WAN",5);}
+    else{memcpy(p,"DAY ",4);put_int(p+4,in->day_of_year,3);}}
     // A Fuller satellite sheet's home circle follows the satellite's height.
     if(FACE_ROLL&&(!FACE_CHART||b->fc)&&cam.wide&&!cam.day&&in->home){
       const int n=circle_pixels_on(&cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring,true);int k=0;
@@ -1578,7 +1589,6 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     }
     if(world){
       if(!in->tape)e->index=(int16_t)js_round(forward?TAPE_X0+(double)(TAPE_X1-TAPE_X0)*m/60:TAPE_X1-(double)(TAPE_X1-TAPE_X0)*m/60);
-      char *p=put_int(e->height,(int)js_round(altitude),1);memcpy(p," KM",3);
       if(in->home){
         const int n=circle_pixels(&cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring);int k=0;
         for(;k<out->circle_count;k++)if(out->circle_n[k]==n&&!memcmp(out->circle_px[k],ring,2*n))break;

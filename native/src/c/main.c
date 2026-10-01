@@ -174,13 +174,13 @@ static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)
 // a satellite's catalog number (i32), its kind (1 a station, plus its view
 // times 2) and its code (3 characters), then the callout's figures and the
 // margin's time, the world band's time scale and how its minutes fall on
-// the route, and the figure set (see native/pkjs/main.js; a phone app
-// from before figure sets sends 25 bytes: Michroma, the default).
+// the route, the figure set and the margins' corner (see
+// native/pkjs/main.js; an older phone app sends 25 or 26 bytes).
 static void take_settings(const uint8_t *b,size_t n){
   if(n<25)return;
   WatchSettings s;memset(&s,0,sizeof s);
-  s.version=6;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
-  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;
+  s.version=7;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
+  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   if(!memcmp(&s,&s_settings,sizeof s)){s_data_ok_until=0;s_data_asked_at=0;check(time(NULL));return;}
@@ -206,6 +206,19 @@ static void inbox(DictionaryIterator *in,void *context){
 }
 static void outbox_failed(DictionaryIterator *it,AppMessageResult reason,void *context){s_data_asked_at=0;}
 
+// The watch's own state in the margins' corner: the phone out of reach,
+// then a low battery (at most 20%, not charging); the minute drawn whole
+// again when it changes.
+static void show_state(void){
+  static char shown[8];char text[8]={0};
+  const BatteryChargeState b=battery_state_service_peek();const int c=b.charge_percent;
+  if(!connection_service_peek_pebble_app_connection())memcpy(text,"NO LINK",7);
+  else if(c<=20&&!b.is_charging){memcpy(text,"BAT ",4);text[4]=(char)('0'+c/10);text[5]=(char)('0'+c%10);}
+  if(!memcmp(text,shown,8))return;
+  memcpy(shown,text,8);enr_status(text);s_drawn_minute=-1;if(s_layer)layer_mark_dirty(s_layer);
+}
+static void battery_changed(BatteryChargeState state){show_state();}
+static void connection_changed(bool connected){show_state();}
 static void window_load(Window *window){
   Layer *root=window_get_root_layer(window);
   s_layer=layer_create(layer_get_bounds(root));
@@ -226,11 +239,16 @@ static void init(void){
   app_message_open(INBOX_SIZE,64);
   tick_timer_service_subscribe(MINUTE_UNIT,tick);
   app_focus_service_subscribe(focus_changed);
+  battery_state_service_subscribe(battery_changed);
+  connection_service_subscribe((ConnectionHandlers){.pebble_app_connection_handler=connection_changed});
+  show_state();
   check(time(NULL));
 }
 static void deinit(void){
   tick_timer_service_unsubscribe();
   app_focus_service_unsubscribe();
+  battery_state_service_unsubscribe();
+  connection_service_unsubscribe();
   build_abort();
   chart_free(&s_now);
   window_destroy(s_window);

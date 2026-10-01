@@ -30,6 +30,9 @@ typedef struct {
   // The figure set (FIGURE_SETS in src/plates.js: 0 Jost, 2 Michroma, the
   // default).
   uint8_t figures;
+  // The margins' corner: 0 the day of the year (Plotboard: the height), 1
+  // the body's ground point, 2 the Moon's light.
+  uint8_t corner;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);
