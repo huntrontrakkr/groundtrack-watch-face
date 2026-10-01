@@ -65,6 +65,7 @@ typedef struct Night {
   const EnrMinute *m;
   int32_t p[ENR_W],u2,lo[BLOCKS],hi[BLOCKS];
   int32_t sun[ENR_TILES][3];int held[NIGHT_ROWS];int32_t (*h)[ENR_W];   // h: NIGHT_ROWS rows, a Fuller sheet's only
+  uint8_t have[NIGHT_ROWS][ENR_W/8];                                      // which of a held row's heights are computed
 } Night;
 // Lettering and leaders go through one list of pixels, drawn one at a
 // time. The longest is a satellite's pass line: 24 characters of at most 24
@@ -81,7 +82,8 @@ typedef struct {int16_t x,y;} Px;
 typedef struct {
   Px scratch[SCRATCH];uint8_t window[3][ENR_W];
   uint64_t *mask,*nmask;
-  uint8_t tiles[ENR_W];int tiles_y;
+  #define TILE_ROWS 4
+  uint8_t tiles[TILE_ROWS][ENR_W];int tiles_y[TILE_ROWS],tiles_next;
   // Decoded rows for class_at outside the base pass's window, for
   // lettering, which comes back to the same rows glyph after glyph
   // (cache_rows decodes a pixel list's rows first); other lookups walk
@@ -124,18 +126,26 @@ static int32_t fuller_point(const EnrScene *s,const Night *n,int t,int x,int y){
 }
 // Which tile each pixel of a row lies on (tile + 1; 0 off the net).
 static const uint8_t *row_tiles(const EnrScene *s,int y){
-  if(work->tiles_y==y)return work->tiles;
+  for(int k=0;k<TILE_ROWS;k++)if(work->tiles_y[k]==y)return work->tiles[k];
+  const int k=work->tiles_next;work->tiles_next=(k+1)%TILE_ROWS;
   const EnrFuller *f=s->fuller;const uint8_t *p=f->tile_runs+f->tile_offset[y],*end=f->tile_runs+f->tile_offset[y+1];
-  for(int x=0;p<end;p+=2)for(int k=0;k<p[0]&&x<W;k++)work->tiles[x++]=p[1];
-  work->tiles_y=y;return work->tiles;
+  for(int x=0;p<end;p+=2)for(int j=0;j<p[0]&&x<W;j++)work->tiles[k][x++]=p[1];
+  work->tiles_y[k]=y;return work->tiles[k];
 }
+// A pixel's height, computed when first asked and kept with its row's
+// (NIGHT_ROWS rows at a time).
 static int32_t fuller_h(const EnrScene *s,Night *n,int x,int y){
-  for(int k=0;k<NIGHT_ROWS;k++)if(n->held[k]==y)return n->h[k][x];
-  // Keep the rows either side of y; replace the farthest.
-  int slot=0;for(int k=1;k<NIGHT_ROWS;k++){const int dk=abs(n->held[k]-y),ds=abs(n->held[slot]-y);if(dk>ds)slot=k;}
-  const uint8_t *tiles=row_tiles(s,y);int32_t *out=n->h[slot];
-  for(int xx=0;xx<W;xx++)out[xx]=tiles[xx]?fuller_point(s,n,tiles[xx]-1,xx,y):FULLER_NONE;
-  n->held[slot]=y;return out[x];
+  int slot=-1;
+  for(int k=0;k<NIGHT_ROWS;k++)if(n->held[k]==y){slot=k;break;}
+  if(slot<0){
+    // Keep the rows either side of y; replace the farthest.
+    slot=0;for(int k=1;k<NIGHT_ROWS;k++){const int dk=abs(n->held[k]-y),ds=abs(n->held[slot]-y);if(dk>ds)slot=k;}
+    n->held[slot]=y;memset(n->have[slot],0,sizeof n->have[slot]);
+  }
+  if(n->have[slot][x>>3]>>(x&7)&1)return n->h[slot][x];
+  const uint8_t t=row_tiles(s,y)[x];
+  const int32_t h=t?fuller_point(s,n,t-1,x,y):FULLER_NONE;
+  n->h[slot][x]=h;n->have[slot][x>>3]|=(uint8_t)(1<<(x&7));return h;
 }
 // A pixel's height in Q30 by the fast sums (INT64_MIN off a Fuller net).
 static int64_t fast_h(const Ctx *c,int x,int y){
@@ -264,7 +274,7 @@ static int block_state(const Ctx *c,int y,int b){
     for(int x=x0;x<=x1;){
       const int t=tiles[x];if(!t){x++;continue;}
       int e=x;while(e<x1&&tiles[e+1]==t)e++;
-      const int64_t a=(int64_t)fuller_point(s,c->n,t-1,x,y)<<1,z=(int64_t)fuller_point(s,c->n,t-1,e,y)<<1;
+      const int64_t a=(int64_t)fuller_h(s,(Night *)c->n,x,y)<<1,z=(int64_t)fuller_h(s,(Night *)c->n,e,y)<<1;
       lo=a<lo?a:lo;hi=a>hi?a:hi;lo=z<lo?z:lo;hi=z>hi?z:hi;
       x=e+1;
     }
@@ -926,7 +936,7 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
 static void work_end(void);
 static bool work_begin(const EnrScene *s,bool masks){
   work=malloc(sizeof(Work));if(!work)return false;
-  memset(work,0,sizeof *work);work->tiles_y=-1;for(int k=0;k<CACHE_ROWS;k++)work->cache_y[k]=-1;memset(work->slot_of,255,sizeof work->slot_of);
+  memset(work,0,sizeof *work);for(int k=0;k<TILE_ROWS;k++)work->tiles_y[k]=-1;for(int k=0;k<CACHE_ROWS;k++)work->cache_y[k]=-1;memset(work->slot_of,255,sizeof work->slot_of);
   if(masks){work->mask=malloc(sizeof(uint64_t)*2*H);if(!work->mask){free(work);work=NULL;return false;}work->nmask=work->mask+H;}
   if(ROLLED(s))for(int k=0;k<2;k++){work->night[k].h=malloc(sizeof(int32_t)*NIGHT_ROWS*W);if(!work->night[k].h){work_end();return false;}}
   work->cache=malloc(sizeof(uint8_t)*CACHE_ROWS*W);

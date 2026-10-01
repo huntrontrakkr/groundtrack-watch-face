@@ -17,6 +17,7 @@ typedef struct {
   uint8_t space,space_ink,screen,waterline,terminator,night_dots;
   uint8_t tint_count,tints[5];double tint_limits[5];
   uint8_t depth_count,depths[2];double depth_limits[2];
+  int32_t tint_q[5],depth_q[2];   // the limits in Q8 metres
 } Plate;
 typedef struct {char code[4];double lat,lon;} Station;
 typedef struct {uint8_t width,height;uint16_t first;} FigureGlyph;

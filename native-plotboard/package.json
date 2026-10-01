@@ -38,7 +38,7 @@
         {
           "type": "raw",
           "name": "MAP_PACK",
-          "file": "map.pack"
+          "file": "map-world.pack"
         },
         {
           "type": "raw",

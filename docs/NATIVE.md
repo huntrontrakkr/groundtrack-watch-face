@@ -32,7 +32,7 @@ The phone sends no charts: it once rendered satellites' scenes and sent them an 
 `native/src/c/chart.c` builds the minute renderer's scene from the hour's input (it was written to mirror the study's JavaScript renderer step for step, until the study moved onto it):
 
 - **The camera and track:** the hour and forty minutes either side, a minute apart, from the Sun and Moon segments or a satellite's; for the world band twenty minutes either side every fifteen seconds, the whole world between 72°N and 60°S fitted to the hour's longitudes; for the whole-day chart the local day (23 or 25 hours across a clock change) every five minutes, its shape fitted and set to the right, graduated in hours.
-- **The ground, streamed row by row** from the map pack: land from four bilinear samples of the atlas per pixel; the relief's bilinear sample and its three smoothing passes, as floats, exactly as the browser's `Float32Array`s; coast and waterline distances; contours, the shelf edge and height tints. Only three stages of three rows, a ring of smoothed rows and the map's columns under the chart are kept, never a full-frame array.
+- **The ground, streamed row by row** from the map pack's tiles: land from four bilinear samples per pixel and the relief's bilinear sample, in integers (fractions in Q8, heights in Q8 metres), from the resolution whose cells are at most a pixel wide; three smoothing passes in integers; coast and waterline distances; contours, the shelf edge and height tints. Only six decoded tiles, three stages of three rows and a ring of smoothed rows are kept, never a full-frame array.
 - **The base layer**, in the renderer's order, writing layers instead of colours: the graticule, home and the tracking network (on the world band with their acquisition circles), the route cased, dashed and graduated, the rose, the hour figures (Jost, from a resource) or the world band's tape, home's mark, the margins with home's rise and set or the satellite's elements.
 - **The time callout** is the minute's: on the whole-day chart set aside in open map level with the satellite, on the hour chart (as an option) hung under the body on the side that keeps it on the face and its leader clearest; an elbow leader breaks for lettering. The minute renderer sets the time in the chosen figures from the 20, 28 and 40 px Jost figures, which the scene keeps (the colon drawn to match, Departure Mono's doubled from its regular figures).
 - **The minutes:** for each, the Sun's direction, the body's place, the Moon's phase, the pass line, and on the world band the tape's index, the satellite's height and home's acquisition circle for that height (120 points by arcsine and arctangent, the same functions as the browser's; minutes that plot the same pixels share one).
@@ -50,13 +50,17 @@ At its peak a build holds about 66 KB; a finished hour 24–34 KB. A first versi
 
 ### The map on the watch: `native/resources/map.pack`
 
-`tools/relief-pack.mjs` packs the land atlas and the relief grid together, **without loss**: every relief code and land bit decodes exactly. Each cell's land bit is coded from six neighbouring land bits; its relief code is predicted from six decoded neighbours with fitted fixed-point weights (land and sea apart) and the difference coded against a frequency table chosen by land and by how large the neighbours' own differences were. Coding is rANS with fixed tables; strips of 32 rows decode independently. The pack keeps 79°N to 66°S, the latitudes the watch's views can show (GPS charts reach 77.5°N and 64.4°S, the world band 72°N to 60°S; `tests/map-pack.test.mjs` checks every view stays inside):
+The plates read relief only through ten thresholds (the shelf at −200 m, the contours at 500 to 5,000 m, the tints at 300 to 3,500 m), so `tools/map-pack.mjs` packs each cell's *level* between them with its land bit, in tiles of 32×32 cells that decode on their own, at three resolutions (0.25°, 0.5° and 1° cells, the coarser ones by majority): a chart decodes only the tiles under it, at the resolution its pixels need (the Sun's hour at 8 px a degree reads the 0.25° cells; the world band at about a pixel a degree reads the 1° cells). Each cell's land bit is coded from four neighbouring land bits, its level against a table chosen by land and the levels to its left and above; coding is rANS with fixed tables, and a tile of one level and one class is two bytes. The pack keeps 79°N to 66°S, the latitudes the watch's views can show (`tests/map-pack.test.mjs` checks every view stays inside, and that both decoders give every cell):
 
 | | |
 |---|---|
-| Relief alone, deflated | 438 KB |
-| Relief and land, packed, 79°N–66°S | 236 KB (`--world`: 270 KB) |
-| All resources, with the figures and tables | 250 KB of the app store's 256 KB (1 MB side-loaded) |
+| The earlier pack: every relief code, losslessly, 0.25° | 236 KB |
+| Levels and land at 0.25°, 0.5° and 1° (`map.pack`, Enroute) | 51 KB |
+| The 1° cells alone (`map-world.pack`, Plotboard) | 5.7 KB |
+| Decoded for a Sun's hour chart | about 12 tiles, 12,000 cells (200,000 before) |
+| Decoded for the world band | 60 tiles, 52,000 cells (830,000 before) |
+
+Rendered from levels instead of heights, contour lines and tint edges move by a pixel here and there (the review of 30 September 2026 shows the comparison).
 
 `native/src/c/map_pack.c` decodes it: 1.6 KB of code, 3 rows of working memory, reading the resource through a 256-byte buffer.
 
@@ -100,7 +104,7 @@ Satellites' element sets are fetched from CelesTrak at most once every two hours
 |---|---|
 | Every hour the faces draw builds within the watch's memory (`tests/native.test.mjs`) | the Sun, the Moon, GPS, the world band's satellites and QZSS's day and hour (from CelesTrak's elements of 29 September 2026, kept in `tests/fixtures`), the plates, homes, zones (with a half-hour one), dates, callouts, events, tapes and Fuller sheets; each build's peak under 69 KB |
 | The study draws with the watch's code (`tests/*.test.mjs`, `tests/enroute-browser.mjs`) | the art's rules (figures clear of the rose and route, the flag between route and figures, stations without collisions, the tape's index, the Fuller net's continuity, home's mark, events' names, Zulu time in the margin) hold on the core's frames; the page's canvas shows the core's pixels |
-| The map pack (`tests/map-pack.test.mjs`) | every cell exact, in JavaScript and C |
+| The map pack (`tests/map-pack.test.mjs`) | every tile's cells exact, in JavaScript and C; the levels are every height the plates read |
 | Segments, sines, arcsines, arctangents, square roots, remainders (`tests/segments.test.mjs`) | the C gives the JavaScript's bits |
 | A minute drawn over the last (`tests/native.test.mjs`) | every minute of every hour above, drawn over the minute before (and over a jump of five), is the minute drawn whole |
 | The phone side (`tests/pkjs.test.mjs`, `tests/config-browser.mjs`) | scenes, requests, retries, settings, segments, rise and set |

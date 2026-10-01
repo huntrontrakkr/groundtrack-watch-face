@@ -24,8 +24,11 @@ test('each face asks for the settings page and the phone\'s location, with its o
   const [a,b,c]=['native','native-plotboard','native-fuller'].map(f=>JSON.parse(readFileSync(`${f}/package.json`,'utf8')).pebble);
   for(const p of [a,b,c])assert.ok(p.capabilities.includes('configurable')&&p.capabilities.includes('location'));
   assert.equal(new Set([a.uuid,b.uuid,c.uuid]).size,3);assert.deepEqual([a.displayName,b.displayName,c.displayName],['Groundtrack Enroute','Groundtrack Plotboard','Groundtrack Fuller']);
-  assert.deepEqual(a.messageKeys,b.messageKeys);assert.deepEqual(a.messageKeys,c.messageKeys);assert.deepEqual(a.resources,b.resources);
-  // Fuller reads the faces' grids and the coastline instead of the map.
+  assert.deepEqual(a.messageKeys,b.messageKeys);assert.deepEqual(a.messageKeys,c.messageKeys);
+  // Plotboard's map is the 1° cells alone; Fuller reads the faces' grids and
+  // the coastline instead of the map.
+  assert.deepEqual(a.resources.media.map(m=>m.name),b.resources.media.map(m=>m.name));
+  assert.deepEqual(b.resources.media.map(m=>m.file),['map-world.pack','figures.bin','tables.bin']);
   assert.deepEqual(c.resources.media.map(m=>m.name),['FULLER_GRIDS','LAND_BITS','FIGURES','TABLES']);
 });
 
