@@ -52,6 +52,7 @@
     <div id="satellites"></div>
   </fieldset>
   <fieldset><legend>Plate</legend><div id="plates"></div></fieldset>
+  <fieldset><legend>Figures</legend><div id="figure-sets"></div></fieldset>
   <fieldset><legend>Clock</legend>
     <label class="row"><input type="checkbox" name="clock24"><span class="name">24-hour figures</span></label>
   </fieldset>
@@ -113,7 +114,7 @@
 <script>
 (function(){
   // Filled in by the phone app: {settings, bodies:[[key,name,note]] (the
-  // satellites), plates:[[key,name,note]], preset, position: the phone's fix
+  // satellites), plates:[[key,name,note]], figureSets:[[key,name,note]], preset, position: the phone's fix
   // {lat, lon} or null}
   var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
   // Each face shows what it draws: Enroute the hour chart and the whole day,
@@ -134,10 +135,11 @@
   }
   rows(config.bodies||[],'body',document.getElementById('satellites'));
   rows(config.plates,'plate',document.getElementById('plates'));
+  rows(config.figureSets||[],'figures',document.getElementById('figure-sets'));
   // (A face may show only some of the options.)
   function pick(name,value){var inputs=form.elements[name];if(!inputs)return;for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
   function picked(name){var inputs=form.elements[name];if(!inputs)return null;for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
-  pick('body',s.body);pick('plate',s.plate);pick('readout',s.readout);pick('numerals',s.numerals);pick('margin',s.margin);pick('span',s.span);pick('tape',s.tape);pick('transfer',s.transfer);
+  pick('body',s.body);pick('plate',s.plate);pick('readout',s.readout);pick('numerals',s.numerals);pick('figures',s.figures);pick('margin',s.margin);pick('span',s.span);pick('tape',s.tape);pick('transfer',s.transfer);
   form.elements.clock24.checked=s.clock24!=='0';
   document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+s.timeZone+')':'None for '+s.timeZone;
   var home=null;try{home=s.home?JSON.parse(s.home):null;}catch(e){}
@@ -191,7 +193,7 @@
       if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
       homeValue=JSON.stringify({lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
     }
-    close(JSON.stringify({body:picked('body'),plate:picked('plate'),readout:picked('readout'),numerals:picked('numerals'),margin:picked('margin'),span:picked('span'),tape:picked('tape'),transfer:picked('transfer'),
+    close(JSON.stringify({body:picked('body'),plate:picked('plate'),readout:picked('readout'),numerals:picked('numerals'),figures:picked('figures'),margin:picked('margin'),span:picked('span'),tape:picked('tape'),transfer:picked('transfer'),
       clock24:form.elements.clock24.checked?'1':'0',home:homeValue,events:events.map(function(e){return {epoch:e.epoch,title:e.title};})}));
   });
 })();

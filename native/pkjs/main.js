@@ -22,7 +22,7 @@
 // Satellites' element sets are fetched from CelesTrak at most once every two
 // hours each (as CelesTrak asks) and kept, under tle-<catalog number>.
 import {HOMES} from '../../src/home.js';
-import {PLATES} from '../../src/plates.js';
+import {PLATES,FIGURE_SETS} from '../../src/plates.js';
 import {registerElements,viewOf,FRESH,CATALOG,catalogEntry,bodyId} from '../../src/satellites.js';
 import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
 import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
@@ -83,7 +83,8 @@ function pump(){
 // margin's time (0 Zulu, 1 the nautical zone under the body) and the world
 // band's time scale (0 fixed, 1 a sliding tape, 2 the world sliding too)
 // and, on the fixed tape, how its minutes fall on the route (0 off, 1 a
-// vernier, 2 a comb, 3 chevrons).
+// vernier, 2 a comb, 3 chevrons), and the figure set (FIGURE_SETS' index).
+var FIGURES=FIGURE_SETS.map(function(f){return f[0];});
 var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide'],TRANSFERS=['off','vernier','comb','chevrons'];
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
 // On Groundtrack Fuller every satellite's chart is a rolling Fuller sheet of
@@ -100,7 +101,8 @@ function watchSettings(){
   var code=entry?entry.code:'';for(var k=0;k<3;k++)bytes.push(k<code.length?code.charCodeAt(k):0);
   var tape=TAPES.indexOf(setting('tape','fixed'));
   var transfer=TRANSFERS.indexOf(setting('transfer','off'));
-  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer);
+  var figures=FIGURES.indexOf(setting('figures','jost'));
+  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?0:figures);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -241,10 +243,10 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),
+    var config={settings:{body:currentBody(),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','jost'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},events:storedEvents(),
       face:FACE,bodies:BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
-      plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),preset:preset?preset.name:null,position:position};
+      plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),figureSets:FIGURE_SETS,preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
     var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');});
     Pebble.openURL('data:text/html;charset=utf-8,'+encodeURIComponent(page));
@@ -260,6 +262,7 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
   if(READOUTS.indexOf(chosen.readout)>=0)localStorage.setItem('readout',chosen.readout);
   if(NUMERALS.indexOf(chosen.numerals)>=0)localStorage.setItem('numerals',chosen.numerals);
+  if(FIGURES.indexOf(chosen.figures)>=0)localStorage.setItem('figures',chosen.figures);
   if(chosen.margin==='utc'||chosen.margin==='body')localStorage.setItem('margin',chosen.margin);
   if(chosen.span==='day'||chosen.span==='hour')localStorage.setItem('span',chosen.span);
   if(TAPES.indexOf(chosen.tape)>=0)localStorage.setItem('tape',chosen.tape);

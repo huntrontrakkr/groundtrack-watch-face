@@ -53,7 +53,7 @@ const FACE=process.env.MEASURE_FACE||'enroute',PROJECT=FACE==='enroute'?'native'
 const KEY=JSON.parse(readFileSync(process.argv[4]||`${PROJECT}/build/js/message_keys.json`,'utf8'));
 const BODY=process.env.MEASURE_BODY||'sun',PLATE=Object.keys(PLATES).indexOf(process.env.MEASURE_PLATE||'enroute');
 const settings=flag=>{
-  const h=HOMES['America/New_York'],b=Buffer.alloc(25),sat=BODY.startsWith('sat:'),c=sat?catalogEntry(BODY):null;
+  const h=HOMES['America/New_York'],b=Buffer.alloc(26),sat=BODY.startsWith('sat:'),c=sat?catalogEntry(BODY):null;
   // Fuller draws a fast satellite's hour, not the world band.
   const view=v=>FACE==='fuller'&&v==='world'?'hour':v;
   b.set([BODY==='sun'?0:BODY==='moon'?1:2,PLATE,flag,1,1]);b.writeInt32LE(Math.round(h.lat*100),5);b.writeInt32LE(Math.round(h.lon*100),9);

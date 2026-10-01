@@ -13,7 +13,7 @@ registerNominal();
 import fonts from '../data/draft-font.json' with {type:'json'};
 
 const read=f=>new Uint8Array(readFileSync(f)),out=process.argv[2]||'docs/screenshots/matrix.png';
-const core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('public/land.bin')});
+const core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack')});
 const zone='America/New_York',home=HOMES[zone],at=iso=>Date.parse(iso);
 const ISS=at('2019-06-05T12:24:00Z'),SUN=at('2026-09-27T08:24:00Z'),MOON=at('2026-09-19T09:24:00Z'),GPS=at('2026-09-27T13:24:00Z'),QZSS=at('2026-09-27T05:24:00Z');
 // [label lines, state]

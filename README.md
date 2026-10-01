@@ -73,4 +73,4 @@ Studies 02–06 cache geography (and, in 02–04, tower geometry) within an hour
 
 The quarter-degree land atlas is a 129,600-byte flash/resource candidate and the relief grid is 1,036,800 bytes; a native port must not load either wholesale into watch RAM (Study 06's notes sketch a phone-rendered hourly base chart instead). The release tooling follows Dymaxion's with Groundtrack's own app identity; no Dymaxion listing or credentials are used ([docs/RELEASING.md](docs/RELEASING.md)).
 
-Project code: Apache-2.0. Natural Earth, NOAA ETOPO1 and USGS GMTED2010: public domain. Fira Sans, Jost, Michroma, Departure Mono and their derived glyph masks: SIL OFL 1.1. Other dependency and reused Dymaxion notices are in [NOTICE](NOTICE).
+Project code: Apache-2.0. Natural Earth, NOAA ETOPO1 and USGS GMTED2010: public domain. Fira Sans, Jost, B612, Michroma, Orbitron, Departure Mono and their derived glyph masks: SIL OFL 1.1. Other dependency and reused Dymaxion notices are in [NOTICE](NOTICE).

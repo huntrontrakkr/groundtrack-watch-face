@@ -24,7 +24,7 @@ typedef struct {
   int32_t tint_q[5],depth_q[2];   // the limits in Q8 metres
 } Plate;
 typedef struct {char code[4];double lat,lon;} Station;
-typedef struct {uint8_t width,height;uint16_t first;} FigureGlyph;
+typedef struct {uint8_t width,height;uint32_t first;} FigureGlyph;
 
 // Track points: 141 on the hour chart, 401 on the world band.
 #define CHART_TRACK_MAX 401
@@ -42,6 +42,7 @@ typedef struct {
   bool flag;                 // the minute flag (readout 1)
   int readout;               // the minute readout: 0 none, 1 the flag, 2 a time callout
   int numerals;              // the callout's figures (ENR_COLON ... ENR_ACCENT)
+  int figures;               // the figure set (FIGURE_SETS in src/plates.js: 0 Jost)
   bool zone_body;            // the margin's time in the nautical zone under the body, not Zulu
   int tape;                  // the world band's time scale: 0 fixed, 1 a sliding tape, 2 the world sliding too
   int transfer;              // on the fixed tape, how its minutes fall on the route: 0 off, 1 vernier, 2 comb, 3 chevrons
@@ -68,7 +69,7 @@ typedef struct {
   MapReadFn figures;void *figure_source;
   MapReadFn tables;void *table_source;   // native/resources/tables.bin
   // The Fuller sheets' faces' grids (fuller.bin) and, zoomed in, the
-  // quarter-degree coastline (land.bin: 720 rows of 180 bytes).
+  // quarter-degree coastline (land.pack, tools/land-pack.mjs).
   MapReadFn grids;void *grid_source;
   MapReadFn land;void *land_source;
   SegmentFn segment;void *segment_context;

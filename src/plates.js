@@ -107,6 +107,14 @@ export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 const EARTH=6371,ORBIT=410,MASK=5*RAD;
 export const ACQUISITION=(acos(EARTH*cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
 export const NUMERALS=['colon','plain','even','mono','accent'];
+// The figure sets for the hour figures, the callout and the tape, in
+// figures.bin's order (tools/generate-figures.py): key, name, note.
+export const FIGURE_SETS=[
+  ['jost','Jost','Futura revival: the Apollo 11 plaque'],
+  ['b612','B612','Airbus cockpit displays'],
+  ['michroma','Michroma','Eurostile: 2001 and NASA hardware'],
+  ['orbitron','Orbitron','Space-age geometric']
+];
 export const FIGURE={scale:40,hour:80,hourTwo:72,minute:28,callout:28,calloutMinute:20};
 // The time scale registers with the route: its hour marks stand over the
 // two stations, 120 px apart on the zoomed charts, so each minute is exactly

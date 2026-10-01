@@ -52,8 +52,8 @@ const shot=decodePNG(readFileSync(shotFile));
 if(shot.width!==W||shot.height!==H)throw new Error(`Screenshot is ${shot.width}x${shot.height}, not ${W}x${H}`);
 const start=civilHour(at,zone),minute=Math.floor((at-start)/MINUTE);
 // The core, the watch's own code, draws the reference frame.
-const read=f=>new Uint8Array(readFileSync(f)),core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('public/land.bin')});
-const e=process.env,state={body,epoch:start+minute*MINUTE,plate,readout:flagArg==='noflag'?false:flagArg==='callout'?true:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',projection:e.PROJECTION||'chart',events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null};
+const read=f=>new Uint8Array(readFileSync(f)),core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack')});
+const e=process.env,state={body,epoch:start+minute*MINUTE,plate,readout:flagArg==='noflag'?false:flagArg==='callout'?true:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',figures:e.FIGURES||'jost',projection:e.PROJECTION||'chart',events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null};
 const ref=Buffer.from(new CoreRenderer(core).render(state).buf);
 
 // Side by side: watch, browser, differences in red over a faded browser frame.

@@ -1,4 +1,4 @@
-import {PLATES,W,H} from './plates.js';
+import {PLATES,FIGURE_SETS,W,H} from './plates.js';
 import {loadCore,CoreRenderer} from './core.js';
 import {MINUTE} from './ephemeris.js';
 import {clockParts} from './render.js';
@@ -17,7 +17,7 @@ const NOTES={
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
   iss:'An archived orbit from 5 June 2019. The station laps most of the world in an hour, so the whole world is the chart.'
 };
-const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',zone:'utc',span:'day'};
+const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',figures:'jost',zone:'utc',span:'day'};
 let main,studyEpoch=state.epoch;
 const proofs={};
 function paint(canvas,buf){
@@ -46,7 +46,7 @@ function render(){
   }
   if(!list.children.length){const li=document.createElement('li');li.textContent='No events this day.';list.append(li);}
   $('home-select').value=state.home?(Object.keys(HOMES).find(k=>HOMES[k]===state.home)||'here'):'none';
-  $('enroute-numerals').value=state.numerals;$('enroute-margin-zone').value=state.zone;
+  $('enroute-figures').value=state.figures;$('enroute-numerals').value=state.numerals;$('enroute-margin-zone').value=state.zone;
   $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-readout').value=state.readout===true?'callout':state.readout||'off';
   const sat=catalogEntry(state.body),elements=elementsFor(state.body);
   $('enroute-date').textContent=new Date(state.epoch).toISOString().slice(0,10);$('body-note').textContent=sat?sat.note:NOTES[state.body];
@@ -116,7 +116,7 @@ try{
   // The core, the watch's own code as WebAssembly, with the watch's
   // resources (the map pack, the figures, the tables, the Fuller grids and
   // the coastline).
-  const [wasm,map,figures,tables,grids,land]=await Promise.all(['core.wasm','map.pack','figures.bin','tables.bin','fuller.bin','land.bin'].map(f=>load(f)));
+  const [wasm,map,figures,tables,grids,land]=await Promise.all(['core.wasm','map.pack','figures.bin','tables.bin','fuller.bin','land.pack'].map(f=>load(f)));
   main=new CoreRenderer(await loadCore({wasm,map,figures,tables,grids,land}));
   document.querySelectorAll('[data-body]').forEach(b=>b.addEventListener('click',()=>{
     state.body=b.dataset.body;registerNominal();state.epoch=state.body==='moon'?OBSERVATIONS[state.observation]:DEMOS[state.body];studyEpoch=state.epoch;render();
@@ -148,6 +148,9 @@ try{
     state.events=[...state.events,{epoch,title,label:uniqueCode(title,taken)}];$('event-label').value='';render();
   });
   $('enroute-numerals').addEventListener('change',()=>{state.numerals=$('enroute-numerals').value;render();});
+  for(const [key,name,note] of FIGURE_SETS){const o=document.createElement('option');o.value=key;o.textContent=name;o.title=note;$('enroute-figures').appendChild(o);}
+  $('enroute-figures').value=state.figures;
+  $('enroute-figures').addEventListener('change',()=>{state.figures=$('enroute-figures').value;render();});
   $('enroute-margin-zone').addEventListener('change',()=>{state.zone=$('enroute-margin-zone').value;render();});
   $('enroute-readout').addEventListener('change',()=>{const v=$('enroute-readout').value;state.readout=v==='callout'?true:v==='flag'?'flag':false;render();});
   render();window.groundtrackEnroute={ready:true,state,main,render,track,demos:DEMOS,observations:OBSERVATIONS,events:STUDY_EVENTS};

@@ -43,7 +43,7 @@
         {
           "type": "raw",
           "name": "LAND_BITS",
-          "file": "land.bin"
+          "file": "land.pack"
         },
         {
           "type": "raw",

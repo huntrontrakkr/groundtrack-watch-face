@@ -27,6 +27,8 @@ typedef struct {
   // On the fixed tape, how its minutes fall on the route: 0 off, 1 a
   // vernier, 2 a comb, 3 chevrons.
   uint8_t transfer;
+  // The figure set (FIGURE_SETS in src/plates.js: 0 Jost).
+  uint8_t figures;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);

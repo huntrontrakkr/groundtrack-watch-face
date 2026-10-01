@@ -547,7 +547,9 @@ static void route_pixel(Canvas *cv,int x,int y,void *arg){
   if(how&2)plot(cv,how&4?x+1:x,how&4?y:y-1,L_ROUTE);
 }
 // The figures: Jost digits, bottom-aligned on a shared baseline.
-static const FigureGlyph *figure(int size,char c){for(int s=0;s<5;s++)if(FIGURE_SIZES[s]==size)return &FIGURE_GLYPHS[s*10+(c-'0')];return 0;}
+// The build's figure set (its table read from figures.bin by chart_begin).
+static const FigureGlyph *s_glyphs;
+static const FigureGlyph *figure(int size,char c){for(int s=0;s<5;s++)if(FIGURE_SIZES[s]==size)return &s_glyphs[s*10+(c-'0')];return 0;}
 static int gap_for(int size){return (int)js_round(size/16.0);}
 static int run_width(const char *t,int size){int w=0,n=0;for(;*t;t++,n++)w+=figure(size,*t)->width;return w+gap_for(size)*(n-1);}
 // A run of figures laid out as figurePixels() does: glyph i at (x[i], y[i]).
@@ -629,10 +631,8 @@ static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char
 #define BEARINGS (FACE_CHART?72:1)
 typedef struct {Px scratch[SCRATCH];Box taken[TAKEN];Px home_code[64];double sb[BEARINGS],cb[BEARINGS];} Draw;
 // The drawing's lists: the track on the screen, the pixel lists and
-// placements, and room for the hour figures' digits, only those drawn: at
-// 80 px two (both figures single: at most 666 bytes), else at 72 px at most
-// four (975 bytes).
-#define FIGURE_ROOM 1000
+// placements, and room for the hour figures' digits, only those drawn
+// (FIGURE_ROOM, chart_data.h).
 // The track: latitude and unwrapped longitude, then its screen position.
 // Point i is at t0 + i*step seconds from the hour (see make_track).
 typedef struct {double a,b;} TrackPoint;
@@ -660,7 +660,7 @@ static bool load_figures(const ChartSources *src,int size,const char *a,const ch
   size_t used=0;
   for(int k=0;k<2;k++)for(const char *t=k?b:a;*t;t++){
     const int d=*t-'0';if(d<0||d>9||f->at[d]!=0xFFFF)continue;
-    const FigureGlyph *g=&FIGURE_GLYPHS[s*10+d];const size_t n=(size_t)g->height*((g->width+7)/8);
+    const FigureGlyph *g=&s_glyphs[s*10+d];const size_t n=(size_t)g->height*((g->width+7)/8);
     if(used+n>space||src->figures(src->figure_source,g->first,room+used,n)!=n)return false;
     f->at[d]=(uint16_t)used;used+=n;
   }
@@ -669,7 +669,7 @@ static bool load_figures(const ChartSources *src,int size,const char *a,const ch
 // A run's glyphs pointed at their loaded bits.
 static void figure_bind(FigureRun *r,const Figures *f,int size){
   int s=0;while(s<5&&FIGURE_SIZES[s]!=size)s++;
-  for(int i=0;i<r->n;i++)r->bits[i]=f->room+f->at[r->g[i]-&FIGURE_GLYPHS[s*10]];
+  for(int i=0;i<r->n;i++)r->bits[i]=f->room+f->at[r->g[i]-&s_glyphs[s*10]];
 }
 
 // ---------------------------------------------------------------- Fuller ground
@@ -685,7 +685,8 @@ typedef struct {int16_t face,a;uint32_t used;uint8_t cover[GRID_N+1],code[GRID_N
 typedef struct {
   MapReadFn read;void *source;uint32_t tick;
   GridRow rows[GRID_SLOTS];
-  // Zoomed in: land.bin's rows, and the grid's directions (i16 x 3 each).
+  // Zoomed in: the coastline's rows (land.pack), and the night's grid of
+  // directions.
   MapReadFn land;void *land_source;int16_t land_row[LAND_SLOTS];uint32_t land_used[LAND_SLOTS];uint8_t land_bits[LAND_SLOTS][180];
   float meters[256];                            // relief codes to metres (from tables.bin)
 } GridCache;
@@ -696,11 +697,31 @@ static const GridRow *grid_row(GridCache *c,int face,int a){
   if(c->read(c->source,at,r->cover,n)!=n||c->read(c->source,at+20*GRID_POINTS,r->code,n)!=n)return NULL;
   r->face=(int16_t)face;r->a=(int16_t)a;r->used=c->tick;return r;
 }
+// A row of the coastline's bits (180 bytes, LSB first) from land.pack
+// (tools/land-pack.mjs): alternately sea and land runs, sea first, each a
+// varint, the last running to the row's end.
+static bool land_row(GridCache *c,int y,uint8_t *out){
+  uint8_t o[8];if(c->land(c->land_source,8+4*(uint32_t)y,o,8)!=8)return false;
+  const uint32_t data=8+4*721,from=(uint32_t)o[0]|o[1]<<8|(uint32_t)o[2]<<16|(uint32_t)o[3]<<24,to=(uint32_t)o[4]|o[5]<<8|(uint32_t)o[6]<<16|(uint32_t)o[7]<<24;
+  memset(out,0,180);
+  uint8_t buf[32];uint32_t at=from,have=0,used=0;int x=0,land=0;
+  while(at<to||used<have){
+    uint32_t v=0;int s=0,b;
+    do{
+      if(used==have){have=to-at<sizeof buf?to-at:sizeof buf;if(!have||c->land(c->land_source,data+at,buf,have)!=have)return false;at+=have;used=0;}
+      b=buf[used++];v|=(uint32_t)(b&127)<<s;s+=7;
+    }while(b&128);
+    if(land)for(int k=x;k<x+(int)v&&k<1440;k++)out[k>>3]|=(uint8_t)(1<<(k&7));
+    x+=(int)v;land^=1;
+  }
+  if(land)for(int k=x;k<1440;k++)out[k>>3]|=(uint8_t)(1<<(k&7));
+  return true;
+}
 static int land_bit(GridCache *c,int x,int y){
   x=((x%1440)+1440)%1440;y=y<0?0:y>719?719:y;
   c->tick++;int slot=0;
   for(int i=0;i<LAND_SLOTS;i++){if(c->land_row[i]==y){c->land_used[i]=c->tick;return (c->land_bits[i][x>>3]>>(x&7))&1;}if(c->land_used[i]<c->land_used[slot])slot=i;}
-  if(c->land(c->land_source,(uint32_t)y*180,c->land_bits[slot],180)!=180)return -1;
+  if(!land_row(c,y,c->land_bits[slot]))return -1;
   c->land_row[slot]=(int16_t)y;c->land_used[slot]=c->tick;return (c->land_bits[slot][x>>3]>>(x&7))&1;
 }
 // gridCell(): the three grid points round a fixed-point place, as (a, b)
@@ -726,6 +747,7 @@ struct ChartBuild {
   ChartInput in;ChartSources src;
   TrackPoint *track;int count,h0,h1,t0,step;Cam cam;Plate plate;
   Plane plane;Tiles *tiles;Ground *ground;RunSink sink;
+  FigureGlyph glyphs[50];    // the figure set's table
   // The drawing's lists, and the scene's runs as they are made: a piece a
   // band of the plane, and their row offsets.
   uint8_t *lists,*piece[PLANE_BANDS];uint16_t *offsets;
@@ -893,7 +915,7 @@ static int fuller_ground_step(ChartBuild *b,int budget){
       e0[x]=(int32_t)relief;
       bool is_land;
       if(b->fine){
-        // land.bin at four points in the pixel.
+        // The coastline at four points in the pixel.
         double sum=0;bool ok=true;
         for(int k=0;k<4;k++){
           const int u=fuller_locate(fc,x+SUB[k][0]/4.0,y+SUB[k][1]/4.0,NULL);if(u<0)continue;
@@ -920,6 +942,11 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   if(in->plate<0||in->plate>=TABLE_PLATES||!read_plate(src,in->plate,&b->plate))FAIL;
+  // The figure set's table, Jost's for an unknown set.
+  {const int set=in->figures>=0&&in->figures<FIGURE_SETS?in->figures:0;uint8_t t[6*50];
+  if(src->figures(src->figure_source,FIGURE_TABLE_AT(set),t,sizeof t)!=sizeof t)FAIL;
+  for(int k=0;k<50;k++){const uint8_t *e=t+6*k;b->glyphs[k]=(FigureGlyph){e[0],e[1],(uint32_t)e[2]|(uint32_t)e[3]<<8|(uint32_t)e[4]<<16|(uint32_t)e[5]<<24};}
+  s_glyphs=b->glyphs;}
   const Plate *pal=&b->plate;
   if(FACE_ROLL&&(!FACE_CHART||in->fuller)){if(!fuller_begin(b))FAIL;return b;}
   // chartCamera(). The track is kept only while the camera is set, and made
@@ -1560,10 +1587,12 @@ EnrScene *chart_finish(ChartBuild *b){
   return out;
 }
 bool chart_callout_figures(EnrScene *s,MapReadFn read,void *source,void *(*alloc)(size_t)){
-  const unsigned from=FIGURE_GLYPHS[0].first,to=FIGURE_GLYPHS[30].first;
+  // The set's 20, 28 and 40 px figures, which lie together in figures.bin.
+  const FigureGlyph *last=&s_glyphs[29];
+  const unsigned from=s_glyphs[0].first,to=last->first+(unsigned)last->height*((last->width+7)/8);
   s->fig_bits=alloc(to-from);
   if(!s->fig_bits||read(source,from,s->fig_bits,to-from)!=to-from)return false;
-  for(int k=0;k<3;k++)for(int d=0;d<10;d++){const FigureGlyph *g=&FIGURE_GLYPHS[k*10+d];s->figures[k].width[d]=g->width;s->figures[k].height[d]=g->height;s->figures[k].first[d]=(uint16_t)(g->first-from);}
+  for(int k=0;k<3;k++)for(int d=0;d<10;d++){const FigureGlyph *g=&s_glyphs[k*10+d];s->figures[k].width[d]=g->width;s->figures[k].height[d]=g->height;s->figures[k].first[d]=(uint16_t)(g->first-from);}
   return true;
 }
 EnrScene *chart_build(const ChartInput *in,const ChartSources *src){

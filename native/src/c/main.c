@@ -174,12 +174,13 @@ static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)
 // a satellite's catalog number (i32), its kind (1 a station, plus its view
 // times 2) and its code (3 characters), then the callout's figures and the
 // margin's time, the world band's time scale and how its minutes fall on
-// the route (see native/pkjs/main.js).
+// the route, and the figure set (see native/pkjs/main.js; a phone app
+// from before figure sets sends 25 bytes, and Jost).
 static void take_settings(const uint8_t *b,size_t n){
   if(n<25)return;
   WatchSettings s;memset(&s,0,sizeof s);
-  s.version=5;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
-  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];
+  s.version=6;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
+  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:0;
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   if(!memcmp(&s,&s_settings,sizeof s)){s_data_ok_until=0;s_data_asked_at=0;check(time(NULL));return;}

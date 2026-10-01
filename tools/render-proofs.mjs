@@ -3,7 +3,7 @@
 // contact sheet per study and a 2x enlargement of each default face.
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {ChartRenderer,CHARTS,W,H} from '../src/chart-render.js';
-import {PLATES,NUMERALS} from '../src/plates.js';
+import {PLATES,NUMERALS,FIGURE_SETS} from '../src/plates.js';
 import {loadCore,CoreRenderer} from '../src/core.js';
 import {encodePNG} from './png.mjs';
 import {HOMES} from '../src/home.js';
@@ -13,7 +13,7 @@ import {STUDY_EVENTS as events} from '../src/events.js';
 import fonts from '../data/draft-font.json' with {type:'json'};
 
 // The core, the watch's own code, draws Study 06's proofs.
-const read=f=>new Uint8Array(readFileSync(f)),core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('public/land.bin')});
+const read=f=>new Uint8Array(readFileSync(f)),core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack')});
 const atlas=read('public/land.bin'),meters=(await import('../src/relief.js')).decodeRelief(read('public/relief.bin'));
 const zone='America/New_York',home=HOMES[zone];
 mkdirSync('docs/screenshots',{recursive:true});
@@ -87,4 +87,13 @@ const numerals=contactSheet('study-06-numerals',[
 const flag=contactSheet('study-06-flag',[4,24,44,58].map(m=>({name:`m${m}`,caption:`SUN / 04:${String(m).padStart(2,'0')}`,body:'sun',epoch:Date.parse('2026-09-27T08:00:00Z')+m*60000})),
   ['enroute','console','red'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new CoreRenderer(core).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,plate,home,events,readout:'flag'}).buf);
 
-console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape, ${gnss} GPS/QZSS, ${numerals} numeral and ${flag} flag native proofs, seven contact sheets and seven 2x enlargements.`);
+// The figure sets: each in the hour figures, a time callout, the world
+// band's tape and a Fuller day's callout.
+const figureSets=contactSheet('study-06-figures',[
+  {name:'sun',caption:'SUN / 04:24',body:'sun',epoch:Date.parse('2026-09-27T08:24:00Z'),plate:'enroute',readout:'flag'},
+  {name:'moon',caption:'MOON CALLOUT / 05:24',body:'moon',epoch:Date.parse('2026-09-19T09:24:00Z'),plate:'console',readout:'callout'},
+  {name:'iss',caption:'ISS / 08:24',body:'iss',epoch:Date.parse('2019-06-05T12:24:00Z'),plate:'crt'},
+  {name:'sun-day',caption:'SUN DAY / 14:24',body:'sun',epoch:Date.parse('2026-09-27T18:24:00Z'),plate:'odyssey',projection:'fuller'}
+],FIGURE_SETS.map(([k,name])=>[k,name]),(scene,figures)=>new CoreRenderer(core).render({timeZone:zone,clock24:true,numerals:'even',home,events,...scene,figures}).buf);
+
+console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape, ${gnss} GPS/QZSS, ${numerals} numeral, ${flag} flag and ${figureSets} figure-set native proofs, eight contact sheets and eight 2x enlargements.`);

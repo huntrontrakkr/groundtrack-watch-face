@@ -20,7 +20,7 @@ static uint8_t *slurp(const char *path,size_t *len){
 static void source(int kind,const char *path){size_t n;uint8_t *b=slurp(path,&n);if(b)core_source(kind,b,n);}
 int main(void){
   source(CORE_MAP,"native/resources/map.pack");source(CORE_FIGURES,"native/resources/figures.bin");source(CORE_TABLES,"native/resources/tables.bin");
-  source(CORE_GRIDS,getenv("FULLER_GRIDS")?getenv("FULLER_GRIDS"):"public/fuller.bin");source(CORE_LAND,getenv("LAND_BITS")?getenv("LAND_BITS"):"public/land.bin");
+  source(CORE_GRIDS,getenv("FULLER_GRIDS")?getenv("FULLER_GRIDS"):"public/fuller.bin");source(CORE_LAND,getenv("LAND_BITS")?getenv("LAND_BITS"):"native/resources/land.pack");
   size_t cap=1<<16,len=0;char *text=malloc(cap);
   for(;;){if(len==cap){cap*=2;text=realloc(text,cap);}const size_t got=fread(text+len,1,cap-len,stdin);if(!got)break;len+=got;}
   if(getenv("HEAP_LIMIT"))limit=(size_t)atol(getenv("HEAP_LIMIT"));

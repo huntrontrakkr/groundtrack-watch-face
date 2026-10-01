@@ -105,7 +105,7 @@ export class CoreRenderer{
   render(state){
     const {body,epoch,timeZone,clock24}=state,start=civilHour(epoch,timeZone),minute=Math.floor((epoch-start)/MINUTE);
     const text=chartInput({body,start,plate:state.plate,readout:state.readout===true?'callout':state.readout||false,numerals:state.numerals||'colon',margin:state.zone||'utc',
-      span:state.span||'day',tape:state.tape||'fixed',transfer:state.transfer||'off',events:state.events||[],clock24,zone:timeZone,home:state.home||null,projection:state.projection||'chart'});
+      span:state.span||'day',tape:state.tape||'fixed',transfer:state.transfer||'off',figures:state.figures||'jost',events:state.events||[],clock24,zone:timeZone,home:state.home||null,projection:state.projection||'chart'});
     const held=this.core.sceneFor(text);if(held.built)this.stats.geometryBuilds++;this.scene=held.scene;
     const frame=this.core.render(minute,held.slot),buf=new Uint8ClampedArray(W*H*3),rgba=new Uint8ClampedArray(W*H*4);
     for(let i=0;i<W*H;i++){const c=RGB[frame[i]];buf[i*3]=c[0];buf[i*3+1]=c[1];buf[i*3+2]=c[2];rgba[i*4]=c[0];rgba[i*4+1]=c[1];rgba[i*4+2]=c[2];rgba[i*4+3]=255;}

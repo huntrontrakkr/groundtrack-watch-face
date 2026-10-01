@@ -57,3 +57,10 @@ test('every latitude the watch can show is in the pack',()=>{
   // The world band's fixed latitudes, for any satellite.
   assert.ok(WORLD.north<=NORTH&&WORLD.south>=SOUTH);
 });
+
+test('the coastline pack is what the packer writes, and every row decodes to land.bin',async()=>{
+  const {packLand,landRow,ROWS}=await import('../tools/land-pack.mjs');
+  const bits=new Uint8Array(readFileSync('public/land.bin')),pack=new Uint8Array(readFileSync('native/resources/land.pack'));
+  assert.ok(Buffer.from(packLand(bits)).equals(Buffer.from(pack)),'run node tools/land-pack.mjs');
+  for(let y=0;y<ROWS;y++)assert.ok(Buffer.from(landRow(pack,y)).equals(Buffer.from(bits.subarray(y*180,(y+1)*180))),`row ${y}`);
+});

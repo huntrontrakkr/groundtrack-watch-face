@@ -26,7 +26,7 @@ static void source(int kind,const char *path){size_t n;uint8_t *b=slurp(path,&n)
 int main(int argc,char **argv){
   if(argc<2){fprintf(stderr,"usage: harness -u | -a | -b | <minute> [-o out.ppm]  < input\n");return 2;}
   source(CORE_MAP,"native/resources/map.pack");source(CORE_FIGURES,"native/resources/figures.bin");source(CORE_TABLES,"native/resources/tables.bin");
-  source(CORE_GRIDS,getenv("FULLER_GRIDS")?getenv("FULLER_GRIDS"):"public/fuller.bin");source(CORE_LAND,getenv("LAND_BITS")?getenv("LAND_BITS"):"public/land.bin");
+  source(CORE_GRIDS,getenv("FULLER_GRIDS")?getenv("FULLER_GRIDS"):"public/fuller.bin");source(CORE_LAND,getenv("LAND_BITS")?getenv("LAND_BITS"):"native/resources/land.pack");
   // The input text, whole.
   size_t cap=1<<16,len=0;char *text=malloc(cap);
   for(;;){if(len==cap){cap*=2;text=realloc(text,cap);}const size_t got=fread(text+len,1,cap-len,stdin);if(!got)break;len+=got;}
