@@ -207,16 +207,15 @@ static const uint8_t *map_row(Tiles *t,int j){
   for(int k=0;k<MAP_ROWS;k++)if(t->row_j[k]==j)return t->rows[k];
   t->failed=true;return t->rows[0];
 }
-// Land (0..256) and height (Q8 metres) bilinear at a place.
-static int32_t land_at(Tiles *t,Place px,Place py){
-  const uint8_t *r0=map_row(t,py.i),*r1=map_row(t,py.i+1);
+// Land (0..256) and height (Q8 metres) bilinear at a place, between the
+// cell rows under and past it (fetched once a pixel row).
+static inline int32_t land_at(const uint8_t *r0,const uint8_t *r1,Place px,int32_t fy){
   const int32_t c00=r0[px.i]>>4,c10=r0[px.i+1]>>4,c01=r1[px.i]>>4,c11=r1[px.i+1]>>4;
-  return (((c00*(256-px.f)+c10*px.f)*(256-py.f)+(c01*(256-px.f)+c11*px.f)*py.f)+128)>>8;
+  return (((c00*(256-px.f)+c10*px.f)*(256-fy)+(c01*(256-px.f)+c11*px.f)*fy)+128)>>8;
 }
-static int32_t height_at(Tiles *t,Place px,Place py){
-  const int16_t *h=t->pack.height;const uint8_t *r0=map_row(t,py.i),*r1=map_row(t,py.i+1);
+static inline int32_t height_at(const int16_t *h,const uint8_t *r0,const uint8_t *r1,Place px,int32_t fy){
   const int32_t h00=h[r0[px.i]&15],h10=h[r0[px.i+1]&15],h01=h[r1[px.i]&15],h11=h[r1[px.i+1]&15];
-  return ((h00*(256-px.f)+h10*px.f)*(256-py.f)+(h01*(256-px.f)+h11*px.f)*py.f)>>8;
+  return ((h00*(256-px.f)+h10*px.f)*(256-fy)+(h01*(256-px.f)+h11*px.f)*fy)>>8;
 }
 
 // ---------------------------------------------------------------- relief smoothing
@@ -231,10 +230,14 @@ typedef struct {int32_t t[3][W];int rows;EmitFn emit;void *ctx;int32_t *out;} Sm
 static int32_t mean_of(int32_t sum,int n){return sum>=0?(sum+n/2)/n:-((-sum+n/2)/n);}
 static void smooth_push(Smooth *s,const int32_t *in){
   const int r=s->rows++;int32_t *t=s->t[r%3];
-  for(int x=0;x<W;x++){int32_t sum=0;int n=0;for(int d=-1;d<=1;d++){const int xx=x+d;if(xx>=0&&xx<W){sum+=in[xx];n++;}}t[x]=mean_of(sum,n);}
+  t[0]=mean_of(in[0]+in[1],2);
+  for(int x=1;x<W-1;x++)t[x]=mean_of(in[x-1]+in[x]+in[x+1],3);
+  t[W-1]=mean_of(in[W-2]+in[W-1],2);
   if(r>=1){
-    int32_t *out=s->out;const int y=r-1;
-    for(int x=0;x<W;x++){int32_t sum=0;int n=0;for(int d=-1;d<=1;d++){const int yy=y+d;if(yy>=0&&yy<H&&yy<=r){sum+=s->t[yy%3][x];n++;}}out[x]=mean_of(sum,n);}
+    // Row r-1 from rows r-2 (if any), r-1 and r.
+    int32_t *out=s->out;const int y=r-1;const int32_t *a=y>0?s->t[(y-1)%3]:NULL,*b=s->t[y%3],*c=s->t[r%3];
+    if(a)for(int x=0;x<W;x++)out[x]=mean_of(a[x]+b[x]+c[x],3);
+    else for(int x=0;x<W;x++)out[x]=mean_of(b[x]+c[x],2);
     s->emit(s->ctx,y,out);
   }
 }
@@ -277,6 +280,8 @@ typedef struct {
   Smooth s1,s2,s3;
   uint8_t land[LAND_RING][W/8+1];int land_rows; // land bits of pixel rows computed
   uint8_t hdist[LAND_RING][W/2];              // each pixel's distance along its row to land, 0-6, a nibble each
+  #define MAT_RING 4
+  uint8_t mat[MAT_RING][W];int mat_y[MAT_RING];   // materials of the rows being finalised (-1 none)
   uint8_t space[LAND_RING][W/8+1];            // a Fuller sheet's pixels off its net
   int32_t e3[E3_RING][W];int e3_rows;         // smoothed relief rows emitted (Q8 metres)
   int32_t row[W];                             // the sampled row, then each stage's output
@@ -316,11 +321,19 @@ static int shore_distance(const Ground *g,int x,int y){
   }
   return best;
 }
-static int material(const Ground *g,int x,int y){
+static int material_of(const Ground *g,int x,int y){
   if(is_land(g,x,y))return M_LAND;
   const int d=sea_distance(g,x,y);
   return d<=1?M_COAST:d==4?M_WAVE:M_SEA;
 }
+// A row's materials, found once (finalise_row reads each row three times,
+// as a row and as its neighbours').
+static const uint8_t *material_row(Ground *g,int y){
+  const int k=y%MAT_RING;
+  if(g->mat_y[k]!=y){for(int x=0;x<W;x++)g->mat[k][x]=(uint8_t)material_of(g,x,y);g->mat_y[k]=y;}
+  return g->mat[k];
+}
+#define material(g,x,y) (material_row((Ground *)(g),(y))[(x)])
 // The contours: every level; on the whole-day chart 2,000 and 4,000 m only.
 static const int WIDE_CONTOURS[2]={2000,4000};
 static int level_of_in(int32_t v,const int *levels,int n){int k=0;for(int c=0;c<n;c++)if(v>=levels[c]*256)k++;return k;}
@@ -368,6 +381,7 @@ static void ground_begin(Ground *g,const Cam *cam,const Plate *pal,RunSink *sink
   g->cam=cam;g->pal=pal;g->sink=sink;
   g->s1.emit=emit1;g->s1.ctx=g;g->s2.emit=emit2;g->s2.ctx=g;g->s3.emit=emit3;g->s3.ctx=g;
   g->s1.out=g->s2.out=g->s3.out=g->row;
+  for(int k=0;k<MAT_RING;k++)g->mat_y[k]=-1;
 }
 static bool ground_row_done(Ground *g);
 static int ground_rows_end(Ground *g);
@@ -386,13 +400,16 @@ static int ground_step(Ground *g,Tiles *t,int budget){
     // sampled all the same, is smoothed into the band's edge.
     const bool band=y>=cam->top&&y<=cam->bottom;
     const Place ra=place_lat(t,glat(cam,y+.25)),rm=place_lat(t,glat(cam,y+.5)),rb=place_lat(t,glat(cam,y+.75));
+    // The cell rows under this pixel row, in order down the map.
+    const uint8_t *ra0=map_row(t,ra.i),*ra1=map_row(t,ra.i+1),*rm0=map_row(t,rm.i),*rm1=map_row(t,rm.i+1),*rb0=map_row(t,rb.i),*rb1=map_row(t,rb.i+1);
+    const int16_t *heights=t->pack.height;
     int32_t *e0=g->row;uint8_t *land=g->land[y%LAND_RING];memset(land,0,W/8+1);memset(g->space[y%LAND_RING],0,W/8+1);
     for(int x=0;x<W;x++){
       if(band){
-        const int32_t c=land_at(t,g->col[0][x],ra)+land_at(t,g->col[2][x],ra)+land_at(t,g->col[0][x],rb)+land_at(t,g->col[2][x],rb);
+        const int32_t c=land_at(ra0,ra1,g->col[0][x],ra.f)+land_at(ra0,ra1,g->col[2][x],ra.f)+land_at(rb0,rb1,g->col[0][x],rb.f)+land_at(rb0,rb1,g->col[2][x],rb.f);
         if(c>=512)land[x>>3]|=(uint8_t)(1<<(x&7));
       }
-      e0[x]=height_at(t,g->col[1][x],rm);
+      e0[x]=height_at(heights,rm0,rm1,g->col[1][x],rm.f);
     }
     if(t->failed)return -1;
     row_distances(g,y);
