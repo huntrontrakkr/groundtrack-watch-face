@@ -38,6 +38,10 @@
   .actions button{flex:1;padding:14px;border:0;font-weight:600}
   #save{background:var(--route);color:#fff}
   #cancel{background:var(--paper);color:var(--ink);border:1px solid var(--line)}
+  .preview{position:sticky;top:0;z-index:1;display:flex;gap:10px;justify-content:center;padding:10px 0 8px;background:var(--water)}
+  .preview figure{margin:0;text-align:center;flex:0 1 200px}
+  .preview canvas{width:100%;max-width:200px;aspect-ratio:200/228;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .preview figcaption{font-size:12px;opacity:.7;margin-top:4px}
 </style>
 </head>
 <body>
@@ -45,6 +49,11 @@
   <h1 id="title">Groundtrack Enroute</h1>
   <p>The watch draws each hour's chart from its own map, with the Sun, Moon and satellites the phone sends ahead. Saving draws this hour again.</p>
 </header>
+<div class="preview" aria-label="A preview of the face in these settings">
+  <figure><canvas id="preview" width="200" height="228"></canvas><figcaption>The watch, this minute</figcaption></figure>
+  <figure><canvas id="preview-screen" width="200" height="228"></canvas><figcaption>On the watch's screen</figcaption></figure>
+</div>
+<p id="preview-note" class="note" style="text-align:center"></p>
 <form id="form">
   <fieldset><legend>Track</legend>
     <label class="row enroute"><input type="radio" name="body" value="sun"><span class="name">Sun<span class="note">Its ground point, where it stands overhead</span></span></label>
@@ -61,7 +70,8 @@
     <label class="row"><input type="radio" name="readout" value="flag"><span class="name">Minute flag<span class="note">A pennant on a staff from the body, with the minutes</span></span></label>
     <label class="row enroute"><input type="radio" name="readout" value="callout"><span class="name">Time callout<span class="note">The time in full, hung from a leader</span></span></label>
   </fieldset>
-  <fieldset class="enroute"><legend>Callout time</legend>
+  <fieldset><legend>Time figures</legend>
+    <p class="note">The time callout's, and on Plotboard the clock's</p>
     <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Four figures, minutes outlined</span></label>
     <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Minutes in route ink</span></label>
     <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Minutes in Departure Mono</span></label>
@@ -192,6 +202,70 @@
     events.push({epoch:t,title:title.slice(0,40)});form.elements.title.value='';showEvents();
   });
   function close(result){location.href='pebblejs://close#'+encodeURIComponent(result);}
+  // ---- The preview: the watch's own core (compiled to WebAssembly) builds
+  // and draws this hour, this minute, in the settings as they are on this
+  // page, from the hour's chart input the phone made; beside it the same
+  // frame as the watch's reflective screen shows its colours (Pebble's
+  // Sunlight mapping). Bodies the phone had no data for are not previewed.
+  var PV=__PREVIEW__,W=200,H=228,core=null,framePtr=0;
+  var NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock'],TRANSFERS=['off','vernier','comb','chevrons'],CORNERS=['day','point','light'];
+  function note(text){document.getElementById('preview-note').textContent=text||'';}
+  function bytesOf(b64){var bin=atob(b64),out=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
+  function boot(){
+    if(!PV||!window.WebAssembly||!window.DecompressionStream)return Promise.reject(new Error('This phone cannot show the preview.'));
+    var gz=new Blob([bytesOf(PV.assets.gz)]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(gz).arrayBuffer().then(function(buf){
+      var all=new Uint8Array(buf),wasm=null;
+      PV.assets.parts.forEach(function(p){if(p[0]<0)wasm=all.subarray(p[1],p[1]+p[2]);});
+      return WebAssembly.instantiate(wasm,{wasi_snapshot_preview1:{fd_close:function(){return 0;},fd_seek:function(){return 0;},fd_write:function(){return 0;}}}).then(function(r){
+        core=r.instance.exports;
+        PV.assets.parts.forEach(function(p){if(p[0]<0)return;var at=core.core_alloc(p[2]);new Uint8Array(core.memory.buffer,at,p[2]).set(all.subarray(p[1],p[1]+p[2]));core.core_source(p[0],at,p[2]);});
+        framePtr=core.core_alloc(W*H);
+      });
+    });
+  }
+  // The hour's chart input with this page's settings in it.
+  function inputFor(text){
+    var lines=text.split('\n'),readout=picked('readout')||'off';
+    function set(key,value){if(value==null||value<0)return;for(var i=0;i<lines.length;i++)if(lines[i].split(' ')[0]===key){lines[i]=key+' '+value;return;}lines.push(key+' '+value);}
+    set('plate',config.plates.map(function(p){return p[0];}).indexOf(picked('plate')));
+    set('flag',readout==='flag'?1:0);set('readout',readout==='flag'?1:readout==='callout'?2:0);
+    set('numerals',NUMERALS.indexOf(picked('numerals')));set('zonebody',picked('margin')==='body'?1:0);
+    if(form.elements.tape)set('tape',TAPES.indexOf(picked('tape')));
+    if(form.elements.transfer)set('transfer',TRANSFERS.indexOf(picked('transfer')));
+    set('figures',(config.figureSets||[]).map(function(f){return f[0];}).indexOf(picked('figures')));
+    set('corner',CORNERS.indexOf(picked('corner')));set('clock24',form.elements.clock24.checked?1:0);
+    return lines.join('\n');
+  }
+  function paint(){
+    if(!core)return;
+    var body=picked('body'),text=PV.texts[body],shown=body;
+    if(!text){shown=Object.keys(PV.texts)[0];text=PV.texts[shown];}
+    var box=document.querySelector('.preview');
+    if(!text){box.style.display='none';note('No preview yet: the phone has not fetched this satellite\'s orbit. It will after saving.');return;}
+    box.style.display='';
+    var bytes=new TextEncoder().encode(inputFor(text)),at=core.core_alloc(bytes.length);
+    new Uint8Array(core.memory.buffer,at,bytes.length).set(bytes);
+    // (What was drawn, for tests to draw again.)
+    window.previewDrawn={input:new TextDecoder().decode(bytes),minute:PV.minute};
+    var ok=core.core_build(at,bytes.length,0);core.core_free(at);
+    if(!ok){note('No preview for this hour.');return;}
+    core.core_render(0,PV.minute,framePtr);
+    var frame=new Uint8Array(core.memory.buffer,framePtr,W*H);
+    [['preview',false],['preview-screen',true]].forEach(function(p){
+      var canvas=document.getElementById(p[0]),ctx=canvas.getContext('2d'),img=ctx.createImageData(W,H);
+      for(var i=0;i<W*H;i++){
+        var c=frame[i],r=((c>>4)&3)*85,g=((c>>2)&3)*85,b=(c&3)*85;
+        if(p[1]){var hx='#'+[r,g,b].map(function(v){return (v<16?'0':'')+v.toString(16).toUpperCase();}).join(''),m=PV.sunlight[hx];if(m){r=parseInt(m.slice(1,3),16);g=parseInt(m.slice(3,5),16);b=parseInt(m.slice(5,7),16);}}
+        img.data[4*i]=r;img.data[4*i+1]=g;img.data[4*i+2]=b;img.data[4*i+3]=255;
+      }
+      ctx.putImageData(img,0,0);
+    });
+    var names={sun:'the Sun',moon:'the Moon'};
+    note(shown===body?'':'The phone has no data yet for this body: '+(names[shown]||'its satellite')+' is shown.');
+  }
+  boot().then(paint,function(error){document.querySelector('.preview').style.display='none';console.log(error.message);});
+  form.addEventListener('change',paint);
   document.getElementById('cancel').addEventListener('click',function(){close('CANCELLED');});
   document.getElementById('save').addEventListener('click',function(){
     var mode=picked('home'),homeValue='';

@@ -42,6 +42,24 @@ try{
 
   // The current settings, the twelve plates and the zone's preset home.
   assert.equal(await page.locator('input[name=plate]').count(),12);
+  // The preview: the face sketched in the settings, and as the watch's
+  // reflective screen shows its colours; it follows the settings.
+  const pixels=id=>page.evaluate(id=>{const c=document.getElementById(id);return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);},id);
+  await page.waitForFunction(()=>window.previewDrawn,null,{timeout:20000});
+  const colours=await pixels('preview'),screen=await pixels('preview-screen');
+  // Exactly the watch's frame: the same input drawn by the core here.
+  {const {input,minute}=await page.evaluate(()=>window.previewDrawn);
+  const {loadCore}=await import('../src/core.js'),read=f=>new Uint8Array(readFileSync(f));
+  const core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack')});
+  core.build(input,0);const frame=core.render(minute,0);let differ=0;
+  for(let i=0;i<200*228;i++){const c=frame[i];if(colours[4*i]!==((c>>4)&3)*85||colours[4*i+1]!==((c>>2)&3)*85||colours[4*i+2]!==(c&3)*85)differ++;}
+  assert.equal(differ,0,'the preview is the core\'s own frame');}
+  assert.equal(colours.length,200*228*4);
+  assert.ok(new Set(colours.filter((v,i)=>i%4===0)).size>2,'the preview is drawn');
+  assert.notDeepEqual(colours,screen,'the screen shows the colours muted');
+  await page.check('input[name=plate][value=console]');
+  assert.notDeepEqual(await pixels('preview'),colours,'the preview follows the plate');
+  await page.check('input[name=plate][value=crt]');
   assert.equal(await page.locator('input[name=plate]:checked').getAttribute('value'),'crt');
   assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
   // Enroute's: the Sun, the Moon, GPS and QZSS (Plotboard has the fast satellites).

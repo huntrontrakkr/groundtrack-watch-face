@@ -31,6 +31,13 @@ import {clockParts} from '../../src/render.js';
 import {registerNominal} from '../../src/nominal.js';
 import {uniqueCode} from '../../src/events.js';
 import CONFIG_PAGE from './config.html';
+// The settings page's preview runs the watch's own core on this hour's
+// chart input (src/chart-input.js), as the watch would draw it, beside the
+// same frame as the watch's reflective screen shows its colours (Pebble's
+// Sunlight mapping).
+import PAGE_ASSETS from 'groundtrack-page-assets';
+import SUNLIGHT from '../../data/sunlight-colors.json';
+import {chartInput} from '../../src/chart-input.js';
 import {devicePosition} from './device-position.js';
 
 // GPS and QZSS have nominal orbits to fall back on, as the study does.
@@ -243,6 +250,24 @@ function currentBody(){var b=setting('body',FIRST);return BODIES.indexOf(b)>=0?b
 // A data-URL page can't reliably ask for the phone's location itself (as
 // Dymaxion found), so the phone takes a coarse fix first, waiting at most
 // five seconds, and passes it in, rounded to 0.01°.
+// The preview's inputs: this hour's chart for the body chosen and (where
+// the face draws them) the Sun and Moon, in the settings as they are; the
+// page changes their settings' lines itself. A body without its data (a
+// satellite's elements not yet fetched) has none.
+function previewInputs(){
+  var now=Date.now(),timeZone=zone(),parts=clockParts(now,timeZone),start=Math.floor(now/60000)*60000-Number(parts.m)*60000;
+  var bodies=[currentBody()];if(FACE!=='plotboard')['sun','moon'].forEach(function(b){if(bodies.indexOf(b)<0)bodies.push(b);});
+  var texts={};
+  bodies.forEach(function(body){
+    if(body.indexOf('sat:')===0){var kept=null;try{kept=JSON.parse(localStorage.getItem('tle-'+body.slice(4)));}catch(error){}if(kept&&kept.text)try{registerElements(kept.text,'celestrak');}catch(error){}}
+    try{
+      texts[body]=chartInput({body:body,start:start,plate:setting('plate','enroute'),readout:readout()==='off'?false:readout(),numerals:setting('numerals','even'),margin:setting('margin','utc'),
+        span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+        events:storedEvents(),clock24:setting('clock24','1')!=='0',zone:timeZone,home:home(timeZone),projection:FACE==='fuller'?'fuller':'chart'});
+    }catch(error){console.log('No preview for '+body+': '+error.message);}
+  });
+  return {assets:PAGE_ASSETS,sunlight:SUNLIGHT.colors,texts:texts,minute:Number(parts.m)};
+}
 Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
@@ -252,7 +277,7 @@ Pebble.addEventListener('showConfiguration',function(){
       face:FACE,bodies:BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),figureSets:FIGURE_SETS,preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
-    var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');});
+    var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');}).replace('__PREVIEW__',function(){return JSON.stringify(previewInputs());});
     Pebble.openURL('data:text/html;charset=utf-8,'+encodeURIComponent(page));
   }
   setTimeout(function(){open(null);},5000);
