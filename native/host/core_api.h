@@ -19,7 +19,7 @@ void core_source(int kind,const uint8_t *data,size_t length);
 // Builds the hour from the input text (src/chart-input.js: key value
 // lines, segments as hex) into one of CORE_SLOTS scenes, freeing what that
 // slot held. 1 on success.
-#define CORE_SLOTS 8
+#define CORE_SLOTS 12
 int core_build(const char *text,size_t length,int slot);
 // Why the last build failed.
 const char *core_failure(void);

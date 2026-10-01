@@ -54,7 +54,22 @@ export const PLATES={
     water:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),land:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),coast:inks(['#000000','#000000','#000000']),
     contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000000','#000000','#000000']),grid:inks(['#000000','#000000','#000000']),
     route:inks(['#000000','#000000','#000000']),ink:inks(['#000000','#000000','#000000']),mark:inks(['#000000','#000000','#000000']),
-    screen:hex('#000000'),space:hex('#FFFFFF'),spaceInk:hex('#000000')}
+    screen:hex('#000000'),space:hex('#FFFFFF'),spaceInk:hex('#000000')},
+  // An engineer's blueprint: white linework on a mid blue, land a lighter
+  // blue than the sea, the route in a yellow pencil; night deepens the blue.
+  blueprint:{name:'Blueprint',note:'Engineering drawing: white line on blue',night:'zones',terminator:hex('#AAFFFF'),
+    water:inks(['#0055AA','#0000AA','#000055']),land:inks(['#0055FF','#0055AA','#0000AA']),coast:inks(['#FFFFFF','#FFFFFF','#AAFFFF']),
+    contour:inks(['#AAFFFF','#55AAFF','#55AAFF']),shelf:inks(['#55AAFF','#0055FF','#0055AA']),grid:inks(['#55AAFF','#0055FF','#0055AA']),
+    route:inks(['#FFFF00','#FFFF00','#FFFF55']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000055'),spaceInk:hex('#FFFFFF')},
+  // The amber of plasma and early flight displays: amber at a few
+  // brightnesses on black; night dims every ink a step, dusk dithered
+  // between, with the terminator drawn.
+  amber:{name:'Amber',note:'Plasma display: amber on black, night dimmed',night:'zones',terminator:hex('#FFAA00'),
+    water:inks(['#000000','#000000','#000000']),land:inks(['#550000','#550000','#000000']),coast:inks(['#FFAA00','#AA5500','#AA5500']),
+    contour:inks(['#AA5500','#550000','#550000']),shelf:inks(['#550000','#550000','#550000']),grid:inks(['#AA5500','#550000','#550000']),
+    route:inks(['#FFFF55','#FFFF55','#FFAA00']),ink:inks(['#FFAA55','#FFAA55','#FFAA00']),mark:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),
+    space:hex('#000000'),spaceInk:hex('#FFAA00')}
 };
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;

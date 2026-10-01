@@ -17,7 +17,7 @@ Contour relief, the continental shelf and the coastline come from public-domain 
 
 A home station gives the day's sunrise and sunset, or the satellite's next pass overhead. The margins carry the local date, Zulu time and the day of the year.
 
-Seven plates: Enroute, Sectional, Console, Hypsometric, Night red, Green CRT and Sunlight.
+Nine plates: Enroute, Sectional, Console, Hypsometric, Night red, Green CRT, Sunlight, Blueprint and Amber.
 
 The watch draws each hour's chart itself and repaints only what moves each minute. The phone sends the Sun and Moon weeks ahead, and a satellite's orbit a few days ahead, so the face keeps going without it.
 

@@ -11,7 +11,7 @@ import network from '../data/tracking-stations.json' with {type:'json'};
 import {localDate} from './chart-text.js';
 import {SCALE} from './plates.js';
 
-export const W=200,H=228,SLOTS=8;
+export const W=200,H=228,SLOTS=12;
 // core_layout's order (native/host/core_api.c).
 const LAYOUT=['scene_size','point_size','minute_size','flags','body','view','forward','hour_start','heavy','fuller','zulu_x','zulu_baseline','top_x','top_baseline','height_right','height_baseline',
   'tape_x0','tape_x1','tape_baseline','tape_lo','tape_hi','home_x','home_y','home_box','mark_count','callout_left','callout_top','callout_bottom','hour_text','numerals',

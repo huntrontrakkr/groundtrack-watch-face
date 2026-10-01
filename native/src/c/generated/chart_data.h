@@ -13,7 +13,7 @@
 static const int CHART_CONTOURS[6]={500,1000,2000,3000,4000,5000};
 
 // native/resources/tables.bin: where its parts begin, and their sizes.
-#define TABLE_PLATES 7
+#define TABLE_PLATES 9
 #define TABLE_STATIONS 24
 #define TABLE_METERS_AT 4
 #define TABLE_PLATE_AT(k) (1028+100*(k))

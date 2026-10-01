@@ -40,8 +40,8 @@ try{
   cdp.on('Page.frameRequestedNavigation',e=>closes.push(e.url));
   await page.setContent(html);
 
-  // The current settings, the seven plates and the zone's preset home.
-  assert.equal(await page.locator('input[name=plate]').count(),7);
+  // The current settings, the nine plates and the zone's preset home.
+  assert.equal(await page.locator('input[name=plate]').count(),9);
   assert.equal(await page.locator('input[name=plate]:checked').getAttribute('value'),'crt');
   assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
   // Enroute's: the Sun, the Moon, GPS and QZSS (Plotboard has the fast satellites).

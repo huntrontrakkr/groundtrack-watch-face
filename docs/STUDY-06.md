@@ -85,6 +85,8 @@ Tests check the following:
 | **Night red** | red cockpit lighting | outlines on black; night dotted, with a dashed terminator | dark red contours | light red | red |
 | **Green CRT** | mission control console phosphor | green land on black; night in scan lines, with a dashed terminator | green contours and coast | pale green | green |
 | **Sunlight** | one-color chart, for bright sun | white, with coastal waterlines on the zoomed charts | dotted black contours | black | black, cased in white; heavier on the Fuller sheets |
+| **Blueprint** | an engineer's blueprint | light blue land on mid-blue water; night deepens the blues, with a dashed terminator | pale cyan contours, white coast | white | yellow |
+| **Amber** | plasma and early flight displays | dark amber land on black; night dims every ink a step, with a dashed terminator | amber contours and coast | light amber | pale yellow |
 
 ## Data
 
