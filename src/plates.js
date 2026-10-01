@@ -69,7 +69,27 @@ export const PLATES={
     water:inks(['#000000','#000000','#000000']),land:inks(['#550000','#550000','#000000']),coast:inks(['#FFAA00','#AA5500','#AA5500']),
     contour:inks(['#AA5500','#550000','#550000']),shelf:inks(['#550000','#550000','#550000']),grid:inks(['#AA5500','#550000','#550000']),
     route:inks(['#FFFF55','#FFFF55','#FFAA00']),ink:inks(['#FFAA55','#FFAA55','#FFAA00']),mark:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),
-    space:hex('#000000'),spaceInk:hex('#FFAA00')}
+    space:hex('#000000'),spaceInk:hex('#FFAA00')},
+  // After the airbrushed shaded relief of the Apollo-era Lunar Astronautical
+  // Charts: the land modelled by light from the northwest in sepia, dithered
+  // like an airbrush, instead of by contours or layer tints; white sea.
+  // Its tints are the light classes, deep shadow to full light (their
+  // heights unused: the slope chooses).
+  airbrush:{name:'Airbrush',note:'Apollo-era chart: relief shaded in light and shadow',night:'screen',shade:true,
+    tints:[[300,hex('#555500')],[500,hex('#AAAA55')],[1000,hex('#FFFFAA')],[2000,hex('#FFFFFF')],[Infinity,hex('#FFFFFF')]],
+    water:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),land:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),coast:inks(['#555500','#555500','#555500']),
+    contour:inks(['#AAAA55','#AAAA55','#AAAA55']),shelf:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),grid:inks(['#AAAA55','#AAAA55','#AAAA55']),
+    route:inks(['#AA0000','#AA0000','#AA0000']),ink:inks(['#550000','#550000','#550000']),mark:inks(['#000000','#000000','#000000']),
+    screen:hex('#555500'),space:hex('#FFFFFF'),spaceInk:hex('#550000')},
+  // The world as points of light, as on a mission wall: a lattice of dots
+  // whose size is the land's height and whose brightness falls with the
+  // night; the sea a grid of faint points.
+  dotmatrix:{name:'Dot matrix',note:'Mission wall: the world in points of light',night:'zones',lattice:true,
+    tints:[[500,hex('#00AAAA')],[2000,hex('#55FFFF')],[Infinity,hex('#FFFFFF')]],
+    water:inks(['#0000AA','#000055','#000055']),land:inks(['#55FFFF','#00AAAA','#005555']),coast:inks(['#00AAAA','#00AAAA','#005555']),
+    contour:inks(['#00AAAA','#00AAAA','#005555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#0000AA','#0000AA','#000055']),
+    route:inks(['#FFAA00','#FFAA00','#FFAA00']),ink:inks(['#FFFFFF','#AAFFFF','#AAFFFF']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
+    space:hex('#000000'),spaceInk:hex('#55FFFF')}
 };
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;

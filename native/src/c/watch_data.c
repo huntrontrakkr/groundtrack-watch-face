@@ -1,5 +1,6 @@
 // See watch_data.h.
 #include "watch_data.h"
+#include "fmath.h"
 #include "chart.h"
 #include "segments.h"
 #include "map_pack.h"
@@ -67,7 +68,7 @@ void pass_blocks_store(const uint8_t *b,size_t n,const WatchSettings *s){
 }
 // The block holding t, if kept for these settings: its length, or 0.
 static int pass_block_load(int64_t t,const WatchSettings *s,uint8_t *r){
-  const int64_t block=t/PASS_BLOCK_SECONDS*PASS_BLOCK_SECONDS;uint8_t w[PASS_WHOSE];whose(w,s);
+  const int64_t block=q64(t,PASS_BLOCK_SECONDS)*PASS_BLOCK_SECONDS;uint8_t w[PASS_WHOSE];whose(w,s);
   const int n=persist_read_data(PASS_KEY+(uint32_t)((block/PASS_BLOCK_SECONDS)%8),r,256);
   return n>=PASS_WHOSE+5&&!memcmp(r,w,PASS_WHOSE)&&le32(r+PASS_WHOSE)==block?n:0;
 }
@@ -75,7 +76,7 @@ static int pass_block_load(int64_t t,const WatchSettings *s,uint8_t *r){
 static bool sat_segment_load(int32_t norad,int64_t t,SatSegment *seg){
   static const int32_t spans[2]={3600,21600};
   for(int k=0;k<2;k++){
-    uint8_t b[SAT_SEGMENT_BYTES];const int32_t start=(int32_t)(t/spans[k]*spans[k]);
+    uint8_t b[SAT_SEGMENT_BYTES];const int32_t start=(int32_t)(q64(t,spans[k])*spans[k]);
     if(persist_read_data(SAT_KEY+(uint32_t)(((start/spans[k])%SAT_RING+SAT_RING)%SAT_RING),b,sizeof b)!=(int)sizeof b)continue;
     if(le32(b)==norad&&le32(b+4)==start&&le32(b+8)==spans[k])return sat_segment_decode(b,seg);
   }
@@ -182,7 +183,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
     in.events[in.event_count].t=t;memcpy(in.events[in.event_count].name,e+k+4,5);in.events[in.event_count].name[5]=0;in.event_count++;
   }}
   const int64_t from=in.view==VIEW_DAY&&in.day_start<in.start-2400?in.day_start:in.start-2400,to=in.view==VIEW_DAY&&in.day_end>in.start+6000?in.day_end:in.start+6000;
-  for(int64_t d=from/86400;d<=to/86400&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
+  for(int64_t d=q64(from,86400);d<=q64(to,86400)&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
   if(sat){
     // A satellite: its segments over the track, and home's passes for the
     // hour.
@@ -193,7 +194,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
       t=days.sat[days.nsat].start+(int64_t)days.sat[days.nsat].span;days.nsat++;
     }
     for(int k=0;k<2;k++){
-      const int64_t block=(in.start+k*3599)/PASS_BLOCK_SECONDS*PASS_BLOCK_SECONDS;
+      const int64_t block=q64(in.start+k*3599,PASS_BLOCK_SECONDS)*PASS_BLOCK_SECONDS;
       if(k&&days.pass_len[0]&&block==le32(days.pass[0]+PASS_WHOSE))break;
       days.pass_len[k]=pass_block_load(block,s,days.pass[k]);
     }

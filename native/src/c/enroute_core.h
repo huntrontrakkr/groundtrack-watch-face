@@ -100,6 +100,10 @@ typedef struct {
   // A Fuller sheet's grids (NULL for the other charts).
   EnrFuller *fuller;
   bool heavy;
+  // The ground drawn as a lattice of dots (the Dot matrix plate): 4-pixel
+  // cells, a dot in each whose size is the height's tint; water a single
+  // dim point; by day the tints' colours, at dusk and night the land's.
+  bool lattice;
   int8_t forward;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;

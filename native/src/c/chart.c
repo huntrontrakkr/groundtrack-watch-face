@@ -103,7 +103,7 @@ static bool body_place(const ChartSources *src,int body,int64_t t,double *lat,do
     sat_segment_position(seg,t,lat,lon,altitude);return true;
   }
   *altitude=0;
-  const Segment *seg=src->segment(src->segment_context,(int32_t)(t/86400));
+  const Segment *seg=src->segment(src->segment_context,(int32_t)q64(t,86400));
   if(!seg)return false;
   seg_position(seg,body==1,t,lat,lon);return true;
 }
@@ -287,6 +287,7 @@ typedef struct {
   int32_t row[W];                             // the sampled row, then each stage's output
   Place col[3][W];                            // the map's place under each column, at x + .25, .5 and .75
   int done;                                   // rows finalised
+  int32_t shade_step;                         // shaded relief: Q8 metres a step of light
 } Ground;
 static void emit2(void *ctx,int row,const int32_t *v){Ground *g=ctx;(void)row;smooth_push(&g->s3,v);}
 static void emit1(void *ctx,int row,const int32_t *v){Ground *g=ctx;(void)row;smooth_push(&g->s2,v);}
@@ -371,6 +372,23 @@ static void finalise_row(Ground *g,int y){
     int ground=land?G_LAND:G_WATER;
     if(land&&pal->tint_count){int k=0;while(k<pal->tint_count-1&&!(relief<pal->tint_q[k]))k++;ground=G_TINT0+k;}
     else if(!land&&pal->depth_count){int k=0;while(k<pal->depth_count-1&&!(relief>=pal->depth_q[k]))k++;ground=G_DEPTH0+k;}
+    // Shaded relief: the land's light from its slope (the smoothed relief,
+    // held at sea level so the coast does not fall away), lit from the
+    // northwest and dithered like an airbrush: classes 0 (deep shadow) to
+    // 4 (full light), 2 flat. Contours give way to it.
+    if(land&&(pal->flags&PLATE_SHADE)){
+      #define AT(xx,yy) ({const int32_t v_=g->e3[(yy)%E3_RING][(xx)];v_>0?v_:0;})
+      const int xl=x>0?x-1:x,xr=x<W-1?x+1:x,yu=y>0?y-1:y,yd=y<H-1?y+1:y;
+      const int32_t gx=AT(xr,y)-AT(xl,y),gy=AT(x,yd)-AT(x,yu);
+      #undef AT
+      // A slope facing the northwest rises to the southeast: gx + gy > 0.
+      static const int8_t BAYER16[16]={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
+      const int32_t v=(gx+gy)*16/g->shade_step+BAYER16[(y&3)*4+(x&3)]-8;
+      int k=2+(v>=0?(v+8)/16:-((-v+7)/16));k=k<0?0:k>4?4:k;
+      ground=G_TINT0+k;if(overlay==L_CONTOUR)overlay=0;
+    }
+    // The lattice is the ground alone: its dots are the coast and relief.
+    if(pal->flags&PLATE_LATTICE)overlay=0;
     g->crow[x]=(uint8_t)(overlay<<4|ground);(void)i;
   }
   sink_row(g->sink,y,g->crow);
@@ -382,6 +400,10 @@ static void ground_begin(Ground *g,const Cam *cam,const Plate *pal,RunSink *sink
   g->s1.emit=emit1;g->s1.ctx=g;g->s2.emit=emit2;g->s2.ctx=g;g->s3.emit=emit3;g->s3.ctx=g;
   g->s1.out=g->s2.out=g->s3.out=g->row;
   for(int k=0;k<MAT_RING;k++)g->mat_y[k]=-1;
+  // A step of light: 90 m a pixel pair on the hour charts, more where the
+  // chart is smaller and a level boundary is crossed in fewer pixels (to
+  // four times at the world band's scale).
+  if(pal->flags&PLATE_SHADE){const double sc=cam->scale>0?cam->scale:2,f=1+2/sc;g->shade_step=(int32_t)(90*256*(f>4?4:f));}
 }
 static bool ground_row_done(Ground *g);
 static int ground_rows_end(Ground *g);
@@ -445,7 +467,7 @@ typedef struct {uint8_t *band[PLANE_BANDS];} Plane;
 #define PLANE_AT(p,i) (PLANE_ROW(p,(i)/W)[(i)%W])
 // wrap: the plane is the world round (the sliding band): columns wrap.
 typedef struct {const Plane *c;bool early;int stage;bool wrap;} Canvas;
-static int wrap_x(const Canvas *cv,int x){return cv->wrap?((x%W)+W)%W:x;}
+static int wrap_x(const Canvas *cv,int x){return FACE_WORLD&&cv->wrap?((x%W)+W)%W:x;}
 static void plot(Canvas *cv,double fx,double fy,int layer){
   const int x=wrap_x(cv,(int)js_round(fx)),y=(int)js_round(fy);
   if(x<0||y<0||x>=W||y>=H)return;
@@ -698,7 +720,7 @@ static int make_track(const ChartInput *in,const ChartSources *src,TrackPoint *t
 }
 static void ground_free(ChartBuild *b){
   const ChartSources *src=&b->src;
-  if(b->tiles&&b->tiles->pack.tables)map_pack_close(&b->tiles->pack,src->release);
+  if(FACE_CHART&&b->tiles&&b->tiles->pack.tables)map_pack_close(&b->tiles->pack,src->release);
   src->release(b->tiles);b->tiles=NULL;src->release(b->ground);b->ground=NULL;
 }
 static void plane_free(ChartBuild *b){for(int k=0;k<PLANE_BANDS;k++){b->src.release(b->plane.band[k]);b->plane.band[k]=NULL;}}
@@ -724,9 +746,9 @@ static bool fuller_begin(ChartBuild *b){
   const bool day=in->view==2,sat=in->body>=2;
   const int step=day?300:sat?15:60,lead=(sat?10:40)*60;
   const int64_t from=day?in->day_start:in->start-lead,to=day?in->day_end:in->start+3600+lead;
-  const int count=(int)((to-from)/step)+1;
-  if(count<2||count>FULLER_TRACK_MAX||(in->start-from)%step||(in->start+3600-from)%step)return false;
-  const int i0=(int)((in->start-from)/step),i1=(int)((in->start+3600-from)/step);if(i1>=count)return false;
+  const int count=(int)q64(to-from,step)+1;
+  if(count<2||count>FULLER_TRACK_MAX||r64(in->start-from,step)||r64(in->start+3600-from,step))return false;
+  const int i0=(int)q64(in->start-from,step),i1=(int)q64(in->start+3600-from,step);if(i1>=count)return false;
   // The track on the screen waits at the end of the runs' arena, where the
   // drawing finds it.
   b->fg=alloc(sizeof(FullerConst));b->fc=alloc(sizeof(FullerCam));
@@ -1127,7 +1149,7 @@ static bool finish_draw(ChartBuild *b){
   for(int i=1;i<count-1&&!day;i++){
     if(!HOUR_OF(b,i))continue;
     const int64_t since=(int64_t)T_OF(b,i)-T_OF(b,h0);const int m=(int)js_round(since/60.0);
-    if(since%60||m<=0||m>=60||(world&&m%5))continue;
+    if(r64(since,60)||m<=0||m>=60||(world&&m%5))continue;
     const double len0=f_sqrt((track[i+1].a-track[i-1].a)*(track[i+1].a-track[i-1].a)+(track[i+1].b-track[i-1].b)*(track[i+1].b-track[i-1].b)),len=len0?len0:1;
     double nx=-(track[i+1].b-track[i-1].b)/len,ny=(track[i+1].a-track[i-1].a)/len;
     if(cam.slow?nx*cam.nx+ny*cam.ny>0:ny<0){nx=-nx;ny=-ny;}
@@ -1391,6 +1413,7 @@ static bool finish_draw(ChartBuild *b){
   out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->sink.row_offset,sizeof out->row_offset);
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0)|(world&&in->tape?64:0)|(world&&in->tape==2?128:0));
+  out->lattice=(pal->flags&PLATE_LATTICE)!=0;
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
@@ -1461,7 +1484,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     e->sun[0]=(enr_real)(f_cos(lat*RAD)*f_cos(lon*RAD));e->sun[1]=(enr_real)(f_cos(lat*RAD)*f_sin(lon*RAD));e->sun[2]=(enr_real)f_sin(lat*RAD);
     if(!body_place(src,in->body,t,&lat,&lon,&altitude))FAIL;
     double mx,my;project(&cam,lat,lon,&mx,&my);e->mx=(enr_real)mx;e->my=(enr_real)my;
-    const Segment *seg=src->segment(src->segment_context,(int32_t)(t/86400));if(!seg)FAIL;
+    const Segment *seg=src->segment(src->segment_context,(int32_t)q64(t,86400));if(!seg)FAIL;
     bool waxing;double fraction;seg_moon_light(seg,t,&fraction,&waxing);e->moon_fraction=(enr_real)fraction;e->waxing=waxing;
     // The margin's time: Zulu, or the nautical zone's under the body (15
     // degrees wide, lettered A-M east, N-Y west).
@@ -1470,7 +1493,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
       const double v=js_round((f_fmod(lon+540,360)-180)/15);zh=v>12?12:v<-12?-12:(int)v;
       if(zh>0)zl="ABCDEFGHIKLM"[zh-1];else if(zh<0)zl="NOPQRSTUVWXY"[-zh-1];
     }
-    const int64_t day=((t+zh*3600)%86400+86400)%86400;const int hh=(int)(day/3600),mm=(int)(day%3600/60);
+    const int64_t day=r64(r64(t+zh*3600,86400)+86400,86400);const int hh=(int)day/3600,mm=(int)day%3600/60;
     e->zulu[0]=(char)('0'+hh/10);e->zulu[1]=(char)('0'+hh%10);e->zulu[2]=(char)('0'+mm/10);e->zulu[3]=(char)('0'+mm%10);e->zulu[4]=zl;
     // The local clock's minute: the hour starts on the local hour.
     e->minute[0]=(char)('0'+m/10);e->minute[1]=(char)('0'+m%10);memset(e->top,0,sizeof e->top);

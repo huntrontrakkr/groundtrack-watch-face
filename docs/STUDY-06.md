@@ -87,6 +87,8 @@ Tests check the following:
 | **Sunlight** | one-color chart, for bright sun | white, with coastal waterlines on the zoomed charts | dotted black contours | black | black, cased in white; heavier on the Fuller sheets |
 | **Blueprint** | an engineer's blueprint | light blue land on mid-blue water; night deepens the blues, with a dashed terminator | pale cyan contours, white coast | white | yellow |
 | **Amber** | plasma and early flight displays | dark amber land on black; night dims every ink a step, with a dashed terminator | amber contours and coast | light amber | pale yellow |
+| **Airbrush** | the airbrushed shaded relief of the Apollo-era Lunar Astronautical Charts | land modelled by its slope, lit from the northwest in sepia and dithered like an airbrush, on white sea; night a dot screen | none: the light models the relief; dark olive coast | dark brown | deep red |
+| **Dot matrix** | a mission wall's lattice of lights | the ground as 4-pixel cells, a dot in each whose size is the height (2×2 lowland, a plus, 3×3 high) and whose colour dims through dusk to night; the sea a faint point a cell | none: the dots are the coast and relief | white | amber |
 
 ## Data
 

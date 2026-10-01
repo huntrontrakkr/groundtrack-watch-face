@@ -31,6 +31,8 @@ const HOURS=[
   ['sat:48274','2026-10-01T06:30:00Z','hypsometric','Asia/Kolkata',{flag:true}],['sat:20580','2026-09-30T20:00:00Z','sunlight','Europe/London',{flag:true}],
   ['sat:49260','2026-10-01T09:00:00Z','console','America/New_York',{flag:true}],['sat:43013','2026-09-30T17:00:00Z','red',null,{}],
   ['sat:49260','2026-09-30T16:00:00Z','crt','America/New_York',{flag:true}],['sun','2026-09-27T08:00:00Z','blueprint','America/New_York',{flag:true}],['sat:25544','2026-09-30T13:00:00Z','amber','America/New_York',{tape:'slide'}],
+  ['moon','2026-09-19T09:00:00Z','dotmatrix','America/New_York',{readout:'callout'}],['sat:25544','2026-09-30T13:00:00Z','dotmatrix','America/New_York',{projection:'fuller',flag:true}],['sat:42738','2026-09-27T05:00:00Z','dotmatrix','America/New_York',{}],
+  ['sun','2026-09-27T08:00:00Z','airbrush','America/New_York',{flag:true}],['sat:25544','2026-09-30T13:00:00Z','airbrush','America/New_York',{tape:'tape'}],['sun','2026-09-27T08:00:00Z','airbrush','UTC',{projection:'fuller'}],
   ['sat:42738','2026-09-27T05:00:00Z','crt','America/New_York',{flag:true}],['sat:42738','2026-09-27T14:00:00Z','sunlight','UTC',{}],
   ['sat:42738','2026-09-26T20:30:00Z','hypsometric','Asia/Kolkata',{readout:'callout',numerals:'mono'}],['sat:42738','2026-09-27T05:00:00Z','sectional','America/New_York',{span:'hour',readout:'callout'}],
   ['sun','2026-09-27T08:00:00Z','enroute','America/New_York',{readout:'callout',numerals:'colon'}],['moon','2026-09-19T09:00:00Z','crt','America/New_York',{readout:'callout',numerals:'mono',margin:'body'}],
@@ -81,7 +83,8 @@ test('night decided by fixed point first is night decided by the double sums, ev
     ['sun','2026-06-21T13:00:00Z','red','America/New_York',{}],['sat:25544','2026-09-30T02:00:00Z','enroute','UTC',{}],
     ['sat:43013','2026-09-30T17:00:00Z','crt','UTC',{}],['sat:49260','2026-10-01T09:00:00Z','sunlight','America/New_York',{flag:true}],
     ['sat:25544','2026-09-30T13:00:00Z','red','America/New_York',{projection:'fuller'}],['sun','2026-09-27T08:00:00Z','crt','UTC',{projection:'fuller'}],
-    ['moon','2026-09-19T09:00:00Z','blueprint','America/New_York',{flag:true}],['sat:25544','2026-09-30T13:00:00Z','amber','America/New_York',{projection:'fuller'}]
+    ['moon','2026-09-19T09:00:00Z','blueprint','America/New_York',{flag:true}],['sat:25544','2026-09-30T13:00:00Z','amber','America/New_York',{projection:'fuller'}],
+    ['moon','2026-09-19T09:00:00Z','dotmatrix','America/New_York',{flag:true}],['sat:25544','2026-09-30T02:00:00Z','dotmatrix','UTC',{}],['moon','2026-09-19T09:00:00Z','airbrush','America/New_York',{flag:true}]
   ]){
     const text=input(...h),a=spawnSync('native/host/harness',['-a'],{input:text,maxBuffer:1<<24}),b=spawnSync('native/host/harness-exact',['-a'],{input:text,maxBuffer:1<<24});
     assert.equal(a.status,0,`${label(h)}: ${a.stderr}`);

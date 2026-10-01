@@ -229,11 +229,25 @@ static int zone_at(const Ctx *c,int x,int y){
   return zone(c,x,y);
 }
 static uint8_t base_color(const EnrScene *s,int ground,int z){
+  // On the lattice, knockouts and what is cleared are the plain ground.
+  if(s->lattice)return s->space;
   if(ground==G_WATER)return s->zoned[ENR_WATER][z];
   if(ground==G_LAND)return s->zoned[ENR_LAND][z];
   if(ground==G_SPACE)return s->space;
   if(ground<G_DEPTH0)return s->tints[ground-G_TINT0];
   return s->depths[ground-G_DEPTH0];
+}
+// The lattice's dot at a pixel: in each 4x4 cell a dot whose size grows
+// with the height's tint (2x2, a plus, 3x3); water a single point; between
+// the dots, the plain ground.
+static const uint16_t LATTICE_DOT[4]={0x0660,0x0672,0x0777,0x0020};  // rows of the cell, 4 bits each: tint 0, 1, 2+, water
+static uint8_t ground_color(const EnrScene *s,int ground,int z,int x,int y){
+  if(!s->lattice)return base_color(s,ground,z);
+  if(ground==G_SPACE)return s->space;
+  const int k=ground==G_WATER||ground>=G_DEPTH0?3:ground==G_LAND?0:ground-G_TINT0>2?2:ground-G_TINT0;
+  if(!(LATTICE_DOT[k]>>((3-(y&3))*4+(3-(x&3)))&1))return s->space;
+  if(k==3)return s->zoned[ENR_WATER][z];
+  return z||ground==G_LAND?s->zoned[ENR_LAND][z]:s->tints[ground-G_TINT0];
 }
 // Ink drawn after the body: the space ink over space, home's mark round
 // home, the ink elsewhere.
@@ -246,7 +260,7 @@ static uint8_t late_ink(const EnrScene *s,int ground,int x,int y,int z){
   return ground==G_SPACE?s->space_ink:s->zoned[ENR_INK][z];
 }
 // (The sliding band is the world round: its columns wrap.)
-static int sliding_x(const EnrScene *s,int x){return (s->flags&ENR_SLIDING_WORLD)?((x%W)+W)%W:x;}
+static int sliding_x(const EnrScene *s,int x){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?((x%W)+W)%W:x;}
 static void plot(Ctx *c,int x,int y,uint8_t color){
   x=sliding_x(c->s,x);
   if(x<0||y<0||x>=W||y>=H)return;
@@ -342,7 +356,7 @@ static uint8_t base_pixel(const Ctx *c,int x,int y,uint8_t cls,int known,bool an
   const int z=known==2?zone(c,x,y):!zones||!dir?0:known==1?2:0;
   uint8_t col;
   if(layer<=L_WATERLINE&&known!=2){
-    col=layer==L_CONTOUR?s->zoned[ENR_CONTOUR][z]:layer==L_COAST?s->zoned[ENR_COAST][z]:layer==L_SHELF?s->zoned[ENR_SHELF][z]:layer==L_WATERLINE?s->waterline:base_color(s,ground,z);
+    col=layer==L_CONTOUR?s->zoned[ENR_CONTOUR][z]:layer==L_COAST?s->zoned[ENR_COAST][z]:layer==L_SHELF?s->zoned[ENR_SHELF][z]:layer==L_WATERLINE?s->waterline:ground_color(s,ground,z,x,y);
     if((s->flags&ENR_SCAN)&&z&&y%(z==2?2:4)==1)col=s->space;
     // No terminator here; at night, the dots of an outline plate.
     if(terminator&&dir&&(s->flags&ENR_NIGHT_DOTS)&&z==2&&x%4==0&&y%4==((x>>2)&1)*2)col=s->night_dots;
@@ -350,7 +364,7 @@ static uint8_t base_pixel(const Ctx *c,int x,int y,uint8_t cls,int known,bool an
     if(!zones&&dir&&known==1&&BAYER[(y&3)*4+(x&3)]<4)col=s->screen;
   }
   else if(layer<=L_WATERLINE){
-    col=layer==L_CONTOUR?s->zoned[ENR_CONTOUR][z]:layer==L_COAST?s->zoned[ENR_COAST][z]:layer==L_SHELF?s->zoned[ENR_SHELF][z]:layer==L_WATERLINE?s->waterline:base_color(s,ground,z);
+    col=layer==L_CONTOUR?s->zoned[ENR_CONTOUR][z]:layer==L_COAST?s->zoned[ENR_COAST][z]:layer==L_SHELF?s->zoned[ENR_SHELF][z]:layer==L_WATERLINE?s->waterline:ground_color(s,ground,z,x,y);
     if((s->flags&ENR_SCAN)&&z&&y%(z==2?2:4)==1)col=s->space;
     if(terminator&&dir){
       if(((x+y)>>1)%3!=2&&crosses(c,x,y,SUNRISE_SINE,s->night_q[0]))col=s->terminator;
@@ -911,9 +925,9 @@ enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_Z
 // at its turned columns, before the turn.
 #define SLIDE_TOP TAPE_P
 #define SLIDE_BOTTOM (H-10)
-static int slide_offset(const EnrScene *s,const EnrMinute *m){return (s->flags&ENR_SLIDING_WORLD)?(((int)js_round(m->mx)-W/2)%W+W)%W:0;}
+static int slide_offset(const EnrScene *s,const EnrMinute *m){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?(((int)js_round(m->mx)-W/2)%W+W)%W:0;}
 static void slide_rows(uint8_t *frame,int stride,int off){
-  if(!off)return;
+  if(!FACE_WORLD||!off)return;
   uint8_t turned[W];
   for(int y=SLIDE_TOP;y<=SLIDE_BOTTOM;y++){
     uint8_t *row=frame+y*stride;
@@ -982,7 +996,10 @@ void enr_ready(EnrScene *s){
   for(int cls=0;cls<256;cls++){
     const int g=cls&15,l=cls>>4;const uint8_t *z=NULL,*z2=NULL;
     if(l==L_CONTOUR)z=s->zoned[ENR_CONTOUR];else if(l==L_COAST)z=s->zoned[ENR_COAST];else if(l==L_SHELF)z=s->zoned[ENR_SHELF];
-    else if(l<=L_WATERLINE||l==L_CLEARED||l==L_EARLY_CLEARED||l==L_LATE_CLEARED){if(l!=L_WATERLINE)z=g==G_WATER?s->zoned[ENR_WATER]:g==G_LAND?s->zoned[ENR_LAND]:NULL;}
+    else if(l<=L_WATERLINE||l==L_CLEARED||l==L_EARLY_CLEARED||l==L_LATE_CLEARED){if(l!=L_WATERLINE)z=g==G_WATER?s->zoned[ENR_WATER]:g==G_LAND?s->zoned[ENR_LAND]:NULL;
+      // On the lattice: the dots take the zoned colours; what is cleared is plain.
+      if(s->lattice){if(l<=L_WATERLINE&&g!=G_SPACE)z=g==G_WATER||g>=G_DEPTH0?s->zoned[ENR_WATER]:s->zoned[ENR_LAND];else z=NULL;}
+    }
     else if(l==L_GRID||l==L_NET_GRID)z=s->zoned[ENR_GRID];else if(l==L_ROUTE)z=s->zoned[ENR_ROUTE];
     else if(l==L_INK||l==L_EARLY_INK)z=s->zoned[ENR_INK];else if(l==L_MARK)z=s->zoned[ENR_MARK];
     else if(l==L_LATE_INK){z=s->zoned[ENR_INK];z2=s->zoned[ENR_MARK];}
