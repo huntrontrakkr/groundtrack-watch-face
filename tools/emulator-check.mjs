@@ -27,6 +27,10 @@ import {MINUTE} from '../src/ephemeris.js';
 import {W,H} from '../src/plates.js';
 import {decodePNG,encodePNG} from './png.mjs';
 import {registerElements} from '../src/satellites.js';
+// NOMINAL=1: GPS and QZSS on their nominal orbits, as the phone falls back
+// to when it has no fresh elements for them.
+import {registerNominal} from '../src/nominal.js';
+if(process.env.NOMINAL)registerNominal();
 if(process.env.TLE_FILE){const lines=readFileSync(process.env.TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','celestrak');}
 
 const [outArg='test-results/emulator',body='sun',plate='enroute',flagArg='flag',zone=Intl.DateTimeFormat().resolvedOptions().timeZone]=process.argv.slice(2);

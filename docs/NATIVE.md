@@ -39,14 +39,14 @@ The phone sends no charts: it once rendered satellites' scenes and sent them an 
 
 Each minute the face redraws only what changed: per row, the minute renderer knows which 16-pixel blocks lie wholly in day or in night, repaints the blocks the terminator crossed and the boxes of the moving things (body, route, flag, Zulu time, pass line), and leaves the rest of the frame buffer as it was. A full repaint happens only when the face comes back into focus.
 
-The build runs a slice at a time on short timers (about a second of work in pieces of at most 80 ms: the ground twelve rows at a time, the drawing, the minutes six at a time), so the firmware never sees the app stop answering; a single blocking second brings up its "not responding" dialog. The old hour's chart is dropped first; the screen keeps showing it until the new one is drawn. Memory is the tight part, 74 KB of heap for everything, and the build takes it in phases so that no two large things are held at once:
+The build runs a slice at a time on short timers (about a second of work in pieces of at most 80 ms: the ground twelve rows at a time, the drawing, the minutes six at a time), so the firmware never sees the app stop answering; a single blocking second brings up its "not responding" dialog. The old hour's chart is dropped first; the screen keeps showing it until the new one is drawn. Memory is the tight part (74 KB of heap on Enroute and Plotboard, 65 KB on Fuller, for everything), and the build takes it in phases so that no two large things are held at once:
 
-1. **The ground** (the map's decoder and rows, the smoothing rings: about 34 KB) writes its classes row by row as row runs into a 16 KB arena, taken first.
-2. The decoder freed, **the class plane** (45.6 KB) is unpacked from the runs, in the one free stretch the arena leaves; the arena then holds the track and the drawing's lists.
-3. **The drawing**, then the plane as row runs into the arena again, the plane freed, and the runs moved to their own size.
-4. **The scene and its minutes**, in what the plane left.
+1. **The ground** (the map's decoder and rows, the smoothing rings: about 25 KB) writes its classes row by row as row runs into an 8 KB arena, taken first, and 2 KB chunks past it.
+2. The decoder freed, **the drawing's plane** holds only what is drawn over the ground, a nibble a pixel (22.8 KB in four bands; nothing drawn is 0): the ground stays in its runs, read where the drawing asks what lies under a pixel. The track and the drawing's lists take a block of their own, with only the hour figures' digits that are drawn.
+3. **The drawing**; then each row's ground and what was drawn over it merged into the scene's runs, a band of the plane at a time, the band let go.
+4. **The scene and its minutes**, in what the plane left. A Fuller sheet's night is lit from every other point of the faces' grid of directions (3.4 KB for 12.9 KB).
 
-At its peak a build holds about 66 KB; a finished hour 24–34 KB. A first version held the plane throughout and needed 80 KB for the world band; `tests/native.test.mjs` checks every hour's peak (`native/host/build_check`).
+At its peak a build holds 43–47 KB on Enroute and Plotboard and 47–51 KB on Fuller; a finished hour 24–40 KB. (A first version held a byte-a-pixel plane throughout and needed 80 KB; the next, 60–64 KB, which on Fuller was within a KB or two of the heap, and failed on the hours that needed a little more.) `tests/native.test.mjs` holds each face, built alone as its app is (`native/host/build_check-<face>`), to a budget that leaves a fifth of its heap free at the peak; `tools/check-app-size.mjs`, run after the build in CI, holds each app 1 KB under the 65,535 bytes an app may be, and checks its header leads the binary. The apps are optimised across their sources at link time (`-flto`, about 1 KB smaller: every byte of an app is a byte of its heap).
 
 ### The map on the watch: `native/resources/map.pack`
 
@@ -118,8 +118,8 @@ These are measurements of the code in the emulator and on the host, not of a wat
 
 | | |
 |---|---|
-| App code and static data | Enroute 53 KB, Plotboard 52 KB, of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call). The minute renderer's 4.6 KB of working memory is taken from the heap for each drawing, not kept |
-| Heap free at launch | 78–79 KB; about 66 KB used at a build's peak; 30–41 KB free with the hour's chart |
+| App code and static data | Enroute 54 KB, Plotboard 56 KB, Fuller 64 KB, of the 64 KB an app may have (PebbleOS keeps an app's size in 16 bits, whatever the SDK says; doubles in software make every sum a call). The minute renderer's 4.6 KB of working memory is taken from the heap for each drawing, not kept |
+| Heap free at launch | 73–74 KB on Enroute and Plotboard, 65 KB on Fuller; 43–51 KB used at a build's peak; 39–49 KB free with the hour's chart (Fuller 27–42 KB) |
 | Building the hour, in the emulator | 0.7–1.1 seconds of work, in slices |
 | Radio for the Sun and Moon | settings on launch; about 10 KB of segments every few weeks |
 | Radio for a satellite | GPS about 2.5 KB of segments and passes every day or two; a fast satellite (hour-long segments) about 13 KB every two to three days |

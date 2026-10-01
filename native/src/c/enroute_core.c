@@ -111,10 +111,12 @@ static int64_t floor_div(int64_t v,int d){return v>=0?v/d:-((-v+d-1)/d);}
 // fuller-ground.js: a pixel's height on tile t from the three grid points
 // round it, in integers, as h / 2^29.
 static int32_t fuller_point(const EnrScene *s,const Night *n,int t,int x,int y){
-  const EnrFuller *f=s->fuller;const int N=ENR_FULLER_N;
+  const EnrFuller *f=s->fuller;const int N=ENR_NIGHT_N,F=ENR_FULLER_N;
   const int32_t *q=f->tile_grid[t];const int64_t qx=4*x+2,qy=4*y+2;
   int64_t a=floor_div(q[0]+q[1]*qx+q[2]*qy,256),b=floor_div(q[3]+q[4]*qx+q[5]*qy,256);
-  a=a<0?0:a>N*256?N*256:a;b=b<0?0:b>N*256-a?N*256-a:b;
+  // The place on the grid, held to the face; then on the night's grid.
+  a=a<0?0:a>F*256?F*256:a;b=b<0?0:b>F*256-a?F*256-a:b;
+  a/=F/N;b/=F/N;
   const int ia=(int)(a/256),ib=(int)(b/256),fa=(int)(a-ia*256),fb=(int)(b-ib*256);
   int i0,w0,i1=0,w1=0,i2=0,w2=0;
   #define GI(aa,bb) ((aa)*(N+1)-(aa)*((aa)-1)/2+(bb))
@@ -1038,10 +1040,10 @@ void enr_ready(EnrScene *s){
     // 1 - cos R of the ends' (with the sine's bulge at most that), bounded
     // above by the series to its sixth power, plus the interpolation's
     // shortening of the directions within a cell.
-    const EnrFuller *f=s->fuller;const double edge=1.1071487177940904,cell=edge/ENR_FULLER_N;double worst=0;
+    const EnrFuller *f=s->fuller;const double edge=1.1071487177940904,cell=edge/ENR_FULLER_N,night_cell=edge/ENR_NIGHT_N;double worst=0;
     for(int t=0;t<f->tile_count;t++){
       const int32_t *q=f->tile_grid[t];const double da=4.0*q[1]/65536,db=4.0*q[4]/65536;
-      const double perpx=cell*f_sqrt(da*da+db*db+da*db),R=8*perpx*1.15+2*cell;
+      const double perpx=cell*f_sqrt(da*da+db*db+da*db),R=8*perpx*1.15+2*night_cell;
       const double r2=R*R,bulge=r2/2-r2*r2/24+r2*r2*r2/720;
       if(bulge>worst)worst=bulge;
     }

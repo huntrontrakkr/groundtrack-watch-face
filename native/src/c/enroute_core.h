@@ -76,6 +76,10 @@ enum {ENR_VIEW_HOUR,ENR_VIEW_WORLD,ENR_VIEW_DAY};
 #define ENR_HEAVY 32
 #define ENR_FULLER_N 64
 #define ENR_GRID_POINTS ((ENR_FULLER_N+1)*(ENR_FULLER_N+2)/2)
+// Night is lit from every other point of the grid each way (the Sun's
+// height is smooth: 2-degree cells are ample, at a quarter of the memory).
+#define ENR_NIGHT_N 32
+#define ENR_NIGHT_POINTS ((ENR_NIGHT_N+1)*(ENR_NIGHT_N+2)/2)
 #define ENR_TILES 32
 typedef struct {
   double net_top;                   // the net's top edge (the day's callout hangs above it)
@@ -85,7 +89,8 @@ typedef struct {
   // Which tile each pixel lies on, as row runs of (count, tile + 1; 0 none).
   uint16_t tile_offset[ENR_H+1];
   uint8_t *tile_runs;
-  // Each grid point's direction in its face's frame (n, u, v), x 16384.
+  // Each night grid point's direction in its face's frame (n, u, v), x
+  // 16384: ENR_NIGHT_POINTS of them.
   int16_t *dirs;
   // How far (Q30) a height along a row's run on one tile can lie beyond
   // the run's end pixels' heights (enr_ready).

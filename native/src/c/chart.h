@@ -62,7 +62,7 @@ typedef const Segment *(*SegmentFn)(void *context,int32_t day);
 
 // Where a build reads from and how it takes memory: the map pack, the
 // figures' bits (native/resources/figures.bin), the Sun and Moon segments,
-// and an allocator. A build holds about 80 KB at its peak, freed as it goes.
+// and an allocator. A build holds about 50 KB at its peak, freed as it goes.
 typedef struct {
   MapReadFn map;void *map_source;
   MapReadFn figures;void *figure_source;

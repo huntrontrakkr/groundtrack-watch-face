@@ -9,6 +9,11 @@ harness: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h .
 build_check: build_check.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 
+# The same for one face alone, as its watch app is built (the all-faces
+# build above peaks elsewhere): build_check-enroute, -plotboard, -fuller.
+build_check-%: build_check.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
+	$(CC) $(CFLAGS) -std=gnu11 -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
+
 # Host check of the shared sine and cosine.
 fmath_test: fmath_test.c ../src/c/fmath.c ../src/c/fmath.h
 	$(CC) $(CFLAGS) -o $@ fmath_test.c ../src/c/fmath.c -lm

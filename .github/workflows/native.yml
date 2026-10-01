@@ -31,6 +31,8 @@ jobs:
           pebble sdk install 4.33.1
       - name: Build the watch app
         run: npm run build:native
+      - name: Check each app's size against its budget
+        run: node tools/check-app-size.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: groundtrack-native

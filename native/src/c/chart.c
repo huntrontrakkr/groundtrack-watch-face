@@ -254,7 +254,7 @@ static void smooth_finish(Smooth *s){
 // is made only once the map's decoder is done with. The runs go to an arena
 // taken first, so the decoder's memory, freed, leaves one free stretch for
 // the plane; any more go to chunks.
-#define RUN_ARENA 16384
+#define RUN_ARENA 8192
 #define RUN_CHUNK 2048
 typedef struct RunChunk {struct RunChunk *next;uint16_t used;uint8_t data[RUN_CHUNK];} RunChunk;
 // cap: the arena's room for runs (a Fuller build keeps its track at the end).
@@ -285,7 +285,9 @@ typedef struct {
   uint8_t space[LAND_RING][W/8+1];            // a Fuller sheet's pixels off its net
   int32_t e3[E3_RING][W];int e3_rows;         // smoothed relief rows emitted (Q8 metres)
   int32_t row[W];                             // the sampled row, then each stage's output
-  Place col[3][W];                            // the map's place under each column, at x + .25, .5 and .75
+  // The map's place under each column, at x + .25, .5 and .75 (a face
+  // without the map's charts, Groundtrack Fuller, keeps none).
+  Place col[FACE_CHART?3:1][FACE_CHART?W:1];
   int done;                                   // rows finalised
   int32_t shade_step;                         // shaded relief: Q8 metres a step of light
 } Ground;
@@ -458,30 +460,56 @@ static int ground_rows_end(Ground *g){
 // renderEnroute()'s plot and knockout, writing layers instead of colours,
 // with the stage of the drawing (native-scene.js): 0 the graticule, 1 the
 // network, 2 the route onward, 3 what is drawn after the body.
-// The class plane in four bands of rows, each its own allocation, so that
-// it can be let go of a band at a time.
+// The drawing's plane: each pixel's drawn layer alone, a nibble (0 where
+// nothing is drawn: the ground's own class stands), in four bands of rows,
+// each its own allocation, so that it can be let go of a band at a time.
+// The ground stays in its row runs (the sink), read where the drawing
+// asks what lies under a pixel, and merged with the plane at the end.
 #define PLANE_BANDS 4
 #define BAND_ROWS (H/PLANE_BANDS)
+#define BAND_BYTES ((W/2)*BAND_ROWS)
 typedef struct {uint8_t *band[PLANE_BANDS];} Plane;
-#define PLANE_ROW(p,y) ((p)->band[(y)/BAND_ROWS]+((y)%BAND_ROWS)*W)
-#define PLANE_AT(p,i) (PLANE_ROW(p,(i)/W)[(i)%W])
+static int layer_at(const Plane *p,int x,int y){return (p->band[y/BAND_ROWS][(y%BAND_ROWS)*(W/2)+(x>>1)]>>((x&1)*4))&15;}
+static void layer_set(const Plane *p,int x,int y,int layer){
+  uint8_t *q=&p->band[y/BAND_ROWS][(y%BAND_ROWS)*(W/2)+(x>>1)];
+  *q=(x&1)?(uint8_t)((*q&0x0F)|layer<<4):(uint8_t)((*q&0xF0)|layer);
+}
+// A byte of the ground's runs: the sink's arena, then its chunks (each
+// filled whole, in order).
+static uint8_t sink_byte(const RunSink *k,unsigned p){
+  if(p<k->cap)return k->arena[p];
+  p-=k->cap;const RunChunk *c=k->head;for(;p>=RUN_CHUNK;p-=RUN_CHUNK)c=c->next;
+  return c->data[p];
+}
+// A row of the ground's classes; rows above `panel` (the world band's tape
+// panel, once it is cleared) are space.
+static void ground_row(const RunSink *k,int panel,int y,uint8_t *row){
+  if(y<panel){memset(row,G_SPACE,W);return;}
+  int x=0;
+  for(unsigned p=k->row_offset[y];p+1<k->row_offset[y+1]&&x<W;p+=2){int n=sink_byte(k,p);if(n>W-x)n=W-x;memset(row+x,sink_byte(k,p+1),n);x+=n;}
+}
 // wrap: the plane is the world round (the sliding band): columns wrap.
-typedef struct {const Plane *c;bool early;int stage;bool wrap;} Canvas;
+typedef struct {const Plane *c;bool early;int stage;bool wrap;const RunSink *ground;int panel;} Canvas;
+// The ground's class under a pixel (its low nibble the ground).
+static int ground_at(const Canvas *cv,int x,int y){
+  if(y<cv->panel)return G_SPACE;
+  const RunSink *k=cv->ground;int at=0;
+  for(unsigned p=k->row_offset[y];p+1<k->row_offset[y+1];p+=2){at+=sink_byte(k,p);if(x<at)return sink_byte(k,p+1)&15;}
+  return G_SPACE;
+}
 static int wrap_x(const Canvas *cv,int x){return FACE_WORLD&&cv->wrap?((x%W)+W)%W:x;}
 static void plot(Canvas *cv,double fx,double fy,int layer){
   const int x=wrap_x(cv,(int)js_round(fx)),y=(int)js_round(fy);
   if(x<0||y<0||x>=W||y>=H)return;
-  const int i=y*W+x;
   if(layer==L_INK&&cv->early)layer=L_EARLY_INK;
   if(layer==L_GRID&&cv->stage>=1)layer=L_NET_GRID;
   if(cv->stage==3&&(layer==L_INK||layer==L_MARK||layer==L_SPACE_INK))layer=L_LATE_INK;
-  PLANE_AT(cv->c,i)=(uint8_t)((PLANE_AT(cv->c,i)&15)|layer<<4);
+  layer_set(cv->c,x,y,layer);
 }
 static void clear(Canvas *cv,double fx,double fy){
   const int x=wrap_x(cv,(int)js_round(fx)),y=(int)js_round(fy);
   if(x<0||y<0||x>=W||y>=H)return;
-  const int i=y*W+x;
-  PLANE_AT(cv->c,i)=(uint8_t)((PLANE_AT(cv->c,i)&15)|(cv->early?L_EARLY_CLEARED:cv->stage==3?L_LATE_CLEARED:L_CLEARED)<<4);
+  layer_set(cv->c,x,y,cv->early?L_EARLY_CLEARED:cv->stage==3?L_LATE_CLEARED:L_CLEARED);
 }
 typedef struct {int16_t x,y;} Px;
 typedef struct {int x,y,w,h;} Box;
@@ -491,7 +519,7 @@ static void letter(Canvas *cv,const Px *px,int n,int layer,int halo){
   for(int i=0;i<n;i++)for(int dy=-halo;dy<=halo;dy++)for(int dx=-halo;dx<=halo;dx++)clear(cv,px[i].x+dx,px[i].y+dy);
   for(int i=0;i<n;i++){
     const int wx=wrap_x(cv,px[i].x),cx=wx<0?0:wx>W-1?W-1:wx,cy=px[i].y<0?0:px[i].y>H-1?H-1:px[i].y;
-    plot(cv,px[i].x,px[i].y,(PLANE_AT(cv->c,cy*W+cx)&15)==G_SPACE?L_SPACE_INK:layer);
+    plot(cv,px[i].x,px[i].y,ground_at(cv,cx,cy)==G_SPACE?L_SPACE_INK:layer);
   }
 }
 static const EnrGlyph *glyph(char ch){const char *p=strchr(ENR_FONT_CHARS,ch);return p&&ch?&ENR_FONT_GLYPHS[p-ENR_FONT_CHARS]:0;}
@@ -553,7 +581,7 @@ static void letter_figure(Canvas *cv,const FigureRun *r,int ring,int layer){
   for(int y=r->y0;y<r->y1;y++)for(int x=r->x0;x<r->x1;x++)if(figure_pixel(r,x,y,ring))for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)clear(cv,x+dx,y+dy);
   for(int y=r->y0;y<r->y1;y++)for(int x=r->x0;x<r->x1;x++)if(figure_pixel(r,x,y,ring)){
     const int cx=x<0?0:x>W-1?W-1:x,cy=y<0?0:y>H-1?H-1:y;
-    plot(cv,x,y,(PLANE_AT(cv->c,cy*W+cx)&15)==G_SPACE?L_SPACE_INK:layer);
+    plot(cv,x,y,ground_at(cv,cx,cy)==G_SPACE?L_SPACE_INK:layer);
   }
 }
 // The figure plotted without a knockout (the world band's tape).
@@ -600,12 +628,11 @@ static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char
 #define TAKEN (FACE_CHART?64:32)
 #define BEARINGS (FACE_CHART?72:1)
 typedef struct {Px scratch[SCRATCH];Box taken[TAKEN];Px home_code[64];double sb[BEARINGS],cb[BEARINGS];} Draw;
-// A Fuller build's arena: its runs are few, and its drawing holds the track,
-// its lists and the hour figures' digits, only those drawn: at 80 px two
-// (both figures single: at most 666 bytes), else at 72 px at most four
-// (975 bytes). The build's peak is the class plane beside this arena.
-#define FULLER_FIGURE_ROOM 1000
-#define FULLER_ARENA ((unsigned)((sizeof(double)*2*FULLER_TRACK_MAX+sizeof(Draw)+FULLER_FIGURE_ROOM+16+7)&~(size_t)7))
+// The drawing's lists: the track on the screen, the pixel lists and
+// placements, and room for the hour figures' digits, only those drawn: at
+// 80 px two (both figures single: at most 666 bytes), else at 72 px at most
+// four (975 bytes).
+#define FIGURE_ROOM 1000
 // The track: latitude and unwrapped longitude, then its screen position.
 // Point i is at t0 + i*step seconds from the hour (see make_track).
 typedef struct {double a,b;} TrackPoint;
@@ -680,14 +707,17 @@ static int land_bit(GridCache *c,int x,int y){
 // and weights out of 256.
 typedef struct {int a[3],b[3],w[3];} GridCell;
 static int64_t floor_div256(int64_t v){return v>=0?v/256:-((-v+255)/256);}
-static void grid_cell(const int32_t *q,int64_t qx,int64_t qy,GridCell *c){
+// (on a grid of every `step`th point: the night's.)
+static void grid_cell_on(const int32_t *q,int64_t qx,int64_t qy,GridCell *c,int step){
   int64_t a=floor_div256(q[0]+q[1]*qx+q[2]*qy),b=floor_div256(q[3]+q[4]*qx+q[5]*qy);
   a=a<0?0:a>GRID_N*256?GRID_N*256:a;b=b<0?0:b>GRID_N*256-a?GRID_N*256-a:b;
+  a/=step;b/=step;
   const int ia=(int)(a/256),ib=(int)(b/256),fa=(int)(a-ia*256),fb=(int)(b-ib*256);
-  if(ia+ib>=GRID_N){*c=(GridCell){{ia,0,0},{ib,0,0},{256,0,0}};return;}
+  if(ia+ib>=GRID_N/step){*c=(GridCell){{ia,0,0},{ib,0,0},{256,0,0}};return;}
   if(fa+fb<=256){*c=(GridCell){{ia,ia+1,ia},{ib,ib,ib+1},{256-fa-fb,fa,fb}};return;}
   *c=(GridCell){{ia+1,ia,ia+1},{ib+1,ib+1,ib},{fa+fb-256,256-fa,256-fb}};
 }
+static void grid_cell(const int32_t *q,int64_t qx,int64_t qy,GridCell *c){grid_cell_on(q,qx,qy,c,1);}
 
 // ---------------------------------------------------------------- the hour
 // A build in progress: the track and camera, then the ground a slice of
@@ -696,6 +726,9 @@ struct ChartBuild {
   ChartInput in;ChartSources src;
   TrackPoint *track;int count,h0,h1,t0,step;Cam cam;Plate plate;
   Plane plane;Tiles *tiles;Ground *ground;RunSink sink;
+  // The drawing's lists, and the scene's runs as they are made: a piece a
+  // band of the plane, and their row offsets.
+  uint8_t *lists,*piece[PLANE_BANDS];uint16_t *offsets;
   char source[24];           // the band's source line, lettered by the renderer when the world slides
   // Then the scene, its minutes made a few at a time, with home's circle's
   // bearings.
@@ -740,7 +773,10 @@ static void ground_free(ChartBuild *b){
   if(FACE_CHART&&b->tiles&&b->tiles->pack.tables)map_pack_close(&b->tiles->pack,src->release);
   src->release(b->tiles);b->tiles=NULL;src->release(b->ground);b->ground=NULL;
 }
-static void plane_free(ChartBuild *b){for(int k=0;k<PLANE_BANDS;k++){b->src.release(b->plane.band[k]);b->plane.band[k]=NULL;}}
+static void plane_free(ChartBuild *b){
+  for(int k=0;k<PLANE_BANDS;k++){b->src.release(b->plane.band[k]);b->plane.band[k]=NULL;b->src.release(b->piece[k]);b->piece[k]=NULL;}
+  b->src.release(b->lists);b->lists=NULL;b->src.release(b->offsets);b->offsets=NULL;
+}
 static void fuller_free(ChartBuild *b){
   const ChartSources *src=&b->src;
   src->release(b->fg);b->fg=NULL;src->release(b->fc);b->fc=NULL;src->release(b->tgrid);b->tgrid=NULL;
@@ -753,6 +789,20 @@ void chart_abort(ChartBuild *b){
   if(b->out){enr_free(b->out,b->src.release);b->src.release(b->out);b->out=NULL;}
   b->src.release(b->sb);b->sb=NULL;
   ground_free(b);sink_free(b);plane_free(b);b->src.release(b->track);b->src.release(b);
+}
+// The night's grid (enroute_core.h): every other point of the faces' grid
+// each way, a row of the grid read at a time through `scratch` (6*(GRID_N+1)
+// bytes). Allocated; NULL without memory or on a short read.
+#define NIGHT_INDEX(a,b) ((a)*(ENR_NIGHT_N+1)-(a)*((a)-1)/2+(b))
+static int16_t *night_dirs(const ChartSources *src,uint8_t *scratch){
+  const int step=GRID_N/ENR_NIGHT_N;
+  int16_t *dirs=src->alloc(sizeof(int16_t)*3*ENR_NIGHT_POINTS),*to=dirs;if(!dirs)return NULL;
+  for(int a=0;a<=GRID_N;a+=step){
+    const size_t n=6*(size_t)(GRID_N+1-a);
+    if(src->grids(src->grid_source,FULLER_HEADER+6*GRID_INDEX(a,0),scratch,n)!=n){src->release(dirs);return NULL;}
+    for(int c=0;c<=GRID_N-a;c+=step)for(int k=0;k<3;k++)*to++=(int16_t)(scratch[6*c+2*k]|scratch[6*c+2*k+1]<<8);
+  }
+  return dirs;
 }
 // rollCamera() and the Fuller ground's setup. A satellite's hour sheet
 // samples its track every 15 seconds from ten minutes before the hour to ten
@@ -798,9 +848,10 @@ static bool fuller_begin(ChartBuild *b){
   if(b->fine){
     if(!src->land)return false;
     b->gc->land=src->land;b->gc->land_source=src->land_source;for(int i=0;i<LAND_SLOTS;i++)b->gc->land_row[i]=-1;
-    b->dirs=alloc(sizeof(int16_t)*3*GRID_POINTS);if(!b->dirs)return false;
-    uint8_t *d=(uint8_t *)b->dirs;if(src->grids(src->grid_source,FULLER_HEADER,d,6*GRID_POINTS)!=6*GRID_POINTS)return false;
-    for(int k=0;k<3*GRID_POINTS;k++)b->dirs[k]=(int16_t)(d[2*k]|d[2*k+1]<<8);
+    // Zoomed in, each pixel's place on the Earth comes from the night's
+    // grid of directions (its 2-degree cells place a pixel within 0.01
+    // degrees); the scene keeps it for the night.
+    if(!(b->dirs=night_dirs(src,(uint8_t *)b->ground)))return false;
   }
   if(src->tables(src->table_source,TABLE_METERS_AT,(uint8_t *)b->gc->meters,1024)!=1024)return false;
   ground_begin(b->ground,&b->cam,&b->plate,&b->sink);
@@ -809,9 +860,9 @@ static bool fuller_begin(ChartBuild *b){
 }
 // A grid direction at a quarter-pixel place on a tile, in the face's frame.
 static void grid_direction(const ChartBuild *b,int t,int64_t qx,int64_t qy,int32_t out[3]){
-  GridCell c;grid_cell(b->tgrid[t],qx,qy,&c);
+  GridCell c;grid_cell_on(b->tgrid[t],qx,qy,&c,GRID_N/ENR_NIGHT_N);
   for(int k=0;k<3;k++){
-    int32_t s=0;for(int j=0;j<3;j++)s+=b->dirs[GRID_INDEX(c.a[j],c.b[j])*3+k]*c.w[j];
+    int32_t s=0;for(int j=0;j<3;j++)s+=b->dirs[NIGHT_INDEX(c.a[j],c.b[j])*3+k]*c.w[j];
     out[k]=s>>8;
   }
 }
@@ -863,7 +914,7 @@ static int fuller_ground_step(ChartBuild *b,int budget){
 ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   ChartBuild *b=src_->alloc(sizeof(ChartBuild));if(!b)return NULL;
   memset(b,0,sizeof *b);b->in=*in_;b->src=*src_;
-  const unsigned arena=FACE_ROLL&&(!FACE_CHART||in_->fuller)?FULLER_ARENA:RUN_ARENA;
+  const unsigned arena=RUN_ARENA;
   b->sink.arena=src_->alloc(arena);if(!b->sink.arena){src_->release(b);return NULL;}
   b->sink.cap=arena;
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
@@ -972,8 +1023,8 @@ int chart_step(ChartBuild *b){
     if(r<=0){
       ground_free(b);
       if(b->gc){
-        // The grid's directions are read again for the scene.
-        b->src.release(b->gc);b->gc=NULL;b->src.release(b->dirs);b->dirs=NULL;b->src.release(b->tgrid);b->tgrid=NULL;
+        // (The night's grid, if the ground read it, goes to the scene.)
+        b->src.release(b->gc);b->gc=NULL;b->src.release(b->tgrid);b->tgrid=NULL;
       }
     }
     return r<0?-1:1;
@@ -1009,23 +1060,13 @@ static bool finish_draw(ChartBuild *b){
   const int top=cam.top,bottom=cam.bottom;
   Draw *draw=NULL;Px *scratch=NULL;EnrScene *out=NULL;EnrPoint *points=NULL;int16_t zulu_x=0,zulu_baseline=0;
   int16_t tape_lo=0,tape_hi=0;
-  // The class plane, from the ground's runs, each chunk freed once read.
-  for(int k=0;k<PLANE_BANDS;k++)if(!(b->plane.band[k]=alloc(W*BAND_ROWS)))FAIL;
+  // The plane, nothing drawn; and the drawing's lists.
+  for(int k=0;k<PLANE_BANDS;k++){if(!(b->plane.band[k]=alloc(BAND_BYTES)))FAIL;memset(b->plane.band[k],0,BAND_BYTES);}
   const Plane *const classes=&b->plane;
-  {int x=0,y=0;const unsigned cap=b->sink.cap,inside=b->sink.n<cap?b->sink.n:cap;
-  for(unsigned k=0;k+1<inside;k+=2){memset(PLANE_ROW(classes,y)+x,b->sink.arena[k+1],b->sink.arena[k]);x+=b->sink.arena[k];if(x>=W){x=0;y++;}}
-  // The arena, read, holds the track and the drawing's lists next.
-  for(RunChunk *c=b->sink.head;c;){
-    for(int k=0;k+1<c->used;k+=2){memset(PLANE_ROW(classes,y)+x,c->data[k+1],c->data[k]);x+=c->data[k];if(x>=W){x=0;y++;}}
-    RunChunk *next=c->next;release(c);c=next;b->sink.head=c;
-  }
-  b->sink.tail=NULL;
-  if(y!=H)FAIL;}
+  const size_t track_bytes=(sizeof(TrackPoint)*(size_t)count+7)&~(size_t)7,ARENA=track_bytes+sizeof(Draw)+FIGURE_ROOM;
+  if(!(b->lists=alloc(ARENA)))FAIL;
   // The track again, on the screen.
-  _Static_assert(sizeof(TrackPoint)*401+sizeof(Draw)+8<=RUN_ARENA,"the arena holds the track and the drawing");
-  const size_t ARENA=b->sink.cap;
-  _Static_assert(sizeof(TrackPoint)*401+sizeof(EnrPoint)*401+8<=RUN_ARENA,"the arena holds the track and the points");
-  TrackPoint *const track=(TrackPoint *)b->sink.arena;
+  TrackPoint *const track=(TrackPoint *)b->lists;
   const bool rolled=FACE_ROLL&&(!FACE_CHART||b->fc);
   if(rolled){
     // The route rolled again, as the camera rolled it.
@@ -1040,11 +1081,11 @@ static bool finish_draw(ChartBuild *b){
   if(make_track(in,src,track)!=count)FAIL;
   for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
   }
-  draw=(Draw *)(b->sink.arena+((sizeof(TrackPoint)*count+7)&~7u));
+  draw=(Draw *)(b->lists+track_bytes);
   // Past the drawing's lists, room for the figures' bitmaps.
-  uint8_t *const room=(uint8_t *)(draw+1);const size_t room_size=ARENA-(size_t)(room-b->sink.arena);
+  uint8_t *const room=(uint8_t *)(draw+1);const size_t room_size=ARENA-(size_t)(room-b->lists);
   scratch=draw->scratch;
-  Canvas cv={classes,true,0,world&&in->tape==2};
+  Canvas cv={classes,true,0,world&&in->tape==2,&b->sink,0};
   uint8_t ring[2*120];
 
   // Graticule: crosses every 5 degrees (30 on the world band), ticks every
@@ -1207,14 +1248,14 @@ static bool finish_draw(ChartBuild *b){
   #define PLACE(end,w) ({int v=(int)js_round((end)-(w)/2.0);v=v<W-4-(w)?v:W-4-(w);v>4?v:4;})
   if(world&&in->tape){
     // A sliding tape moves each minute, all of it the minute's.
-    for(int i=0;i<TAPE_PANEL*W;i++)PLANE_AT(classes,i)=G_SPACE;
+    cv.panel=TAPE_PANEL;for(int y=0;y<TAPE_PANEL;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
   }else if(world){
     // The world band's hours are set in a panel over the map, an
     // instrument tape: minute graduations, tall hour marks under the
     // figures, this hour solid and the next outlined. Its index is the
     // minute's.
     const int B=TAPE_BASELINE,P=TAPE_PANEL,X0=TAPE_X0,X1=TAPE_X1;
-    for(int i=0;i<P*W;i++)PLANE_AT(classes,i)=G_SPACE;
+    cv.panel=P;for(int y=0;y<P;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
     for(int x=0;x<W;x++)plot(&cv,x,P-1,L_SPACE_INK);
     for(int x=X0;x<=X1;x++)plot(&cv,x,B,L_SPACE_INK);
     for(int m=0;m<=60;m++){
@@ -1316,9 +1357,9 @@ static bool finish_draw(ChartBuild *b){
     letter(&cv,home_code,home_code_n,L_MARK,1);
     // Its mark's pixels, in order: the symbol's and, over the ground, the
     // code's, where no knockout has cleared them.
-    #define MARK_AT(px,py,code) do{const int X=(px),Y=(py);if(X>=0&&Y>=0&&X<W&&Y<H&&(PLANE_AT(classes,Y*W+X)>>4)==L_LATE_INK&&mark_n<128){\
-      bool over_space_code=false;for(int i=0;i<home_code_n;i++)if(home_code[i].x==X&&home_code[i].y==Y&&(PLANE_AT(classes,Y*W+X)&15)==G_SPACE)over_space_code=true;\
-      if(!over_space_code&&(!(code)||(PLANE_AT(classes,Y*W+X)&15)!=G_SPACE))marks[mark_n++]=(Y)*W+(X);}}while(0)
+    #define MARK_AT(px,py,code) do{const int X=(px),Y=(py);if(X>=0&&Y>=0&&X<W&&Y<H&&layer_at(classes,X,Y)==L_LATE_INK&&mark_n<128){\
+      bool over_space_code=false;for(int i=0;i<home_code_n;i++)if(home_code[i].x==X&&home_code[i].y==Y&&ground_at(&cv,X,Y)==G_SPACE)over_space_code=true;\
+      if(!over_space_code&&(!(code)||ground_at(&cv,X,Y)!=G_SPACE))marks[mark_n++]=(Y)*W+(X);}}while(0)
     for(int dy=0;dy<11;dy++)for(int dx=0;dx<11;dx++)if(AIRPORT[dy][dx]=='#')MARK_AT(hx+dx-5,hy+dy-5,false);
     for(int i=0;i<home_code_n;i++)MARK_AT(home_code[i].x,home_code[i].y,true);
     #undef MARK_AT
@@ -1357,77 +1398,45 @@ static bool finish_draw(ChartBuild *b){
   }
   draw=NULL;
 
-  // The route's points, to the pixel, at the arena's end (the drawing's
-  // lists done with); then the track is done with.
-  const size_t tail=(ARENA-sizeof(EnrPoint)*(size_t)count)&~(size_t)3;
-  EnrPoint *const kept=(EnrPoint *)(b->sink.arena+tail);
+  // The route's points, to the pixel; then the drawing's lists are done with.
+  points=alloc(sizeof(EnrPoint)*(count?count:1));if(!points)FAIL;
   for(int i=0;i<count;i++){
-    EnrPoint *q=&kept[i];q->x=(int16_t)js_round(track[i].a);q->y=(int16_t)js_round(track[i].b);
+    EnrPoint *q=&points[i];q->x=(int16_t)js_round(track[i].a);q->y=(int16_t)js_round(track[i].b);
     q->flags=(uint8_t)((i&&fabs(track[i].b-track[i-1].b)>fabs(track[i].a-track[i-1].a)?ENR_STEEP:0)|(i&&fabs(track[i].a-track[i-1].a)>W/2?ENR_JUMP:0)|(HOUR_OF(b,i)?ENR_HOUR:0));
   }
   const double c1x_=track[h1].a;
   double least=INFINITY;for(int i=0;i<count;i++)if(track[i].a<least)least=track[i].a;
-  // The class plane as row runs, into the arena before the points; the
-  // plane freed leaves one free stretch for the scene, and the points and
-  // runs move there at their own sizes. Runs too long for the arena are made
-  // over the plane itself.
+  // (Then a few rows of scratch in their place: the stack is small.)
+  release(b->lists);b->lists=NULL;
+  _Static_assert(3*W>=6*(GRID_N+1),"the scratch holds a row of the grid's directions");
+  if(!(b->lists=alloc(3*W)))FAIL;
+  uint8_t *const row=b->lists,*const out_row=b->lists+W;
+  // The scene's class plane as row runs: each row the ground's classes
+  // with what was drawn laid over them, a band of the plane at a time into
+  // a piece of its own, the band let go; then the ground, and the pieces
+  // together.
   const uint8_t *runs;
-  if(rolled){
-    // A Fuller build's arena is small: its runs are packed over the plane
-    // itself, and the plane shrunk to them.
-    // The first band's runs go to the arena (its drawing done with), each
-    // band after to its own block once the band before is let go; then all
-    // of them together.
-    uint8_t *piece[PLANE_BANDS]={0};unsigned n=0;b->sink.row_offset[0]=0;bool ok=true;
-    for(int k=0;k<PLANE_BANDS&&ok;k++){
-      unsigned m=0;for(int y=k*BAND_ROWS;y<(k+1)*BAND_ROWS;y++)m+=(unsigned)row_runs(PLANE_ROW(classes,y),NULL);
-      piece[k]=k?alloc(m?m:1):m<=tail?b->sink.arena:NULL;
-      if(!piece[k]){ok=false;break;}
-      unsigned at=0;for(int y=k*BAND_ROWS;y<(k+1)*BAND_ROWS;y++){at+=(unsigned)row_runs(PLANE_ROW(classes,y),piece[k]+at);b->sink.row_offset[y+1]=(uint16_t)(n+at);}
-      n+=m;release(b->plane.band[k]);b->plane.band[k]=NULL;
-    }
-    uint8_t *all=ok?alloc(n?n:1):NULL;
-    if(all){unsigned at=0;for(int k=0;k<PLANE_BANDS;k++){const unsigned m=(unsigned)(b->sink.row_offset[(k+1)*BAND_ROWS]-b->sink.row_offset[k*BAND_ROWS]);memcpy(all+at,piece[k],m);at+=m;}}
-    for(int k=1;k<PLANE_BANDS;k++)release(piece[k]);
-    if(!all)FAIL;
-    runs=all;
-    points=alloc(sizeof(EnrPoint)*(count?count:1));if(!points){release(all);FAIL;}
-    memcpy(points,kept,sizeof(EnrPoint)*count);release(b->sink.arena);b->sink.arena=NULL;
-  }else
-  {unsigned n=0;for(int y=0;y<H;y++)n+=(unsigned)row_runs(PLANE_ROW(classes,y),NULL);
-  uint8_t *arena=b->sink.arena;
-  if(n<=tail){
-    n=0;b->sink.row_offset[0]=0;
-    for(int y=0;y<H;y++){n+=(unsigned)row_runs(PLANE_ROW(classes,y),arena+n);b->sink.row_offset[y+1]=(uint16_t)n;}
-    plane_free(b);
-    points=alloc(sizeof(EnrPoint)*(count?count:1));if(!points)FAIL;
-    memcpy(points,kept,sizeof(EnrPoint)*count);
-    b->sink.arena=NULL;
-    uint8_t *moved=src->resize?src->resize(arena,n?n:1):NULL;
-    runs=moved?moved:arena;
-  }else{
-    // Longer than the room before the points: the rest to a spill block,
-    // and all of it together once the plane is freed.
-    uint8_t *spill=alloc(n-tail);if(!spill)FAIL;
-    unsigned at=0;b->sink.row_offset[0]=0;uint8_t row[2*W];
-    for(int y=0;y<H;y++){
-      const int k=row_runs(PLANE_ROW(classes,y),row);
-      for(int q=0;q<k;q++,at++){if(at<tail)arena[at]=row[q];else spill[at-tail]=row[q];}
-      b->sink.row_offset[y+1]=(uint16_t)at;
-    }
-    plane_free(b);
-    points=alloc(sizeof(EnrPoint)*(count?count:1));
-    uint8_t *all=alloc(n);
-    if(!points||!all){release(all);release(spill);FAIL;}
-    memcpy(points,kept,sizeof(EnrPoint)*count);memcpy(all,arena,tail);memcpy(all+tail,spill,n-tail);
-    release(spill);release(arena);b->sink.arena=NULL;runs=all;
-  }}
-  if(!runs)FAIL;
+  {if(!(b->offsets=alloc(sizeof(uint16_t)*(H+1))))FAIL;
+  unsigned n=0;b->offsets[0]=0;
+  for(int k=0;k<PLANE_BANDS;k++){
+    unsigned m=0;
+    #define MERGED(y) do{ground_row(&b->sink,cv.panel,(y),row);for(int x=0;x<W;x++){const int l=layer_at(classes,x,(y));if(l)row[x]=(uint8_t)((row[x]&15)|l<<4);}}while(0)
+    for(int y=k*BAND_ROWS;y<(k+1)*BAND_ROWS;y++){MERGED(y);m+=(unsigned)row_runs(row,NULL);}
+    if(!(b->piece[k]=alloc(m?m:1)))FAIL;
+    unsigned at=0;
+    for(int y=k*BAND_ROWS;y<(k+1)*BAND_ROWS;y++){MERGED(y);const int r=row_runs(row,out_row);memcpy(b->piece[k]+at,out_row,r);at+=(unsigned)r;b->offsets[y+1]=(uint16_t)(n+at);}
+    #undef MERGED
+    n+=m;release(b->plane.band[k]);b->plane.band[k]=NULL;
+  }
+  sink_free(b);
+  uint8_t *all=alloc(n?n:1);if(!all)FAIL;
+  for(int k=0;k<PLANE_BANDS;k++){const unsigned from=b->offsets[k*BAND_ROWS],m=b->offsets[(k+1)*BAND_ROWS]-from;memcpy(all+from,b->piece[k],m);release(b->piece[k]);b->piece[k]=NULL;}
+  runs=all;}
   
   // The scene: the plate, the night's tables, the minutes and the track.
   out=alloc(sizeof(EnrScene));if(!out){release((void *)runs);FAIL;}
   memset(out,0,sizeof *out);
-  out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->sink.row_offset,sizeof out->row_offset);
+  out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->offsets,sizeof out->row_offset);release(b->offsets);b->offsets=NULL;
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0)|(world&&in->tape?64:0)|(world&&in->tape==2?128:0));
   out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;
@@ -1448,12 +1457,9 @@ static bool finish_draw(ChartBuild *b){
     f->tile_count=(uint8_t)fc->tile_count;for(int t=0;t<fc->tile_count;t++){f->tile_face[t]=fc->tiles[t].face;fuller_tile_grid(fc,t,GRID_N,f->tile_grid[t]);}
     // Which tile each pixel lies on comes after (fuller_tile_rows).
     b->tile_cap=2048;b->tile_n=0;b->tile_row=0;f->tile_runs=alloc(b->tile_cap);if(!f->tile_runs)FAIL;f->tile_offset[0]=0;
+    // The night's grid: the zoomed ground's own, or read now.
     if(b->dirs){f->dirs=b->dirs;b->dirs=NULL;}
-    else{
-      f->dirs=alloc(sizeof(int16_t)*3*GRID_POINTS);if(!f->dirs)FAIL;
-      uint8_t *d=(uint8_t *)f->dirs;if(src->grids(src->grid_source,FULLER_HEADER,d,6*GRID_POINTS)!=6*GRID_POINTS)FAIL;
-      for(int k=0;k<3*GRID_POINTS;k++){const int16_t v=(int16_t)(d[2*k]|d[2*k+1]<<8);f->dirs[k]=v;}
-    }
+    else if(!(f->dirs=night_dirs(src,b->lists)))FAIL;
     out->heavy=heavy;
   }
   out->c1x=(enr_real)c1x_;out->normal_x=cam.slow?(enr_real)cam.nx:0;out->normal_y=cam.slow?(enr_real)cam.ny:-1;
@@ -1484,7 +1490,8 @@ static bool finish_draw(ChartBuild *b){
   if(home_mark){out->home_box[0]=(int16_t)home_box.x;out->home_box[1]=(int16_t)home_box.y;out->home_box[2]=(int16_t)home_box.w;out->home_box[3]=(int16_t)home_box.h;}
   b->out=out;b->forward=forward;b->minute=0;
   if((world||(rolled&&cam.wide&&!day))&&in->home){b->sb=alloc(2*120*sizeof(double));if(!b->sb)FAIL;b->cb=b->sb+120;bearings(3,b->sb,b->cb);}
-  return true;
+   release(b->lists);b->lists=NULL;
+   return true;
 fail:
   if(out){enr_free(out,release);release(out);}
   release(points);

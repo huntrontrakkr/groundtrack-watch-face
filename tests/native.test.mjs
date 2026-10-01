@@ -12,7 +12,7 @@ import {registerLiveFixture} from './tle-fixture.mjs';
 import {registerNominal} from '../src/nominal.js';
 import {nameCode} from '../src/events.js';
 
-let cc=true;try{execFileSync('make',['-s','-C','native/host','harness','harness-exact','build_check'],{stdio:'pipe'});}catch{cc=false;}
+let cc=true;try{execFileSync('make',['-s','-C','native/host','harness','harness-exact','build_check','build_check-enroute','build_check-plotboard','build_check-fuller'],{stdio:'pipe'});}catch{cc=false;}
 registerLiveFixture();registerNominal();
 const ev=(iso,title)=>({epoch:Date.parse(iso),label:nameCode(title)});
 const input=(body,iso,plate,zone,more={})=>{const home=zone?HOMES[zone]||null:null;return chartInput({body,start:Date.parse(iso),plate,zone:zone||'UTC',home,...more});};
@@ -61,7 +61,32 @@ test('every hour builds within the watch\'s memory',{skip:!cc&&'no C compiler'},
     const out=JSON.parse(r.stdout.toString());
     // The build's memory at its peak, counted as the watch's heap would
     // (with this machine's larger pointers): the watch has about 67 KB.
-    assert.ok(out.peak<=69000,`${label(h)}: the build peaks at ${out.peak} bytes`);
+    assert.ok(out.peak<=56000,`${label(h)}: the build peaks at ${out.peak} bytes`);
+  }
+});
+
+// Each face alone, as its watch app is built, with room to spare: the
+// watch's heap is what its 128 KB leaves after the app itself (about 74 KB
+// on Enroute and Plotboard, 65 KB on Fuller), and a build that peaks near
+// it fails on the hours that need a little more. These budgets (counted
+// with this machine's larger pointers, so a little high) leave a fifth of
+// the heap free at the peak, and on Fuller, whose finished sheet stays
+// while each minute is drawn, a third of it after.
+const BUDGETS={enroute:{peak:52000,kept:40000},plotboard:{peak:52000,kept:44000},fuller:{peak:54000,kept:42000}};
+test('each face builds its hours with a fifth of its heap to spare',{skip:!cc&&'no C compiler'},()=>{
+  const day=Date.parse('2026-09-30T00:00:00Z'),at=h=>new Date(day+h*3600e3).toISOString();
+  const cases={
+    enroute:[['sun',{}],['moon',{}],['sat:36585',{}],['sat:42738',{}],['sat:42738',{span:'hour'}]],
+    plotboard:[['sat:25544',{}],['sat:25544',{tape:'slide'}],['sat:43013',{tape:'tape'}]],
+    fuller:[['sat:25544',{projection:'fuller'}],['sat:43013',{projection:'fuller'}],['sun',{projection:'fuller'}],['moon',{projection:'fuller'}],['sat:36585',{projection:'fuller'}],['sat:42738',{projection:'fuller'}]]
+  };
+  for(const [face,list] of Object.entries(cases))for(const [body,more] of list)for(const hour of [0,7,14,21]){
+    const r=spawnSync(`native/host/build_check-${face}`,[],{input:input(body,at(hour),'console','America/New_York',{flag:true,...more})});
+    const what=`${face} ${body} ${JSON.stringify(more)} hour ${hour}`;
+    assert.equal(r.status,0,`${what}: ${r.stdout}${r.stderr}`);
+    const out=JSON.parse(r.stdout.toString());
+    assert.ok(out.peak<=BUDGETS[face].peak,`${what}: the build peaks at ${out.peak} bytes (budget ${BUDGETS[face].peak})`);
+    assert.ok(out.kept<=BUDGETS[face].kept,`${what}: the hour keeps ${out.kept} bytes (budget ${BUDGETS[face].kept})`);
   }
 });
 
