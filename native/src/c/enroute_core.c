@@ -570,6 +570,15 @@ static int circuit(int ax,int ay,int bx,int by,enr_real clearance,Px *out){
 }
 // The minute flag: a staff from the body flying a pennant with the minutes
 // reversed out of the route's ink.
+// A colour that reads on an ink (GColor8, 0b11rrggbb): the plate's paper
+// or space where it stands well off the ink's lightness, else black or
+// white, whichever is further. Lightness in tenths: 3r + 6g + 1b, 0-30.
+static int lightness(uint8_t c){return 3*((c>>4)&3)+6*((c>>2)&3)+((c)&3);}
+static uint8_t on_ink(const EnrScene *s,uint8_t ink){
+  const int l=lightness(ink),p=lightness(s->space);
+  if(abs(p-l)>=12)return s->space;
+  return l>=15?0xC0:0xFF;
+}
 static void draw_flag(Ctx *c){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
   const int mx=js_round(m->mx),my=js_round(m->my);
@@ -585,8 +594,10 @@ static void draw_flag(Ctx *c){
     for(int x=0;x<fw+tip&&n<SCRATCH;x++)px[n++]=(Px){d>0?sx+1+x:sx-1-x,top+y};
   }
   letter(c,px,n,ENR_ROUTE,1);
+  // The minutes in a colour that stands off the pennant's ink, not the
+  // ground showing through.
   Px digits[128];const int k=text_pixels(m->minute,2,d>0?sx+4:sx-fw+2,top+10,digits);
-  for(int i=0;i<k;i++)clear(c,digits[i].x,digits[i].y);
+  for(int i=0;i<k;i++){const int x=digits[i].x,y=digits[i].y;plot(c,x,y,on_ink(s,s->zoned[ENR_ROUTE][zone_at(c,x,y)]));}
 }
 
 // The world band's tape: the route's ink filled along the baseline up to

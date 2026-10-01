@@ -28,4 +28,6 @@
 // A scene's view, as far as this face can have it.
 #define VIEW_IS_WORLD(v) (FACE_WORLD&&(!FACE_HOUR||(v)==1))
 #define VIEW_IS_DAY(v) (FACE_HOUR&&(v)==2)
-#define VIEW_IS_HOUR(v) (FACE_HOUR&&(!FACE_WORLD||(v)==0))
+// (A face without the world band still has the day view: an hour chart is
+// view 0 there too, not anything but the world band.)
+#define VIEW_IS_HOUR(v) (FACE_HOUR&&(FACE_WORLD?(v)==0:(v)!=2))
