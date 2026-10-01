@@ -40,7 +40,7 @@ const HOURS=[
   ['sat:25544','2026-09-30T13:00:00Z','crt','America/New_York',{flag:true,events:[ev('2026-09-30T13:12:00Z','Launch'),ev('2026-09-30T13:40:00Z','Call')]}],
   ['sat:25544','2026-09-30T13:00:00Z','crt','America/New_York',{tape:'tape'}],['sat:43013','2026-09-30T17:00:00Z','console','UTC',{tape:'tape',clock24:false}],
   ['sat:25544','2026-09-30T13:00:00Z','sectional','America/New_York',{tape:'tape',events:[ev('2026-09-30T13:12:00Z','Launch'),ev('2026-09-30T13:05:00Z','Tea')]}],
-  ['sat:25544','2026-09-30T13:00:00Z','crt','America/New_York',{tape:'slide',minute:23}],['sat:49260','2026-10-01T09:00:00Z','console','America/New_York',{tape:'slide',minute:0}],
+  ['sat:25544','2026-09-30T13:00:00Z','crt','America/New_York',{tape:'slide'}],['sat:49260','2026-10-01T09:00:00Z','console','America/New_York',{tape:'slide'}],
   ['sat:25544','2026-09-30T13:00:00Z','crt','America/New_York',{transfer:'vernier'}],['sat:43013','2026-09-30T17:00:00Z','enroute','UTC',{transfer:'comb'}],['sat:49260','2026-10-01T09:00:00Z','red','America/New_York',{transfer:'chevrons'}],
   ['sat:25544','2026-09-30T13:00:00Z','crt','America/New_York',{projection:'fuller',flag:true}],['sat:48274','2026-10-01T06:30:00Z','sectional','Asia/Kolkata',{projection:'fuller',flag:true}],
   ['sat:20580','2026-09-30T20:00:00Z','hypsometric','Europe/London',{projection:'fuller',readout:'callout'}],['sat:49260','2026-10-01T09:00:00Z','red','America/New_York',{projection:'fuller',flag:true}],

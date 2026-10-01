@@ -426,20 +426,22 @@ static int ground_rows_end(Ground *g){
 typedef struct {uint8_t *band[PLANE_BANDS];} Plane;
 #define PLANE_ROW(p,y) ((p)->band[(y)/BAND_ROWS]+((y)%BAND_ROWS)*W)
 #define PLANE_AT(p,i) (PLANE_ROW(p,(i)/W)[(i)%W])
-typedef struct {const Plane *c;bool early;int stage;} Canvas;
+// wrap: the plane is the world round (the sliding band): columns wrap.
+typedef struct {const Plane *c;bool early;int stage;bool wrap;} Canvas;
+static int wrap_x(const Canvas *cv,int x){return cv->wrap?((x%W)+W)%W:x;}
 static void plot(Canvas *cv,double fx,double fy,int layer){
-  const double x=js_round(fx),y=js_round(fy);
+  const int x=wrap_x(cv,(int)js_round(fx)),y=(int)js_round(fy);
   if(x<0||y<0||x>=W||y>=H)return;
-  const int i=(int)y*W+(int)x;
+  const int i=y*W+x;
   if(layer==L_INK&&cv->early)layer=L_EARLY_INK;
   if(layer==L_GRID&&cv->stage>=1)layer=L_NET_GRID;
   if(cv->stage==3&&(layer==L_INK||layer==L_MARK||layer==L_SPACE_INK))layer=L_LATE_INK;
   PLANE_AT(cv->c,i)=(uint8_t)((PLANE_AT(cv->c,i)&15)|layer<<4);
 }
 static void clear(Canvas *cv,double fx,double fy){
-  const double x=js_round(fx),y=js_round(fy);
+  const int x=wrap_x(cv,(int)js_round(fx)),y=(int)js_round(fy);
   if(x<0||y<0||x>=W||y>=H)return;
-  const int i=(int)y*W+(int)x;
+  const int i=y*W+x;
   PLANE_AT(cv->c,i)=(uint8_t)((PLANE_AT(cv->c,i)&15)|(cv->early?L_EARLY_CLEARED:cv->stage==3?L_LATE_CLEARED:L_CLEARED)<<4);
 }
 typedef struct {int16_t x,y;} Px;
@@ -449,7 +451,7 @@ typedef struct {int x,y,w,h;} Box;
 static void letter(Canvas *cv,const Px *px,int n,int layer,int halo){
   for(int i=0;i<n;i++)for(int dy=-halo;dy<=halo;dy++)for(int dx=-halo;dx<=halo;dx++)clear(cv,px[i].x+dx,px[i].y+dy);
   for(int i=0;i<n;i++){
-    const int cx=px[i].x<0?0:px[i].x>W-1?W-1:px[i].x,cy=px[i].y<0?0:px[i].y>H-1?H-1:px[i].y;
+    const int wx=wrap_x(cv,px[i].x),cx=wx<0?0:wx>W-1?W-1:wx,cy=px[i].y<0?0:px[i].y>H-1?H-1:px[i].y;
     plot(cv,px[i].x,px[i].y,(PLANE_AT(cv->c,cy*W+cx)&15)==G_SPACE?L_SPACE_INK:layer);
   }
 }
@@ -638,6 +640,7 @@ struct ChartBuild {
   ChartInput in;ChartSources src;
   TrackPoint *track;int count,h0,h1,t0,step;Cam cam;Plate plate;
   Plane plane;Tiles *tiles;Ground *ground;RunSink sink;
+  char source[24];           // the band's source line, lettered by the renderer when the world slides
   // Then the scene, its minutes made a few at a time, with home's circle's
   // bearings.
   EnrScene *out;bool forward;int minute;double *sb,*cb;
@@ -841,8 +844,10 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     // proportion.
     cam.world=true;cam.scale=(W-16)/(maxlon-minlon>180?maxlon-minlon:180);cam.k=1;cam.lat0=WORLD_SOUTH;cam.y0=H-10;
     cam.lonMid=(maxlon+minlon)/2;cam.x0=W/2;
-    // With the world sliding, centred on the body at the minute.
-    if(in->tape==2){const int i=(in->minute*60+1200)/15;if(i<0||i>=count)FAIL;cam.lonMid=track[i].b;}
+    // With the world sliding under the tape, the band is the whole world
+    // round, W columns to 360 degrees: the minute renderer turns it under
+    // the index (enr_render), so the hour is built once.
+    if(in->tape==2)cam.scale=W/360.0;
     cam.top=(int)ceil(sy(&cam,WORLD_NORTH));cam.bottom=(int)floor(sy(&cam,WORLD_SOUTH));
   }
   else if(!VIEW_IS_HOUR(in->view))FAIL;
@@ -983,7 +988,7 @@ static bool finish_draw(ChartBuild *b){
   // Past the drawing's lists, room for the figures' bitmaps.
   uint8_t *const room=(uint8_t *)(draw+1);const size_t room_size=ARENA-(size_t)(room-b->sink.arena);
   scratch=draw->scratch;
-  Canvas cv={classes,true,0};
+  Canvas cv={classes,true,0,world&&in->tape==2};
   uint8_t ring[2*120];
 
   // Graticule: crosses every 5 degrees (30 on the world band), ticks every
@@ -1065,18 +1070,21 @@ static bool finish_draw(ChartBuild *b){
   // On a Fuller sheet a one-ink plate's route is heavier: two pixels ahead
   // of the body (the second the hour's), three behind.
   bool heavy=rolled&&(pal->flags&PLATE_MONO);
+  // (Round the world, a step across the seam is drawn on round it.)
   #define JUMP(p,q) (fabs(track[q].a-track[p].a)>W/2)
+  #define ON_ROUND(p,q) (cv.wrap&&JUMP(p,q)?track[q].a+(track[p].a>track[q].a?W:-W):track[q].a)
   if(pal->flags&PLATE_MONO)for(int i=1;i<count;i++){
-    if(JUMP(i-1,i)||!(HOUR_OF(b,i-1)&&HOUR_OF(b,i)))continue;
-    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,casing_pixel,&heavy);
+    if((JUMP(i-1,i)&&!cv.wrap)||!(HOUR_OF(b,i-1)&&HOUR_OF(b,i)))continue;
+    segment(&cv,track[i-1].a,track[i-1].b,ON_ROUND(i-1,i),track[i].b,casing_pixel,&heavy);
   }
   cv.early=false;cv.stage=2;
   for(int i=1;i<count;i++){
-    if(JUMP(i-1,i))continue;
+    if(JUMP(i-1,i)&&!cv.wrap)continue;
     const bool hour=HOUR_OF(b,i-1)&&HOUR_OF(b,i),steep=fabs(track[i].b-track[i-1].b)>fabs(track[i].a-track[i-1].a);
     uint8_t how=(uint8_t)((hour?1:0)|(heavy?2:0)|(steep?4:0));
-    segment(&cv,track[i-1].a,track[i-1].b,track[i].a,track[i].b,route_pixel,&how);
+    segment(&cv,track[i-1].a,track[i-1].b,ON_ROUND(i-1,i),track[i].b,route_pixel,&how);
   }
+  #undef ON_ROUND
   // A whole day is graduated in hours instead: a tick every hour, longer
   // and numbered every three, longest at the two midnights. Where the day's
   // track crosses itself two hours meet, and the later label gives way.
@@ -1272,7 +1280,8 @@ static bool finish_draw(ChartBuild *b){
     char source[24],*p=source;
     for(const char *c=in->code[0]?in->code:"SAT";*c;c++)*p++=*c;
     memcpy(p," EL ",4);p+=4;p=put_int(p,d,2);*p++=' ';memcpy(p,MONTHS[mo-1],3);p+=3;*p++=' ';p=put_int(p,sec/3600,2);p=put_int(p,sec%3600/60,2);*p++='Z';*p=0;
-    const int n=text_pixels(source,6,top-6,scratch);letter(&cv,scratch,n,L_INK,1);
+    if(cv.wrap)memcpy(b->source,source,sizeof b->source);
+    else{const int n=text_pixels(source,6,top-6,scratch);letter(&cv,scratch,n,L_INK,1);}
     zulu_x=(int16_t)(W-6-text_width("0000Z"));zulu_baseline=H-1;top_baseline=H-1;height_right=W-6;height_baseline=(int16_t)(top-6);
   }else{
     // Margins: the local date and day of the year, Zulu time between them;
@@ -1395,7 +1404,7 @@ static bool finish_draw(ChartBuild *b){
   if(world&&!in->tape){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
   out->numerals=(uint8_t)in->numerals;
-  out->slide_minute=world&&in->tape==2?(uint8_t)in->minute:255;
+  memcpy(out->source,b->source,sizeof out->source);
   out->event_count=(uint8_t)nevents;memcpy(out->events,events,sizeof events[0]*nevents);
   if(world&&in->tape){
     memcpy(out->tape_hour,hour,strlen(hour));memcpy(out->tape_next,next,strlen(next));

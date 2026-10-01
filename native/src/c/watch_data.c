@@ -156,7 +156,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   const bool sat=s->body==BODY_SATELLITE;
   // On Groundtrack Fuller every chart is a rolling Fuller sheet, of the day
   // for the Sun and Moon.
-  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:FACE_ROLL?VIEW_DAY:0;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.minute=lt->tm_min;in.clock24=s->clock24;
+  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:FACE_ROLL?VIEW_DAY:0;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.clock24=s->clock24;
   in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
   in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;

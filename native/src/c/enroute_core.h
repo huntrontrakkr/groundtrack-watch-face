@@ -136,8 +136,10 @@ typedef struct {
   int16_t fig_box[2][4];
   // The world band's sliding tape: this hour's figures and the next's.
   char tape_hour[3],tape_next[3];
-  // With the world sliding, the one minute the scene is for (255 otherwise).
-  uint8_t slide_minute;
+  // With the world sliding (ENR_SLIDING_WORLD), the band is the whole
+  // world round, W columns to 360 degrees, turned under the index each
+  // minute by enr_render; its source line, lettered over it then.
+  char source[24];
   // Events: each fix, its name's x (baseline the fix's y - 7) and box, and
   // whether the name is clear of what stays all hour; each minute it also
   // gives way to that minute's flag, callout or tape, and to the names
@@ -196,7 +198,8 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
 // Lettering's box, set at x on a baseline; its width.
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]);
 int enr_text_width(const char *text,int n);
-// A pixel's class (ground nibble, layer nibble) and its night zone (0 day,
-// 1 dusk, 2 night) at a minute.
+// A pixel's class (ground nibble, layer nibble; with the world sliding, the
+// band's own columns, before it is turned) and its night zone (0 day, 1
+// dusk, 2 night) at a minute, at the screen's pixel.
 int enr_class(const EnrScene *scene,int x,int y);
 int enr_zone(const EnrScene *scene,int minute,int x,int y);

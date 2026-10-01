@@ -245,13 +245,17 @@ static uint8_t late_ink(const EnrScene *s,int ground,int x,int y,int z){
   if(home_mark(s,x,y))return s->zoned[ENR_MARK][z];
   return ground==G_SPACE?s->space_ink:s->zoned[ENR_INK][z];
 }
+// (The sliding band is the world round: its columns wrap.)
+static int sliding_x(const EnrScene *s,int x){return (s->flags&ENR_SLIDING_WORLD)?((x%W)+W)%W:x;}
 static void plot(Ctx *c,int x,int y,uint8_t color){
+  x=sliding_x(c->s,x);
   if(x<0||y<0||x>=W||y>=H)return;
   if(c->measure){touch(c,x,y);return;}
   c->frame[y*c->stride+x]=color;
 }
 // A knockout: plain ground, without night's screen.
 static void clear(Ctx *c,int x,int y){
+  x=sliding_x(c->s,x);
   if(x<0||y<0||x>=W||y>=H)return;
   if(c->measure){touch(c,x,y);return;}
   plot(c,x,y,base_color(c->s,class_at(c,x,y)&15,zone(c,x,y)));
@@ -454,8 +458,8 @@ static void segment(Ctx *c,int x,int y,int xx,int yy,PixelFn fn,void *arg){
 }
 static void bold_pixel(Ctx *c,int x,int y,void *arg){
   // A heavy route's second pixel is the hour's; behind the body it takes
-  // a third, on the other side.
-  const bool steep=*(bool *)arg,heavy=FACE_ROLL&&c->s->heavy;const int bx=steep?(heavy?x-1:x+1):x,by=steep?y:(heavy?y+1:y-1);
+  // a third, on the other side. (The sliding band's columns wrap.)
+  const bool steep=*(bool *)arg,heavy=FACE_ROLL&&c->s->heavy;x=sliding_x(c->s,x);const int bx=sliding_x(c->s,steep?(heavy?x-1:x+1):x),by=steep?y:(heavy?y+1:y-1);
   if(bx<0||by<0||bx>=W||by>=H)return;
   const int layer=class_at(c,bx,by)>>4;
   // Only what was drawn before the route (ground, grid, the network's ink
@@ -534,9 +538,9 @@ static void letter(Ctx *c,const Px *px,int n,int ink_key,int halo){
   if(s_figures_only)halo=0;
   for(int i=0;i<n;i++)for(int dy=-halo;dy<=halo;dy++)for(int dx=-halo;dx<=halo;dx++)clear(c,px[i].x+dx,px[i].y+dy);
   for(int i=0;i<n;i++){
-    const int cx=px[i].x<0?0:px[i].x>W-1?W-1:px[i].x,cy=px[i].y<0?0:px[i].y>H-1?H-1:px[i].y;
+    const int wx=sliding_x(c->s,px[i].x),cx=wx<0?0:wx>W-1?W-1:wx,cy=px[i].y<0?0:px[i].y>H-1?H-1:px[i].y;
     const bool space=(class_at(c,cx,cy)&15)==G_SPACE;
-    plot(c,px[i].x,px[i].y,space?c->s->space_ink:c->s->zoned[ink_key][zone_at(c,px[i].x,px[i].y)]);
+    plot(c,px[i].x,px[i].y,space?c->s->space_ink:c->s->zoned[ink_key][zone_at(c,wx,px[i].y)]);
   }
 }
 // A leader routed like a circuit trace: 45 degrees, then straight.
@@ -742,9 +746,10 @@ static void draw_sliding_tape(Ctx *c){
   for(int kk=0;kk<5;kk++)for(int d=-kk;d<=kk;d++)plot(c,IX+d,B-6+kk,ink);
   // With the world sliding, the index line on down through the map to the
   // body, under what is drawn after it (home, the margins).
+  // (Drawn in the band's own columns, before it is turned: at the body's.)
   if(s->flags&ENR_SLIDING_WORLD){
-    const int top=s->height_baseline+6,my=js_round(c->m->my);
-    for(int y=top;y<my-8;y++)if(((y-top)>>1)%2==0&&(class_at(c,IX,y)>>4)<L_LATE_CLEARED)plot(c,IX,y,s->zoned[ENR_ROUTE][zone_at(c,IX,y)]);
+    const int top=s->height_baseline+6,my=js_round(c->m->my),bx=sliding_x(s,js_round(c->m->mx));
+    for(int y=top;y<my-8;y++)if(((y-top)>>1)%2==0&&(class_at(c,bx,y)>>4)<L_LATE_CLEARED)plot(c,bx,y,s->zoned[ENR_ROUTE][zone_at(c,bx,y)]);
   }
 }
 // The sliding tape's figures: this hour's and the next's (which: 0 both,
@@ -898,7 +903,23 @@ static void draw_events(Ctx *c){
 // its flag (or the tape's index and minutes), what was drawn over them, then
 // the margins' Zulu time, pass line and height. PART_ALL draws them all; a
 // single part is drawn alone, to measure where it goes.
-enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_CIRCLE,PARTS};
+enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PARTS};
+// The sliding band: how far its columns are turned at a minute (the body's
+// column comes under the index, W/2), and the rows turned (the band and
+// the route, between the tape's panel and the bottom margin). What stands
+// still over the band (the height, the source line) is drawn on the band
+// at its turned columns, before the turn.
+#define SLIDE_TOP TAPE_P
+#define SLIDE_BOTTOM (H-10)
+static int slide_offset(const EnrScene *s,const EnrMinute *m){return (s->flags&ENR_SLIDING_WORLD)?(((int)js_round(m->mx)-W/2)%W+W)%W:0;}
+static void slide_rows(uint8_t *frame,int stride,int off){
+  if(!off)return;
+  uint8_t turned[W];
+  for(int y=SLIDE_TOP;y<=SLIDE_BOTTOM;y++){
+    uint8_t *row=frame+y*stride;
+    memcpy(turned,row+off,W-off);memcpy(turned+W-off,row,off);memcpy(row,turned,W);
+  }
+}
 static void draw_moving(Ctx *c,int part){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=VIEW_IS_WORLD(s->view),flag=(s->flags&ENR_MINUTE_FLAG)&&VIEW_IS_HOUR(s->view);
   if(part==PART_CIRCLE){draw_circle(c);return;}
@@ -921,7 +942,9 @@ static void draw_moving(Ctx *c,int part){
   if(!part||part==PART_EVENTS)draw_events(c);
   if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
   if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
-  if(world&&(!part||part==PART_HEIGHT))draw_text(c,m->height,sizeof m->height,0,s->height_right,s->height_baseline);
+  const int off=slide_offset(s,m);
+  if(world&&(!part||part==PART_HEIGHT))draw_text(c,m->height,sizeof m->height,0,s->height_right+off,s->height_baseline);
+  if(world&&off&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint64_t *mask,const uint64_t *nmask,const Night *from){
   minute=minute<0?0:minute>59?59:minute;
@@ -931,6 +954,7 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
   draw_circle(&c);
   draw_bold_route(&c,minute);
   draw_moving(&c,PART_ALL);
+  slide_rows(frame,row_stride,slide_offset(scene,c.m));
   return drawn;
 }
 static void work_end(void);
@@ -1011,6 +1035,9 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
 static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
   minute=minute<0?0:minute>59?59:minute;
   if(from<0||from>59)return render(scene,minute,frame,row_stride,NULL,NULL,NULL);
+  // The sliding band turned back to its own columns, as minute `from` was
+  // drawn; render turns it on again.
+  slide_rows(frame,row_stride,(W-slide_offset(scene,&scene->minutes[from]))%W);
   uint64_t *const mask=work->mask,*const nmask=work->nmask;memset(mask,0,sizeof(uint64_t)*H);memset(nmask,0,sizeof(uint64_t)*H);
   Ctx a={scene,&scene->minutes[from],frame,row_stride,{0,0,0},0,false,{0,0,0,0},NULL},b=a;b.m=&scene->minutes[minute];
   night_ready(scene,&work->night[1],a.m);a.n=&work->night[1];night_ready(scene,&work->night[0],b.m);b.n=&work->night[0];
@@ -1066,6 +1093,8 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
   case ENR_MEASURE_INDEX:if(world){if(scene->flags&ENR_SLIDING_TAPE)draw_sliding_tape(&c);else draw_index(&c);}break;
   }
   if(c.box[2]>=c.box[0]){out[0]=(int16_t)c.box[0];out[1]=(int16_t)c.box[1];out[2]=(int16_t)(c.box[2]-c.box[0]+1);out[3]=(int16_t)(c.box[3]-c.box[1]+1);}
+  // The body is drawn on the band before it is turned.
+  if(part==ENR_MEASURE_BODY&&out[2])out[0]=(int16_t)(((out[0]-slide_offset(scene,c.m))%W+W)%W);
   work_end();
 }
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]){
@@ -1088,5 +1117,6 @@ int enr_zone(const EnrScene *scene,int minute,int x,int y){
   minute=minute<0?0:minute>59?59:minute;
   Ctx c={scene,&scene->minutes[minute],NULL,0,{0,0,0},0,true,{W,H,-1,-1},NULL};
   night_ready(scene,&work->night[0],c.m);c.n=&work->night[0];
+  if(y>=SLIDE_TOP&&y<=SLIDE_BOTTOM)x=(x+slide_offset(scene,c.m))%W;
   const int z=zone_at(&c,x,y);work_end();return z;
 }

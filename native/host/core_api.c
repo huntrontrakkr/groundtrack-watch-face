@@ -55,7 +55,7 @@ int core_build(const char *text,size_t length,int slot){
     else if(!strcmp(key,"code"))snprintf(in.code,sizeof in.code,"%s",value);else if(!strcmp(key,"plate"))in.plate=atoi(value);
     else if(!strcmp(key,"flag"))in.flag=atoi(value);else if(!strcmp(key,"readout"))in.readout=atoi(value);
     else if(!strcmp(key,"numerals"))in.numerals=atoi(value);else if(!strcmp(key,"zonebody"))in.zone_body=atoi(value);
-    else if(!strcmp(key,"tape"))in.tape=atoi(value);else if(!strcmp(key,"minute"))in.minute=atoi(value);
+    else if(!strcmp(key,"tape"))in.tape=atoi(value);
     else if(!strcmp(key,"transfer"))in.transfer=atoi(value);
     else if(!strcmp(key,"event")&&in.event_count<16){char name[8]={0};long long t=0;sscanf(value,"%lld %7s",&t,name);in.events[in.event_count].t=t;snprintf(in.events[in.event_count].name,6,"%s",name);in.event_count++;}
     else if(!strcmp(key,"clock24"))in.clock24=atoi(value);
@@ -86,7 +86,7 @@ int core_layout(int32_t *out,int max){
     offsetof(EnrScene,home_x),offsetof(EnrScene,home_y),offsetof(EnrScene,home_box),offsetof(EnrScene,mark_count),
     offsetof(EnrScene,callout_left),offsetof(EnrScene,callout_top),offsetof(EnrScene,callout_bottom),offsetof(EnrScene,hour_text),offsetof(EnrScene,numerals),
     offsetof(EnrScene,c0),offsetof(EnrScene,c1),offsetof(EnrScene,station_count),offsetof(EnrScene,stations),offsetof(EnrScene,station_table),offsetof(EnrScene,fig_box),
-    offsetof(EnrScene,tape_hour),offsetof(EnrScene,tape_next),offsetof(EnrScene,slide_minute),
+    offsetof(EnrScene,tape_hour),offsetof(EnrScene,tape_next),
     offsetof(EnrScene,event_count),offsetof(EnrScene,events),(int32_t)sizeof(s_scene[0]->events[0]),
     offsetof(EnrScene,minutes),offsetof(EnrMinute,mx),offsetof(EnrMinute,my),offsetof(EnrMinute,zulu),offsetof(EnrMinute,minute),offsetof(EnrMinute,top),offsetof(EnrMinute,index),offsetof(EnrMinute,height),
     offsetof(EnrScene,track_count),offsetof(EnrScene,track_t0),offsetof(EnrScene,track_step),offsetof(EnrScene,track),

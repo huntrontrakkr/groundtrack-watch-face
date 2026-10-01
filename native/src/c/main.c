@@ -46,11 +46,10 @@ static void chart_free(Chart *c){
   if(c->scene){enr_free(c->scene,free);free(c->scene);}
   c->scene=NULL;
 }
-// A chart covers its hour; with the world sliding, its one minute.
+// A chart covers its hour.
 static bool covers(const Chart *c,time_t t){
   if(!c->scene)return false;
   const EnrScene *s=c->scene;
-  if(s->slide_minute!=255){const time_t m=s->hour_start+60*s->slide_minute;return t>=m&&t<m+60;}
   return t>=s->hour_start&&t<s->hour_start+3600;
 }
 static void set_status(const char *text){strncpy(s_status,text,sizeof s_status-1);s_status[sizeof s_status-1]=0;}
