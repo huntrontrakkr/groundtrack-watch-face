@@ -60,10 +60,11 @@ static int32_t q30(enr_real v){return (int32_t)(v*(enr_real)Q30);}
 // Sun in each tile's face frame, and a few rows of heights (FULLER_NONE
 // off the net).
 #define FULLER_NONE INT32_MIN
+#define NIGHT_ROWS 3
 typedef struct Night {
   const EnrMinute *m;
   int32_t p[ENR_W],u2,lo[BLOCKS],hi[BLOCKS];
-  int32_t sun[ENR_TILES][3];int held[3];int32_t h[3][ENR_W];
+  int32_t sun[ENR_TILES][3];int held[NIGHT_ROWS];int32_t (*h)[ENR_W];   // h: NIGHT_ROWS rows, a Fuller sheet's only
 } Night;
 // Lettering and leaders go through one list of pixels, drawn one at a
 // time. The longest is a satellite's pass line: 24 characters of at most 24
@@ -73,22 +74,26 @@ typedef struct {int16_t x,y;} Px;
 // The minute renderer's working memory, taken for each drawing only: a
 // chart is built while none is drawn, and has it then. Two nights: the
 // minute drawn and, drawing over the last minute, that one.
+// Taken in pieces of a few KB each (the heap after a Fuller build is small
+// and broken up): the masks only when drawing over the last minute, the
+// Fuller heights only for a Fuller sheet, the class cache if there is room.
+#define CACHE_ROWS 16
 typedef struct {
-  Px scratch[SCRATCH];uint8_t window[3][ENR_W];uint64_t mask[ENR_H],nmask[ENR_H];
+  Px scratch[SCRATCH];uint8_t window[3][ENR_W];
+  uint64_t *mask,*nmask;
   uint8_t tiles[ENR_W];int tiles_y;
   // Decoded rows for class_at outside the base pass's window, for
   // lettering, which comes back to the same rows glyph after glyph
   // (cache_rows decodes a pixel list's rows first); other lookups walk
   // their row's runs. slot_of: a row's slot, or 255.
-  #define CACHE_ROWS 16
-  uint8_t cache[CACHE_ROWS][ENR_W];int cache_y[CACHE_ROWS],cache_next;uint8_t slot_of[ENR_H];
+  uint8_t (*cache)[ENR_W];int cache_y[CACHE_ROWS],cache_next;uint8_t slot_of[ENR_H];
   Night night[2];
 } Work;
 static Work *work;
 #define scratch (work->scratch)
 static void night_ready(const EnrScene *s,Night *n,const EnrMinute *m){
   if(n->m==m)return;
-  n->m=m;n->held[0]=n->held[1]=n->held[2]=-100;
+  n->m=m;for(int k=0;k<NIGHT_ROWS;k++)n->held[k]=-100;
   if(ROLLED(s)){
     const EnrFuller *f=s->fuller;const enr_real *u=m->sun;
     for(int t=0;t<f->tile_count;t++){const double *b=f->bases[f->tile_face[t]];for(int k=0;k<3;k++){const double v=(u[0]*b[3*k]+u[1]*b[3*k+1]+u[2]*b[3*k+2])*32768,r=floor(v);n->sun[t][k]=(int32_t)(v-r>=0.5?r+1:r);}}
@@ -125,9 +130,9 @@ static const uint8_t *row_tiles(const EnrScene *s,int y){
   work->tiles_y=y;return work->tiles;
 }
 static int32_t fuller_h(const EnrScene *s,Night *n,int x,int y){
-  for(int k=0;k<3;k++)if(n->held[k]==y)return n->h[k][x];
+  for(int k=0;k<NIGHT_ROWS;k++)if(n->held[k]==y)return n->h[k][x];
   // Keep the rows either side of y; replace the farthest.
-  int slot=0;for(int k=1;k<3;k++){const int dk=abs(n->held[k]-y),ds=abs(n->held[slot]-y);if(dk>ds)slot=k;}
+  int slot=0;for(int k=1;k<NIGHT_ROWS;k++){const int dk=abs(n->held[k]-y),ds=abs(n->held[slot]-y);if(dk>ds)slot=k;}
   const uint8_t *tiles=row_tiles(s,y);int32_t *out=n->h[slot];
   for(int xx=0;xx<W;xx++)out[xx]=tiles[xx]?fuller_point(s,n,tiles[xx]-1,xx,y):FULLER_NONE;
   n->held[slot]=y;return out[x];
@@ -169,6 +174,7 @@ static uint8_t class_at(const Ctx *c,int x,int y){
 // The rows of a pixel list decoded into the cache (lettering reads each of
 // its rows many times over).
 static void cache_rows(const EnrScene *s,const Px *px,int n){
+  if(!work->cache)return;
   for(int i=0;i<n;i++){
     const int y=px[i].y;if(y<0||y>=H||work->slot_of[y]!=255)continue;
     const int k=work->cache_next;work->cache_next=(k+1)%CACHE_ROWS;
@@ -917,9 +923,17 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
   draw_moving(&c,PART_ALL);
   return drawn;
 }
-static bool work_begin(void){work=malloc(sizeof(Work));if(work){work->night[0].m=work->night[1].m=NULL;work->tiles_y=-1;for(int k=0;k<CACHE_ROWS;k++)work->cache_y[k]=-1;work->cache_next=0;memset(work->slot_of,255,sizeof work->slot_of);}return work;}
-static void work_end(void){free(work);work=NULL;}
-void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){if(work_begin()){render(scene,minute,frame,row_stride,NULL,NULL,NULL);work_end();}}
+static void work_end(void);
+static bool work_begin(const EnrScene *s,bool masks){
+  work=malloc(sizeof(Work));if(!work)return false;
+  memset(work,0,sizeof *work);work->tiles_y=-1;for(int k=0;k<CACHE_ROWS;k++)work->cache_y[k]=-1;memset(work->slot_of,255,sizeof work->slot_of);
+  if(masks){work->mask=malloc(sizeof(uint64_t)*2*H);if(!work->mask){free(work);work=NULL;return false;}work->nmask=work->mask+H;}
+  if(ROLLED(s))for(int k=0;k<2;k++){work->night[k].h=malloc(sizeof(int32_t)*NIGHT_ROWS*W);if(!work->night[k].h){work_end();return false;}}
+  work->cache=malloc(sizeof(uint8_t)*CACHE_ROWS*W);
+  return true;
+}
+static void work_end(void){if(!work)return;free(work->mask);free(work->night[0].h);free(work->night[1].h);free(work->cache);free(work);work=NULL;}
+void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){if(work_begin(scene,false)){render(scene,minute,frame,row_stride,NULL,NULL,NULL);work_end();}}
 
 void enr_ready(EnrScene *s){
   if(!ROLLED(s))for(int y=0;y<H;y++){s->row_q[y][0]=q30(s->row_cos[y]);s->row_q[y][1]=q30(s->row_sin[y]);}
@@ -976,14 +990,18 @@ static void box_blocks(const int *box,uint64_t *mask){
 }
 static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);
 int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
-  if(!work_begin())return 0;
+  if(!work_begin(scene,from>=0&&from<=59)){
+    // Without room for the masks, the minute whole.
+    if(!work_begin(scene,false))return 0;
+    from=-1;
+  }
   const int drawn=update(scene,from,minute,frame,row_stride);
   work_end();return drawn;
 }
 static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
   minute=minute<0?0:minute>59?59:minute;
   if(from<0||from>59)return render(scene,minute,frame,row_stride,NULL,NULL,NULL);
-  uint64_t *const mask=work->mask,*const nmask=work->nmask;memset(mask,0,sizeof work->mask);memset(nmask,0,sizeof work->nmask);
+  uint64_t *const mask=work->mask,*const nmask=work->nmask;memset(mask,0,sizeof(uint64_t)*H);memset(nmask,0,sizeof(uint64_t)*H);
   Ctx a={scene,&scene->minutes[from],frame,row_stride,{0,0,0},0,false,{0,0,0,0},NULL},b=a;b.m=&scene->minutes[minute];
   night_ready(scene,&work->night[1],a.m);a.n=&work->night[1];night_ready(scene,&work->night[0],b.m);b.n=&work->night[0];
   night_blocks(&a,&b,nmask);
@@ -1024,7 +1042,7 @@ void enr_free(EnrScene *s,void (*release)(void *)){
 // The study's measures (enroute_core.h).
 void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
   out[0]=out[1]=out[2]=out[3]=0;
-  if(!work_begin())return;
+  if(!work_begin(scene,false))return;
   minute=minute<0?0:minute>59?59:minute;
   Ctx c={scene,&scene->minutes[minute],NULL,0,{0,0,0},0,true,{W,H,-1,-1},NULL};
   night_ready(scene,&work->night[0],c.m);c.n=&work->night[0];
@@ -1042,11 +1060,11 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
 }
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]){
   out[0]=out[1]=out[2]=out[3]=0;
-  if(!work_begin())return;
+  Work w;memset(&w,0,sizeof w);work=&w;
   const int k=text_pixels(text,n,x,baseline,scratch);int x0=W,y0=H,x1=-1,y1=-1;
   for(int i=0;i<k;i++){const Px p=scratch[i];x0=p.x<x0?p.x:x0;y0=p.y<y0?p.y:y0;x1=p.x>x1?p.x:x1;y1=p.y>y1?p.y:y1;}
   if(x1>=x0){out[0]=(int16_t)x0;out[1]=(int16_t)y0;out[2]=(int16_t)(x1-x0+1);out[3]=(int16_t)(y1-y0+1);}
-  work_end();
+  work=NULL;
 }
 int enr_text_width(const char *text,int n){return text_width(text,n);}
 int enr_class(const EnrScene *scene,int x,int y){
@@ -1056,7 +1074,7 @@ int enr_class(const EnrScene *scene,int x,int y){
   return G_SPACE;
 }
 int enr_zone(const EnrScene *scene,int minute,int x,int y){
-  if(!work_begin())return -1;
+  if(!work_begin(scene,false))return -1;
   minute=minute<0?0:minute>59?59:minute;
   Ctx c={scene,&scene->minutes[minute],NULL,0,{0,0,0},0,true,{W,H,-1,-1},NULL};
   night_ready(scene,&work->night[0],c.m);c.n=&work->night[0];
