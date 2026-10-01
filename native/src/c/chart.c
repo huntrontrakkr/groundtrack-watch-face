@@ -523,7 +523,7 @@ static const FigureGlyph *figure(int size,char c){for(int s=0;s<5;s++)if(FIGURE_
 static int gap_for(int size){return (int)js_round(size/16.0);}
 static int run_width(const char *t,int size){int w=0,n=0;for(;*t;t++,n++)w+=figure(size,*t)->width;return w+gap_for(size)*(n-1);}
 // A run of figures laid out as figurePixels() does: glyph i at (x[i], y[i]).
-typedef struct {const FigureGlyph *g[3];int x[3],y[3],n,x0,y0,x1,y1;const uint8_t *bits;int base;} FigureRun;
+typedef struct {const FigureGlyph *g[3];int x[3],y[3],n,x0,y0,x1,y1;const uint8_t *bits[3];} FigureRun;
 static void figure_run(const char *t,int size,int x,int y,FigureRun *r){
   int h=0;for(const char *p=t;*p;p++){const int gh=figure(size,*p)->height;if(gh>h)h=gh;}
   r->n=0;int cx=x;r->x0=x;r->y0=y;r->x1=x;r->y1=y;
@@ -538,7 +538,7 @@ static bool figure_solid(const FigureRun *r,int x,int y){
   for(int i=0;i<r->n;i++){
     const FigureGlyph *g=r->g[i];const int gx=x-r->x[i],gy=y-r->y[i];
     if(gx<0||gy<0||gx>=g->width||gy>=g->height)continue;
-    if(r->bits[g->first-r->base+gy*((g->width+7)/8)+(gx>>3)]&(128>>(gx&7)))return true;
+    if(r->bits[i][gy*((g->width+7)/8)+(gx>>3)]&(128>>(gx&7)))return true;
   }
   return false;
 }
@@ -601,8 +601,11 @@ static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char
 #define BEARINGS (FACE_CHART?72:1)
 typedef struct {Px scratch[SCRATCH];Box taken[TAKEN];Px home_code[64];double sb[BEARINGS],cb[BEARINGS];} Draw;
 // A Fuller build's arena: its runs are few, and its drawing holds the track,
-// its lists and the hour's figures (80 px: 3003 bytes of bitmaps).
-#define FULLER_ARENA ((unsigned)((sizeof(double)*2*FULLER_TRACK_MAX+sizeof(Draw)+3003+16+7)&~(size_t)7))
+// its lists and the hour figures' digits, only those drawn: at 80 px two
+// (both figures single: at most 666 bytes), else at 72 px at most four
+// (975 bytes). The build's peak is the class plane beside this arena.
+#define FULLER_FIGURE_ROOM 1000
+#define FULLER_ARENA ((unsigned)((sizeof(double)*2*FULLER_TRACK_MAX+sizeof(Draw)+FULLER_FIGURE_ROOM+16+7)&~(size_t)7))
 // The track: latitude and unwrapped longitude, then its screen position.
 // Point i is at t0 + i*step seconds from the hour (see make_track).
 typedef struct {double a,b;} TrackPoint;
@@ -619,13 +622,27 @@ static bool read_plate(const ChartSources *src,int k,Plate *p){
   for(int k=0;k<2;k++)p->depth_q[k]=isfinite(p->depth_limits[k])?(int32_t)(p->depth_limits[k]*256):INT32_MIN;
   return true;
 }
-// Into `room` (the build's arena, past what it holds), of `space` bytes.
-static uint8_t *load_figures(const ChartSources *src,int size,int *base,uint8_t *room,size_t space){
+// The figures of one size that two runs of digits use, each digit's bits
+// loaded once into `room` (the build's arena, past what it holds), of
+// `space` bytes: at[d] is digit d's place there.
+typedef struct {const uint8_t *room;uint16_t at[10];} Figures;
+static bool load_figures(const ChartSources *src,int size,const char *a,const char *b,Figures *f,uint8_t *room,size_t space){
   int s=0;while(s<5&&FIGURE_SIZES[s]!=size)s++;
-  if(s==5)return NULL;
-  const int from=FIGURE_GLYPHS[s*10].first,to=s<4?FIGURE_GLYPHS[(s+1)*10].first:FIGURE_BYTES;
-  if((size_t)(to-from)>space||src->figures(src->figure_source,from,room,to-from)!=(size_t)(to-from))return NULL;
-  *base=from;return room;
+  if(s==5)return false;
+  f->room=room;for(int d=0;d<10;d++)f->at[d]=0xFFFF;
+  size_t used=0;
+  for(int k=0;k<2;k++)for(const char *t=k?b:a;*t;t++){
+    const int d=*t-'0';if(d<0||d>9||f->at[d]!=0xFFFF)continue;
+    const FigureGlyph *g=&FIGURE_GLYPHS[s*10+d];const size_t n=(size_t)g->height*((g->width+7)/8);
+    if(used+n>space||src->figures(src->figure_source,g->first,room+used,n)!=n)return false;
+    f->at[d]=(uint16_t)used;used+=n;
+  }
+  return true;
+}
+// A run's glyphs pointed at their loaded bits.
+static void figure_bind(FigureRun *r,const Figures *f,int size){
+  int s=0;while(s<5&&FIGURE_SIZES[s]!=size)s++;
+  for(int i=0;i<r->n;i++)r->bits[i]=f->room+f->at[r->g[i]-&FIGURE_GLYPHS[s*10]];
 }
 
 // ---------------------------------------------------------------- Fuller ground
@@ -1211,9 +1228,9 @@ static bool finish_draw(ChartBuild *b){
       }
     }
     const int size=40,hw=run_width(hour,size),nw=run_width(next,size),gx=PLACE(forward?X0:X1,hw),nx=PLACE(forward?X1:X0,nw);
-    int base;uint8_t *bits=load_figures(src,size,&base,room,room_size);if(!bits)FAIL;
-    FigureRun run;figure_run(hour,size,gx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,0,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
-    figure_run(next,size,nx,4,&run);run.bits=bits;run.base=base;plot_figure(&cv,&run,1,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
+    Figures fig;if(!load_figures(src,size,hour,next,&fig,room,room_size))FAIL;
+    FigureRun run;figure_run(hour,size,gx,4,&run);figure_bind(&run,&fig,size);plot_figure(&cv,&run,0,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
+    figure_run(next,size,nx,4,&run);figure_bind(&run,&fig,size);plot_figure(&cv,&run,1,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
     tape_lo=(int16_t)((gx+hw<nx+nw?gx+hw:nx+nw)+3);tape_hi=(int16_t)((gx>nx?gx:nx)-3-text_width("00"));
     // How the tape's even minutes fall on the route, in a strip under the
     // tape (renderEnroute()'s transfer): the route's own minutes ticked, a
@@ -1253,7 +1270,7 @@ static bool finish_draw(ChartBuild *b){
   }else if(!day){
     // The hour figures: this hour solid over its rose, the next outlined.
     const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
-    int base;uint8_t *bits=load_figures(src,size,&base,room,room_size);if(!bits)FAIL;
+    Figures fig;if(!load_figures(src,size,hour,next,&fig,room,room_size))FAIL;
     int hx0=PLACE(c0x,hw),hy0=gy,nx0=PLACE(c1x,nw),ny0=gy;
     if(cam.slow){
       // Each figure stands off its station on the route's open side.
@@ -1261,8 +1278,8 @@ static bool finish_draw(ChartBuild *b){
       STAND(c0x,c0y,hw,hx0,hy0);STAND(c1x,c1y,nw,nx0,ny0);
       #undef STAND
     }
-    FigureRun run;figure_run(hour,size,hx0,hy0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,0,L_INK);figs[nfigs++]=figure_bounds(&run);
-    figure_run(next,size,nx0,ny0,&run);run.bits=bits;run.base=base;letter_figure(&cv,&run,2,L_INK);figs[nfigs++]=figure_bounds(&run);
+    FigureRun run;figure_run(hour,size,hx0,hy0,&run);figure_bind(&run,&fig,size);letter_figure(&cv,&run,0,L_INK);figs[nfigs++]=figure_bounds(&run);
+    figure_run(next,size,nx0,ny0,&run);figure_bind(&run,&fig,size);letter_figure(&cv,&run,2,L_INK);figs[nfigs++]=figure_bounds(&run);
 
   }
   #undef PLACE
@@ -1413,7 +1430,7 @@ static bool finish_draw(ChartBuild *b){
   out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->sink.row_offset,sizeof out->row_offset);
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0)|(world&&in->tape?64:0)|(world&&in->tape==2?128:0));
-  out->lattice=(pal->flags&PLATE_LATTICE)!=0;
+  out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;

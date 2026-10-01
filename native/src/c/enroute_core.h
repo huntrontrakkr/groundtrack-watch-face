@@ -104,6 +104,8 @@ typedef struct {
   // cells, a dot in each whose size is the height's tint; water a single
   // dim point; by day the tints' colours, at dusk and night the land's.
   bool lattice;
+  // The Sun drawn as HAL 9000's eye (the Odyssey plate).
+  bool hal;
   int8_t forward;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;
@@ -190,7 +192,8 @@ void enr_ready(EnrScene *scene);
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride);
 // The same minute, drawn over the frame as minute `from` of the same scene
 // left it: only what can have changed is drawn again. With from outside
-// 0-59, the whole frame. Returns the pixels of the base drawn.
+// 0-59, the whole frame. Returns the pixels of the base drawn, or -1
+// without the memory to draw (the frame untouched).
 int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);
 
 // For the study and its tests (the host and the core's WebAssembly): where

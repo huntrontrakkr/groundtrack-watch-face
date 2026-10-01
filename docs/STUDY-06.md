@@ -89,6 +89,7 @@ Tests check the following:
 | **Amber** | plasma and early flight displays | dark amber land on black; night dims every ink a step, with a dashed terminator | amber contours and coast | light amber | pale yellow |
 | **Airbrush** | the airbrushed shaded relief of the Apollo-era Lunar Astronautical Charts | land modelled by its slope, lit from the northwest in sepia and dithered like an airbrush, on white sea; night a dot screen | none: the light models the relief; dark olive coast | dark brown | deep red |
 | **Dot matrix** | a mission wall's lattice of lights | the ground as 4-pixel cells, a dot in each whose size is the height (2×2 lowland, a plus, 3×3 high) and whose colour dims through dusk to night; the sea a faint point a cell | none: the dots are the coast and relief | white | amber |
+| **Odyssey** | *2001: A Space Odyssey*: the opening alignment, Discovery's displays and HAL 9000 | a dark Earth on black: grey land by day, the dawn blazing gold along the terminator (twilight the brightest ground), night black with grey coasts; the Sun drawn as HAL's eye | grey contours, gold at dawn | white | white |
 
 ## Data
 

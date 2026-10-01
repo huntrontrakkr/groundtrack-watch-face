@@ -15,6 +15,6 @@ The Earth unfolded as Buckminster Fuller unfolded it, rolled along the route. Th
 
 The hour is set along the route as on an aeronautical chart: a compass rose turned to true north, the next hour's reporting point, minute graduations and the hour's figures. The tracking stations that can hear the satellite this hour are marked with their circles, and home has its own.
 
-Contour relief, the continental shelf and the coastline come from public-domain elevation data, pre-projected onto every face of the icosahedron and stored on the watch, and the calculated Sun brings the night across the net. Eleven plates, from paper charts and airbrushed relief to blueprint blue, a dot-matrix wall and green or amber screens; a minute flag or a time callout; events on the route as reporting points.
+Contour relief, the continental shelf and the coastline come from public-domain elevation data, pre-projected onto every face of the icosahedron and stored on the watch, and the calculated Sun brings the night across the net. Twelve plates, from paper charts and airbrushed relief to blueprint blue, a dot-matrix wall, green or amber screens and 2001's HAL; a minute flag or a time callout; events on the route as reporting points.
 
 Orbits come from CelesTrak through the phone, a few days ahead, so the face keeps going without it. Requires Pebble Time 2. Not for navigation. Source code is on GitHub.

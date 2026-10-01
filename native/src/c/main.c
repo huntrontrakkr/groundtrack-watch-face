@@ -138,8 +138,10 @@ static void update(Layer *layer,GContext *ctx){
   // emery is rectangular: every row is a full row of GColor8 bytes.
   const int minute=(int)((now-s_now.scene->hour_start)/60);
   const bool partial=s_tick_redraw&&s_drawn_serial==s_chart_serial&&s_drawn_minute>=0&&s_drawn_minute<=minute;
-  enr_render_update(s_now.scene,partial?s_drawn_minute:-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
+  const int drawn=enr_render_update(s_now.scene,partial?s_drawn_minute:-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
   graphics_release_frame_buffer(ctx,frame);
+  // Without the memory to draw, the next tick tries the whole minute again.
+  if(drawn<0){APP_LOG(APP_LOG_LEVEL_WARNING,"No room to draw; heap free %u",(unsigned)heap_bytes_free());s_drawn_minute=-1;s_tick_redraw=false;return;}
   s_drawn_serial=s_chart_serial;s_drawn_minute=minute;s_tick_redraw=false;s_painted=true;
 }
 

@@ -89,7 +89,16 @@ export const PLATES={
     water:inks(['#0000AA','#000055','#000055']),land:inks(['#55FFFF','#00AAAA','#005555']),coast:inks(['#00AAAA','#00AAAA','#005555']),
     contour:inks(['#00AAAA','#00AAAA','#005555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#0000AA','#0000AA','#000055']),
     route:inks(['#FFAA00','#FFAA00','#FFAA00']),ink:inks(['#FFFFFF','#AAFFFF','#AAFFFF']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
-    space:hex('#000000'),spaceInk:hex('#55FFFF')}
+    space:hex('#000000'),spaceInk:hex('#55FFFF')},
+  // 2001: A Space Odyssey. The opening alignment: a dark Earth with the
+  // dawn blazing along its rim (twilight drawn as the brightest ground,
+  // day dim, night black); Discovery's displays, white line on black
+  // glass; and the Sun as HAL 9000's eye.
+  odyssey:{name:'Odyssey',note:'2001: dawn on a dark Earth, the Sun as HAL',night:'zones',hal:true,terminator:hex('#FFFFAA'),
+    water:inks(['#000000','#AA5500','#000000']),land:inks(['#555555','#FFAA00','#000000']),coast:inks(['#AAAAAA','#FFFFAA','#555555']),
+    contour:inks(['#AAAAAA','#FFFF55','#0000AA']),shelf:inks(['#000055','#AA5500','#000000']),grid:inks(['#555555','#AA5500','#555555']),
+    route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#AAAAAA']),mark:inks(['#FF0000','#FF0000','#FF0000']),
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')}
 };
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;

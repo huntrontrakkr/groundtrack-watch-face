@@ -80,7 +80,9 @@ typedef struct {int16_t x,y;} Px;
 // Fuller heights only for a Fuller sheet, the class cache if there is room.
 #define CACHE_ROWS 16
 typedef struct {
-  Px scratch[SCRATCH];uint8_t window[3][ENR_W];
+  // The pixel list and the two nights, each its own piece (2.5 and 2.8
+  // KB: after a Fuller build no free stretch may hold the whole).
+  Px *scratch_px;uint8_t window[3][ENR_W];
   uint64_t *mask,*nmask;
   #define TILE_ROWS 4
   uint8_t tiles[TILE_ROWS][ENR_W];int tiles_y[TILE_ROWS],tiles_next;
@@ -89,10 +91,10 @@ typedef struct {
   // (cache_rows decodes a pixel list's rows first); other lookups walk
   // their row's runs. slot_of: a row's slot, or 255.
   uint8_t (*cache)[ENR_W];int cache_y[CACHE_ROWS],cache_next;uint8_t slot_of[ENR_H];
-  Night night[2];
+  Night *night;
 } Work;
 static Work *work;
-#define scratch (work->scratch)
+#define scratch (work->scratch_px)
 static void night_ready(const EnrScene *s,Night *n,const EnrMinute *m){
   if(n->m==m)return;
   n->m=m;for(int k=0;k<NIGHT_ROWS;k++)n->held[k]=-100;
@@ -507,7 +509,15 @@ static void draw_body(Ctx *c){
   const int mx=js_round(m->mx),my=js_round(m->my);
   const uint8_t mk=s->zoned[ENR_MARK][zone_at(c,mx,my)];
   for(int dy=-7;dy<=7;dy++)for(int dx=-7;dx<=7;dx++)if(dx*dx+dy*dy<=6.6*6.6)clear(c,mx+dx,my+dy);
-  if(s->body==ENR_SUN){
+  if(s->body==ENR_SUN&&s->hal){
+    // HAL 9000's eye: a chrome ring, the dark lens, the red eye and its
+    // hot centre (GColor8: AAAAAA, 555555, AA0000, FF0000, FFAA00, FFFFAA).
+    for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++){
+      const int d=dx*dx+dy*dy;
+      const uint8_t col=d<=2?0xFE:d<=5?0xF8:d<=13?0xF0:d<=20?0xE0:d<=29?0xD5:d<=43?0xEA:0;
+      if(col)plot(c,mx+dx,my+dy,col);
+    }
+  }else if(s->body==ENR_SUN){
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++){const int d=dx*dx+dy*dy;if(d<=5.2*5.2&&d>3.6*3.6)plot(c,mx+dx,my+dy,mk);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++)if(dx*dx+dy*dy<=1.5*1.5)plot(c,mx+dx,my+dy,mk);
   }else if(s->body==ENR_MOON){
@@ -985,13 +995,16 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
 static void work_end(void);
 static bool work_begin(const EnrScene *s,bool masks){
   work=malloc(sizeof(Work));if(!work)return false;
-  memset(work,0,sizeof *work);for(int k=0;k<TILE_ROWS;k++)work->tiles_y[k]=-1;for(int k=0;k<CACHE_ROWS;k++)work->cache_y[k]=-1;memset(work->slot_of,255,sizeof work->slot_of);
-  if(masks){work->mask=malloc(sizeof(uint64_t)*2*H);if(!work->mask){free(work);work=NULL;return false;}work->nmask=work->mask+H;}
+  memset(work,0,sizeof *work);
+  work->scratch_px=malloc(sizeof(Px)*SCRATCH);work->night=malloc(sizeof(Night)*2);
+  if(!work->scratch_px||!work->night){work_end();return false;}
+  memset(work->night,0,sizeof(Night)*2);for(int k=0;k<TILE_ROWS;k++)work->tiles_y[k]=-1;for(int k=0;k<CACHE_ROWS;k++)work->cache_y[k]=-1;memset(work->slot_of,255,sizeof work->slot_of);
+  if(masks){work->mask=malloc(sizeof(uint64_t)*2*H);if(!work->mask){work_end();return false;}work->nmask=work->mask+H;}
   if(ROLLED(s))for(int k=0;k<2;k++){work->night[k].h=malloc(sizeof(int32_t)*NIGHT_ROWS*W);if(!work->night[k].h){work_end();return false;}}
   work->cache=malloc(sizeof(uint8_t)*CACHE_ROWS*W);
   return true;
 }
-static void work_end(void){if(!work)return;free(work->mask);free(work->night[0].h);free(work->night[1].h);free(work->cache);free(work);work=NULL;}
+static void work_end(void){if(!work)return;free(work->mask);if(work->night){free(work->night[0].h);free(work->night[1].h);}free(work->night);free(work->scratch_px);free(work->cache);free(work);work=NULL;}
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){if(work_begin(scene,false)){render(scene,minute,frame,row_stride,NULL,NULL,NULL);work_end();}}
 
 void enr_ready(EnrScene *s){
@@ -1054,7 +1067,7 @@ static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int r
 int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
   if(!work_begin(scene,from>=0&&from<=59)){
     // Without room for the masks, the minute whole.
-    if(!work_begin(scene,false))return 0;
+    if(!work_begin(scene,false))return -1;
     from=-1;
   }
   const int drawn=update(scene,from,minute,frame,row_stride);
@@ -1127,7 +1140,7 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
 }
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]){
   out[0]=out[1]=out[2]=out[3]=0;
-  Work w;memset(&w,0,sizeof w);work=&w;
+  Work w;memset(&w,0,sizeof w);Px px[SCRATCH];w.scratch_px=px;work=&w;
   const int k=text_pixels(text,n,x,baseline,scratch);int x0=W,y0=H,x1=-1,y1=-1;
   for(int i=0;i<k;i++){const Px p=scratch[i];x0=p.x<x0?p.x:x0;y0=p.y<y0?p.y:y0;x1=p.x>x1?p.x:x1;y1=p.y>y1?p.y:y1;}
   if(x1>=x0){out[0]=(int16_t)x0;out[1]=(int16_t)y0;out[2]=(int16_t)(x1-x0+1);out[3]=(int16_t)(y1-y0+1);}
