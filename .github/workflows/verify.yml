@@ -19,6 +19,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # The core (the watch's code) as WebAssembly, for the study and its tests.
+      - name: Install wasi-sdk and build the core
+        run: |
+          mkdir -p ~/.local/wasi && cd ~/.local/wasi
+          curl -sL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.tar.gz | tar xz
+          cd "$GITHUB_WORKSPACE" && tools/build-core.sh
       - run: npm test
       - run: npm run measure
       - run: git diff --exit-code docs/trajectory-measurements.json

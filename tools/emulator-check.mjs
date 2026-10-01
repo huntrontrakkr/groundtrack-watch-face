@@ -1,4 +1,5 @@
-// The watch app in the Pebble emulator against the browser renderer: takes
+// The watch app in the Pebble emulator against the core (the watch's own
+// code, as WebAssembly): takes
 // a screenshot of the emulator, renders the browser's frame for the same
 // minute and compares them pixel for pixel. Writes watch | browser | the
 // pixels that differ (red) side by side at 2x.
@@ -19,11 +20,11 @@ import {execFileSync} from 'node:child_process';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {buildScene} from './export-scene.mjs';
 import {civilHour} from '../src/chart-render.js';
+import {loadCore,CoreRenderer} from '../src/core.js';
 import {HOMES} from '../src/home.js';
 import {MINUTE} from '../src/ephemeris.js';
-import {W,H} from '../src/enroute-render.js';
+import {W,H} from '../src/plates.js';
 import {decodePNG,encodePNG} from './png.mjs';
 import {registerElements} from '../src/satellites.js';
 if(process.env.TLE_FILE){const lines=readFileSync(process.env.TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','celestrak');}
@@ -46,8 +47,10 @@ if(at===null)throw new Error('No screenshot within one minute');
 const shot=decodePNG(readFileSync(shotFile));
 if(shot.width!==W||shot.height!==H)throw new Error(`Screenshot is ${shot.width}x${shot.height}, not ${W}x${H}`);
 const start=civilHour(at,zone),minute=Math.floor((at-start)/MINUTE);
-const e=process.env,{renderer,state}=buildScene({body,start,plate,readout:flagArg==='noflag'?false:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',projection:e.PROJECTION||'chart',minute,events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null});
-const ref=Buffer.from(renderer.render({...state,epoch:start+minute*MINUTE}).buf);
+// The core, the watch's own code, draws the reference frame.
+const read=f=>new Uint8Array(readFileSync(f)),core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('public/land.bin')});
+const e=process.env,state={body,epoch:start+minute*MINUTE,plate,readout:flagArg==='noflag'?false:flagArg==='callout'?true:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',projection:e.PROJECTION||'chart',events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null};
+const ref=Buffer.from(new CoreRenderer(core).render(state).buf);
 
 // Side by side: watch, browser, differences in red over a faded browser frame.
 const gap=10,wide=W*3+gap*2,sheet=Buffer.alloc(wide*H*3,255);let differ=0,first=null;const where=[];

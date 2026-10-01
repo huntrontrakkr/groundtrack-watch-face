@@ -9,7 +9,7 @@ import {encodePack,readPack,decodeStrip} from '../tools/relief-pack.mjs';
 import {MAP_ROWS} from '../tools/generate-map-pack.mjs';
 import {chartCamera,WORLD} from '../src/chart-render.js';
 import {registerNominal} from '../src/nominal.js';
-import {W,H} from '../src/enroute-render.js';
+import {W,H} from '../src/plates.js';
 
 const relief=new Uint8Array(readFileSync('public/relief.bin')),land=new Uint8Array(readFileSync('public/land.bin'));
 const committed=new Uint8Array(readFileSync('native/resources/map.pack'));

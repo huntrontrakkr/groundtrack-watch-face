@@ -23,16 +23,19 @@ static void pass_for(void *ctx,int64_t t,char out[24]){
   memset(out,0,24);
 }
 static size_t unhex(const char *hex,uint8_t *out,size_t max){size_t n=0;while(hex[0]&&hex[1]&&n<max){unsigned v;sscanf(hex,"%2x",&v);out[n++]=(uint8_t)v;hex+=2;}return n;}
-static EnrScene *s_scene;static char s_why[64];
+static EnrScene *s_scene[CORE_SLOTS];static char s_why[64];
+static void *(*s_alloc)(size_t)=malloc;static void (*s_release)(void *)=free;static void *(*s_resize)(void *,size_t)=realloc;
+void core_allocator(void *(*alloc)(size_t),void (*release)(void *),void *(*resize)(void *,size_t)){s_alloc=alloc;s_release=release;s_resize=resize;}
 
 void *core_alloc(size_t n){return malloc(n);}
 void core_free(void *p){free(p);}
 void core_source(int kind,const uint8_t *data,size_t length){if(kind>=0&&kind<5){s_source[kind].data=data;s_source[kind].length=length;}}
 const char *core_failure(void){return s_why;}
-const EnrScene *core_scene(void){return s_scene;}
+const EnrScene *core_scene(int slot){return slot>=0&&slot<CORE_SLOTS?s_scene[slot]:NULL;}
 
-int core_build(const char *text,size_t length){
-  if(s_scene){enr_free(s_scene,free);free(s_scene);s_scene=NULL;}
+int core_build(const char *text,size_t length,int slot){
+  if(slot<0||slot>=CORE_SLOTS)return 0;
+  if(s_scene[slot]){enr_free(s_scene[slot],s_release);s_release(s_scene[slot]);s_scene[slot]=NULL;}
   s_nsegs=s_nsats=s_nblocks=0;s_why[0]=0;
   ChartInput in;memset(&in,0,sizeof in);
   char key[32];static char value[8000];
@@ -66,29 +69,34 @@ int core_build(const char *text,size_t length){
   }
   const ChartSources src={.map=mem_read,.map_source=&s_source[CORE_MAP],.figures=mem_read,.figure_source=&s_source[CORE_FIGURES],.tables=mem_read,.table_source=&s_source[CORE_TABLES],
     .grids=s_source[CORE_GRIDS].data?mem_read:NULL,.grid_source=&s_source[CORE_GRIDS],.land=s_source[CORE_LAND].data?mem_read:NULL,.land_source=&s_source[CORE_LAND],
-    .segment=seg_for,.satellite=sat_for,.pass_line=pass_for,.alloc=malloc,.release=free,.resize=realloc};
-  s_scene=chart_build(&in,&src);
-  if(!s_scene){snprintf(s_why,sizeof s_why,"%s",chart_failure());return 0;}
+    .segment=seg_for,.satellite=sat_for,.pass_line=pass_for,.alloc=s_alloc,.release=s_release,.resize=s_resize};
+  s_scene[slot]=chart_build(&in,&src);
+  if(!s_scene[slot]){snprintf(s_why,sizeof s_why,"%s",chart_failure());return 0;}
   return 1;
 }
-int core_render(int minute,uint8_t *frame){if(!s_scene)return -1;enr_render(s_scene,minute,frame,ENR_W);return 0;}
-int core_render_update(int from,int minute,uint8_t *frame){if(!s_scene)return -1;return enr_render_update(s_scene,from,minute,frame,ENR_W);}
+int core_render(int slot,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;enr_render(s,minute,frame,ENR_W);return 0;}
+int core_render_update(int slot,int from,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;return enr_render_update(s,from,minute,frame,ENR_W);}
 // The scene's layout, in the order src/core.js reads it.
 int core_layout(int32_t *out,int max){
   const int32_t v[]={
     (int32_t)sizeof(EnrScene),(int32_t)sizeof(EnrPoint),(int32_t)sizeof(EnrMinute),
     offsetof(EnrScene,flags),offsetof(EnrScene,body),offsetof(EnrScene,view),offsetof(EnrScene,forward),offsetof(EnrScene,hour_start),offsetof(EnrScene,heavy),offsetof(EnrScene,fuller),
-    offsetof(EnrScene,zulu_x),offsetof(EnrScene,zulu_baseline),offsetof(EnrScene,top_x),offsetof(EnrScene,top_baseline),
+    offsetof(EnrScene,zulu_x),offsetof(EnrScene,zulu_baseline),offsetof(EnrScene,top_x),offsetof(EnrScene,top_baseline),offsetof(EnrScene,height_right),offsetof(EnrScene,height_baseline),
     offsetof(EnrScene,tape_x0),offsetof(EnrScene,tape_x1),offsetof(EnrScene,tape_baseline),offsetof(EnrScene,tape_lo),offsetof(EnrScene,tape_hi),
     offsetof(EnrScene,home_x),offsetof(EnrScene,home_y),offsetof(EnrScene,home_box),offsetof(EnrScene,mark_count),
     offsetof(EnrScene,callout_left),offsetof(EnrScene,callout_top),offsetof(EnrScene,callout_bottom),offsetof(EnrScene,hour_text),offsetof(EnrScene,numerals),
     offsetof(EnrScene,c0),offsetof(EnrScene,c1),offsetof(EnrScene,station_count),offsetof(EnrScene,stations),offsetof(EnrScene,station_table),offsetof(EnrScene,fig_box),
     offsetof(EnrScene,tape_hour),offsetof(EnrScene,tape_next),offsetof(EnrScene,slide_minute),
-    offsetof(EnrScene,event_count),offsetof(EnrScene,events),(int32_t)sizeof(s_scene->events[0]),
+    offsetof(EnrScene,event_count),offsetof(EnrScene,events),(int32_t)sizeof(s_scene[0]->events[0]),
     offsetof(EnrScene,minutes),offsetof(EnrMinute,mx),offsetof(EnrMinute,my),offsetof(EnrMinute,zulu),offsetof(EnrMinute,minute),offsetof(EnrMinute,top),offsetof(EnrMinute,index),offsetof(EnrMinute,height),
     offsetof(EnrScene,track_count),offsetof(EnrScene,track_t0),offsetof(EnrScene,track_step),offsetof(EnrScene,track),
-    (int32_t)sizeof(enr_real)};
+    (int32_t)sizeof(enr_real),offsetof(EnrFuller,tile_count),offsetof(EnrFuller,tile_face)};
   const int n=(int)(sizeof v/sizeof v[0]);
   for(int i=0;i<n&&i<max;i++)out[i]=v[i];
   return n;
 }
+void core_measure(int slot,int minute,int part,int16_t *out){const EnrScene *s=core_scene(slot);if(s)enr_measure(s,minute,part,out);else out[0]=out[1]=out[2]=out[3]=0;}
+void core_text_box(const char *text,int n,int x,int baseline,int16_t *out){enr_text_box(text,n,x,baseline,out);}
+int core_text_width(const char *text,int n){return enr_text_width(text,n);}
+int core_class(int slot,int x,int y){const EnrScene *s=core_scene(slot);return s?enr_class(s,x,y):-1;}
+int core_zone(int slot,int minute,int x,int y){const EnrScene *s=core_scene(slot);return s?enr_zone(s,minute,x,y):-1;}

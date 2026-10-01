@@ -1,14 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {STUDY_ORBITS,registerNominal} from '../src/nominal.js';
 import {parseTLE,viewOf,elementsFor,bodyId} from '../src/satellites.js';
 import {position,MINUTE} from '../src/ephemeris.js';
-import {EnrouteRenderer,W,H} from '../src/enroute-render.js';
-import {decodeRelief} from '../src/relief.js';
+import {W,H} from '../src/plates.js';
+import {renderer} from './core-fixture.mjs';
 
 registerNominal();
-const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
 const GPS='sat:36585',QZS='sat:42738',DAY=Date.parse('2026-09-27T00:00:00Z');
 const overlap=(a,b)=>!(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
 
@@ -22,8 +20,8 @@ test('the nominal orbits are valid element sets of the right classes, and labell
   assert.ok(Math.max(...lats)>39&&Math.min(...lats)<-39&&Math.max(...lons)-Math.min(...lons)<40&&Math.abs((Math.max(...lons)+Math.min(...lons))/2-139)<8);
 });
 
-test('GPS stands on the hour chart: stations a route apart in any direction, figures clear of the rose',()=>{
-  const r=new EnrouteRenderer(atlas,meters);
+test('GPS stands on the hour chart: stations a route apart in any direction, figures clear of the rose',async()=>{
+  const r=await renderer();
   for(let h=0;h<12;h++){
     const out=r.render({body:GPS,epoch:DAY+h*3600000+24*MINUTE,timeZone:'UTC',clock24:false,plate:'enroute'}),[s0,s1]=r.camera.stations;
     assert.equal(out.world,false);assert.ok(Math.abs(Math.hypot(s1.x-s0.x,s1.y-s0.y)-120)<1,`hour ${h}`);
@@ -35,8 +33,8 @@ test('GPS stands on the hour chart: stations a route apart in any direction, fig
   }
 });
 
-test('QZSS draws its day on one chart, the time set aside, crossing labels giving way',()=>{
-  const r=new EnrouteRenderer(atlas,meters);
+test('QZSS draws its day on one chart, the time set aside, crossing labels giving way',async()=>{
+  const r=await renderer();
   for(const h of [1,5,11,14,20]){
     const out=r.render({body:QZS,epoch:DAY+h*3600000+24*MINUTE,timeZone:'Asia/Tokyo',clock24:false,plate:'enroute'}),cam=r.camera;
     assert.equal(cam.day.hours.length,25);

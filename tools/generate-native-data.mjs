@@ -12,7 +12,7 @@
 //
 //   node tools/generate-native-data.mjs
 import {writeFileSync,mkdirSync} from 'node:fs';
-import {PLATES,CONTOURS,SHELF,SPAN,W,H} from '../src/enroute-render.js';
+import {PLATES,CONTOURS,SHELF,SPAN,W,H} from '../src/plates.js';
 import {TRACK_Y} from '../src/chart-render.js';
 import {reliefMeters} from '../src/relief.js';
 import network from '../data/tracking-stations.json' with {type:'json'};

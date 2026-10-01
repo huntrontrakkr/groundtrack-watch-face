@@ -1,7 +1,7 @@
 // Events: moments the wearer has to be somewhere, set on the route as
 // compulsory reporting points. On a watch they would come from the phone's
 // timeline; the study keeps a few of its own.
-import {localDay} from './enroute-render.js';
+import {localDay} from './chart-text.js';
 import {clockParts} from './render.js';
 import {MINUTE} from './ephemeris.js';
 

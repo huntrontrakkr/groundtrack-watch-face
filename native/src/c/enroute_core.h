@@ -186,3 +186,17 @@ void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride);
 // left it: only what can have changed is drawn again. With from outside
 // 0-59, the whole frame. Returns the pixels of the base drawn.
 int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);
+
+// For the study and its tests (the host and the core's WebAssembly): where
+// a minute's moving parts fall, as a box (x, y, w, h; w 0 for nothing
+// drawn): the body, the minute flag, the time callout, the sliding tape's
+// hour figure and next hour's figure, and the tape's index.
+enum {ENR_MEASURE_BODY,ENR_MEASURE_FLAG,ENR_MEASURE_CALLOUT,ENR_MEASURE_TAPE_HOUR,ENR_MEASURE_TAPE_NEXT,ENR_MEASURE_INDEX};
+void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
+// Lettering's box, set at x on a baseline; its width.
+void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]);
+int enr_text_width(const char *text,int n);
+// A pixel's class (ground nibble, layer nibble) and its night zone (0 day,
+// 1 dusk, 2 night) at a minute.
+int enr_class(const EnrScene *scene,int x,int y);
+int enr_zone(const EnrScene *scene,int minute,int x,int y);

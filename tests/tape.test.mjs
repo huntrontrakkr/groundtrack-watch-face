@@ -1,16 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {EnrouteRenderer,SCALE,W} from '../src/enroute-render.js';
-import {decodeRelief} from '../src/relief.js';
+import {SCALE,W} from '../src/plates.js';
 import {MINUTE} from '../src/ephemeris.js';
+import {renderer} from './core-fixture.mjs';
 
-const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
 const HOUR=Date.parse('2019-06-05T12:00:00Z');
 const state=(m,tape)=>({body:'iss',epoch:HOUR+m*MINUTE,timeZone:'UTC',clock24:false,plate:'enroute',tape});
 
-test('on the tape the index stands still and the hours ride past, this hour pinned at the left',()=>{
-  const r=new EnrouteRenderer(atlas,meters);
+test('on the tape the index stands still and the hours ride past, this hour pinned at the left',async()=>{
+  const r=await renderer();
   for(let m=0;m<60;m+=3){
     const out=r.render(state(m,'tape')),{index,box,nextBox,hour,next}=out.figure;
     assert.deepEqual([index.x,index.y],[W/2,SCALE.baseline]);assert.equal(hour,'12');assert.equal(next,'1');
@@ -26,8 +24,8 @@ test('on the tape the index stands still and the hours ride past, this hour pinn
   assert.ok(r.render(state(50,'tape')).figure.nextBox.x<W);
 });
 
-test('with the world sliding too, the satellite stays under the index',()=>{
-  const r=new EnrouteRenderer(atlas,meters);
+test('with the world sliding too, the satellite stays under the index',async()=>{
+  const r=await renderer();
   for(const m of [0,17,33,59]){const out=r.render(state(m,'slide'));assert.ok(Math.abs(out.marker.x-W/2)<=1.5,`minute ${m}: ${out.marker.x}`);}
   // The fixed ruler is unchanged by default.
   const fixed=r.render({...state(24),tape:undefined});assert.ok(fixed.figure.index.x>SCALE.x0&&fixed.figure.index.x<W/2);

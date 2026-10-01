@@ -13,7 +13,7 @@ native/host/harness-exact
 native/host/map_test
 native/host/segments_test
 native/host/fmath_test
-native/host/chart_test
+native/host/build_check
 native/host/*.o
 native/src/pkjs/index.js
 
@@ -26,3 +26,4 @@ native-plotboard/src/pkjs/index.js
 native-fuller/build/
 native-fuller/.lock-waf*
 native-fuller/src/pkjs/index.js
+public/core.wasm

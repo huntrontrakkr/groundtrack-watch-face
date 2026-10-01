@@ -1,10 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {EnrouteRenderer,nauticalZone,NUMERALS} from '../src/enroute-render.js';
-import {decodeRelief} from '../src/relief.js';
+import {nauticalZone} from '../src/chart-text.js';
+import {NUMERALS} from '../src/plates.js';
+import {renderer} from './core-fixture.mjs';
 
-const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
 const SUN=Date.parse('2026-09-27T08:24:00Z'),MOON=Date.parse('2026-09-15T12:24:00Z');
 
 test('nautical zones are 15° wide and lettered A–M east, N–Y west, Z at Greenwich',()=>{
@@ -14,8 +13,8 @@ test('nautical zones are 15° wide and lettered A–M east, N–Y west, Z at Gre
   const letters=new Set();for(let h=-12;h<=12;h++)letters.add(nauticalZone(h*15-(h===12?1:0)).letter);assert.equal(letters.size,25);assert.ok(!letters.has('J'));
 });
 
-test('the margin can give the time in the zone under the body; the Sun’s is always near noon',()=>{
-  const r=new EnrouteRenderer(atlas,meters);
+test('the margin can give the time in the zone under the body; the Sun’s is always near noon',async()=>{
+  const r=await renderer();
   for(let h=0;h<24;h+=3){
     const out=r.render({body:'sun',epoch:SUN+h*3600000,timeZone:'UTC',clock24:true,plate:'enroute',zone:'body'}),t=out.zulu.text,minutes=Number(t.slice(0,2))*60+Number(t.slice(2,4));
     assert.match(t,/^\d{4}[A-IK-Z]$/);assert.ok(Math.abs(minutes-720)<=46,`${h}: ${t}`);
@@ -25,8 +24,8 @@ test('the margin can give the time in the zone under the body; the Sun’s is al
   assert.match(r.render({body:'moon',epoch:MOON,timeZone:'UTC',clock24:true,plate:'enroute'}).zulu.text,/^1224Z$/);
 });
 
-test('every callout style sets the time on one baseline, and four figures read as one time',()=>{
-  const r=new EnrouteRenderer(atlas,meters),base={body:'moon',epoch:MOON,timeZone:'UTC',clock24:true,plate:'enroute',readout:true};
+test('every callout style sets the time on one baseline, and four figures read as one time',async()=>{
+  const r=await renderer(),base={body:'moon',epoch:MOON,timeZone:'UTC',clock24:true,plate:'enroute',readout:true};
   const boxes={};
   for(const numerals of NUMERALS){const out=r.render({...base,numerals});boxes[numerals]=out.figure.readout;assert.ok(out.figure.readout,numerals);}
   assert.equal(r.render({...base,numerals:'even'}).figure.time,'1224');assert.equal(r.render({...base,numerals:'colon'}).figure.time,'12:24');

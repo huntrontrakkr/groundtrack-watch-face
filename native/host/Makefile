@@ -1,14 +1,13 @@
 # Host harness and a watch-side size check for the native core.
-CORE=enroute_parse.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/chart.c ../src/c/fuller.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/passes.c
+CORE=core_api.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/chart.c ../src/c/fuller.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/passes.c
 CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 
-harness: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
+harness: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/chart.h
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
-# The watch's own chart builder, writing the phone's scene format.
-CHART_SRC=../src/c/chart.c ../src/c/fuller.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/fmath.c ../src/c/passes.c
-chart_test: chart_test.c $(CHART_SRC) ../src/c/chart.h ../src/c/fmath.h ../src/c/generated/chart_data.h ../src/c/departure_font.h ../src/c/enroute_core.h
-	$(CC) $(CFLAGS) -std=gnu11 -o $@ chart_test.c $(CHART_SRC) -lm
+# The watch's chart builder's memory, as a watch's heap would see it.
+build_check: build_check.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
+	$(CC) $(CFLAGS) -std=gnu11 -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 
 # Host check of the shared sine and cosine.
 fmath_test: fmath_test.c ../src/c/fmath.c ../src/c/fmath.h
@@ -45,5 +44,5 @@ shim-check: ../src/c/main.c
 	arm-none-eabi-gcc -std=gnu11 -Wall -Wno-unused-parameter -Istub -I../src/c -DENR_FLOAT -mcpu=cortex-m4 -mthumb -fsyntax-only ../src/c/main.c
 
 clean:
-	rm -f harness harness-exact harness-float map_test segments_test fmath_test chart_test *.o
+	rm -f harness harness-exact harness-float map_test segments_test fmath_test build_check *.o
 .PHONY: arm shim-check clean

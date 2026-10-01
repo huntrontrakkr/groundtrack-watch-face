@@ -22,7 +22,8 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {F,NEIGHBORS,BASES,inverseFace,CONSTANTS} from '../src/fuller.js';
 import {decodeRelief,reliefAt,reliefMeters} from '../src/relief.js';
 import {lonLat,dot} from '../src/geometry.js';
-import {FULLER_N as N,gridIndex,GRID_POINTS} from '../src/fuller-ground.js';
+// The grid: N steps an edge; point (a, b) at a*(N+1) - a*(a-1)/2 + b.
+export const N=64,GRID_POINTS=(N+1)*(N+2)/2,gridIndex=(a,b)=>a*(N+1)-a*(a-1)/2+b;
 
 const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
 const land=(lat,lon)=>{

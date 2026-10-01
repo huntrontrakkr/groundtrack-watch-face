@@ -1,11 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {parseTLE,registerElements,satellitePosition,checksum,bodyId,CATALOG,FRESH} from '../src/satellites.js';
 import {position} from '../src/ephemeris.js';
 import {chartCamera,civilHour} from '../src/chart-render.js';
-import {EnrouteRenderer,W,H} from '../src/enroute-render.js';
-import {decodeRelief} from '../src/relief.js';
+import {W,H} from '../src/plates.js';
+import {renderer} from './core-fixture.mjs';
 import {fixtureTLE} from './tle-fixture.mjs';
 import iss from '../data/iss.json' with {type:'json'};
 
@@ -37,11 +36,10 @@ test('live elements propagate near their epoch and are refused when stale',()=>{
   assert.throws(()=>position(bodyId(43013),NOW),/No elements/);
 });
 
-test('a live satellite gets the world band, its symbol, track and element note',()=>{
-  const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
+test('a live satellite gets the world band, its symbol, track and element note',async()=>{
   for(const norad of [25544,49260]){
     registerElements(fixtureTLE(NOW-7200000,norad),'test');
-    const r=new EnrouteRenderer(atlas,meters),out=r.render({body:bodyId(norad),epoch:NOW,timeZone:'UTC',clock24:true,plate:'enroute'});
+    const r=await renderer(),out=r.render({body:bodyId(norad),epoch:NOW,timeZone:'UTC',clock24:true,plate:'enroute'});
     assert.equal(out.world,true);assert.deepEqual([out.figure.hour,out.figure.next],['14','15']);
     assert.ok(out.figure.index.y<r.camera.band.top);
     for(let i=0;i<out.buf.length;i++)assert.equal(out.buf[i]%85,0);

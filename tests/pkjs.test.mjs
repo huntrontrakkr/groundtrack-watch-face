@@ -133,7 +133,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     assert.equal(rise.length,45*12);
     // The first local date: 29 September, with New York's rise and set as
     // the chart's margin gives them.
-    const {riseText}=await import('../src/enroute-render.js');
+    const {riseText}=await import('../src/chart-text.js');
     const u16=k=>rise[4+2*k]|rise[5+2*k]<<8,hhmm=v=>v===65535?'----':String(Math.floor(v/60)).padStart(2,'0')+String(v%60).padStart(2,'0');
     assert.equal(rise[0]|rise[1]<<8|rise[2]<<16,Date.UTC(2026,8,29)/86400000);
     assert.deepEqual([`HOM SR ${hhmm(u16(0))}`,`SS ${hhmm(u16(1))}`],riseText('sun',HOMES[zone],Date.parse('2026-09-29T22:00:00Z'),zone));

@@ -1,13 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {STUDY_EVENTS,nameCode,uniqueCode,pronounceable,atLocal} from '../src/events.js';
-import {EnrouteRenderer,PLATES,W} from '../src/enroute-render.js';
-import {decodeRelief} from '../src/relief.js';
+import {PLATES,W} from '../src/plates.js';
 import {MINUTE} from '../src/ephemeris.js';
-import {decodeFullerPack} from '../src/fuller-ground.js';
+import {renderer} from './core-fixture.mjs';
 
-const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin'))),fuller=decodeFullerPack(new Uint8Array(readFileSync('public/fuller.bin')));
 const SUN=Date.parse('2026-09-27T08:24:00Z'),ISS=Date.parse('2019-06-05T12:24:00Z');
 const overlap=(a,b)=>!(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
 
@@ -31,8 +28,8 @@ test('event times are local wall-clock times',()=>{
   assert.equal(new Date(atLocal(SUN,'Asia/Kolkata',9,30)).toISOString(),'2026-09-27T04:00:00.000Z');
 });
 
-test('an event is a filled triangle on the route at its minute, named clear of the figures',()=>{
-  const r=new EnrouteRenderer(atlas,meters,fuller),state={body:'sun',epoch:SUN,timeZone:'America/New_York',clock24:false,plate:'enroute',events:STUDY_EVENTS};
+test('an event is a filled triangle on the route at its minute, named clear of the figures',async()=>{
+  const r=await renderer(),state={body:'sun',epoch:SUN,timeZone:'America/New_York',clock24:false,plate:'enroute',events:STUDY_EVENTS};
   const out=r.render(state),[run]=out.events,at=r.camera.track.find(p=>p.epoch===Date.parse('2026-09-27T08:45:00Z'));
   assert.equal(run.label,'RUNNN');assert.ok(Math.abs(run.x-at.x)<=1&&Math.abs(run.y-at.y)<=1);
   const px=(x,y)=>[...out.buf.slice((y*W+x)*3,(y*W+x)*3+3)].join(),ink=PLATES.enroute.ink[0].join();
@@ -48,8 +45,8 @@ test('an event is a filled triangle on the route at its minute, named clear of t
   assert.deepEqual(r.render({...state,events:[{epoch:SUN+6*3600000,label:'LATER'}]}).events,[]);
 });
 
-test('events stand on the day strip and the satellite’s world band too',()=>{
-  const r=new EnrouteRenderer(atlas,meters,fuller);
+test('events stand on the day strip and the satellite’s world band too',async()=>{
+  const r=await renderer();
   const day=r.render({body:'sun',epoch:SUN,timeZone:'America/New_York',clock24:false,plate:'enroute',projection:'fuller',events:STUDY_EVENTS});
   assert.deepEqual(day.events.map(e=>e.label),['RUNNN','DINNR']);
   const world=r.render({body:'iss',epoch:ISS,timeZone:'UTC',clock24:false,plate:'console',events:STUDY_EVENTS});

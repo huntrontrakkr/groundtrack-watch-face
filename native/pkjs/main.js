@@ -22,11 +22,11 @@
 // Satellites' element sets are fetched from CelesTrak at most once every two
 // hours each (as CelesTrak asks) and kept, under tle-<catalog number>.
 import {HOMES} from '../../src/home.js';
-import {PLATES} from '../../src/enroute-render.js';
+import {PLATES} from '../../src/plates.js';
 import {registerElements,viewOf,FRESH,CATALOG,catalogEntry,bodyId} from '../../src/satellites.js';
 import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
 import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
-import {localDay,localDate} from '../../src/enroute-render.js';
+import {localDay,localDate} from '../../src/chart-text.js';
 import {clockParts} from '../../src/render.js';
 import {registerNominal} from '../../src/nominal.js';
 import {uniqueCode} from '../../src/events.js';

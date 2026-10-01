@@ -17,7 +17,7 @@ import {join,resolve} from 'node:path';
 import {connect} from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {HOMES} from '../../src/home.js';
-import {PLATES} from '../../src/enroute-render.js';
+import {PLATES} from '../../src/plates.js';
 import {catalogEntry,viewOf} from '../../src/satellites.js';
 
 const label=process.argv[2]||'build',repeats=Number(process.argv[3]||2);

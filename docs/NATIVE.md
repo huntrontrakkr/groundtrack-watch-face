@@ -10,7 +10,7 @@ Each compiles only its own charts (`native/src/c/face.h`: the other face's code 
 
 **Groundtrack Fuller.** The watch rolls the icosahedron along the track as the study does (`native/src/c/fuller.c`, to the same bits) and builds the sheet's ground from the faces' pre-projected grids (`fuller.bin`, 100 KB; see Study 06), not from the map pack, which this face leaves out: a pixel's place on its face's grid is an integer affine function of the pixel, and its land, relief and the Sun's height are interpolated between three grid points in integers. Zoomed in past 150 px a face (GPS's hour) its coastline comes from the quarter-degree `land.bin` (130 KB) at the grids' directions. Each minute the renderer lights the sheet from the grid; measured at 35 million instructions, six times Enroute's minute, because it draws the whole ground again each minute and compares heights in software doubles (see [energy/review-2026-09-30.md](energy/review-2026-09-30.md) for the plan to pare it down). The build fits a smaller heap: the class plane is kept in four bands, so its runs can be made a band at a time, and the track is rolled again for the drawing rather than kept.
 
-For the Sun, the Moon and all seven satellites (GPS on the hour chart; the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20 on the world band; QZSS on the whole-day chart) the watch draws each hour's chart itself, from its own map and ephemeris, and needs the phone only now and then; its charts are the browser renderer's to the byte, and in the SDK's emulator its frames match the browser's pixel for pixel.
+For the Sun, the Moon and all seven satellites (GPS on the hour chart; the ISS, Tiangong, Hubble, Landsat 9 and NOAA-20 on the world band; QZSS on the whole-day chart) the watch draws each hour's chart itself, from its own map and ephemeris, and needs the phone only now and then. The same code is the study's renderer: `tools/build-core.sh` compiles it to WebAssembly (`public/core.wasm`, behind `native/host/core_api.c` and `src/core.js`), so the page draws with the watch's code and there is one renderer to change. In the SDK's emulator the watch's frames match the core's pixel for pixel (`npm run check:emulator`).
 
 ## What runs where
 
@@ -25,11 +25,11 @@ The layers also record *when* in the browser's drawing each pixel was last drawn
 | Without the phone | as long as the segments last (the phone sends 45 days) | as long as the satellite's segments last (three days from its elements' epoch) |
 | Each minute | the minute renderer, redrawing only what changed | the same |
 
-The phone sends no charts: it once rendered satellites' scenes and sent them an hour at a time (22–33 KB each), a path removed once every view was built on the watch. `src/native-scene.js` still writes the same scenes, for the tests that hold the watch to the browser.
+The phone sends no charts: it once rendered satellites' scenes and sent them an hour at a time (22–33 KB each), a path removed once every view was built on the watch. What it sends is the input the chart builder takes (`src/chart-input.js` writes it as text for the host tools and the study: settings, the local hour and date, home and its rise and set, the Sun, Moon and satellite segments, home's passes).
 
 ### The watch builds the hour
 
-`native/src/c/chart.c` mirrors `buildScene` (`src/native-scene.js`) and the base layer of `renderEnroute` step for step, and builds the minute renderer's own scene:
+`native/src/c/chart.c` builds the minute renderer's scene from the hour's input (it was written to mirror the study's JavaScript renderer step for step, until the study moved onto it):
 
 - **The camera and track:** the hour and forty minutes either side, a minute apart, from the Sun and Moon segments or a satellite's; for the world band twenty minutes either side every fifteen seconds, the whole world between 72°N and 60°S fitted to the hour's longitudes; for the whole-day chart the local day (23 or 25 hours across a clock change) every five minutes, its shape fitted and set to the right, graduated in hours.
 - **The ground, streamed row by row** from the map pack: land from four bilinear samples of the atlas per pixel; the relief's bilinear sample and its three smoothing passes, as floats, exactly as the browser's `Float32Array`s; coast and waterline distances; contours, the shelf edge and height tints. Only three stages of three rows, a ring of smoothed rows and the map's columns under the chart are kept, never a full-frame array.
@@ -46,7 +46,7 @@ The build runs a slice at a time on short timers (about a second of work in piec
 3. **The drawing**, then the plane as row runs into the arena again, the plane freed, and the runs moved to their own size.
 4. **The scene and its minutes**, in what the plane left.
 
-At its peak a build holds about 66 KB; a finished hour 24–34 KB. A first version held the plane throughout and needed 80 KB for the world band; `tests/chart-native.test.mjs` now checks every case's peak.
+At its peak a build holds about 66 KB; a finished hour 24–34 KB. A first version held the plane throughout and needed 80 KB for the world band; `tests/native.test.mjs` checks every hour's peak (`native/host/build_check`).
 
 ### The map on the watch: `native/resources/map.pack`
 
@@ -98,10 +98,11 @@ Satellites' element sets are fetched from CelesTrak at most once every two hours
 
 | | |
 |---|---|
-| The watch's scenes against the phone's (`tests/chart-native.test.mjs`) | byte for byte, across the Sun, the Moon, GPS, the world band's satellites and QZSS's day (from CelesTrak's elements of 29 September 2026, kept in `tests/fixtures`), all seven plates, homes, zones (with a half-hour one) and dates; with each build's peak memory |
+| Every hour the faces draw builds within the watch's memory (`tests/native.test.mjs`) | the Sun, the Moon, GPS, the world band's satellites and QZSS's day and hour (from CelesTrak's elements of 29 September 2026, kept in `tests/fixtures`), the plates, homes, zones (with a half-hour one), dates, callouts, events, tapes and Fuller sheets; each build's peak under 69 KB |
+| The study draws with the watch's code (`tests/*.test.mjs`, `tests/enroute-browser.mjs`) | the art's rules (figures clear of the rose and route, the flag between route and figures, stations without collisions, the tape's index, the Fuller net's continuity, home's mark, events' names, Zulu time in the margin) hold on the core's frames; the page's canvas shows the core's pixels |
 | The map pack (`tests/map-pack.test.mjs`) | every cell exact, in JavaScript and C |
 | Segments, sines, arcsines, arctangents, square roots, remainders (`tests/segments.test.mjs`) | the C gives the JavaScript's bits |
-| The minute renderer against the browser (`tests/native.test.mjs`) | pixel-exact on every plate, Console's symbols inked by their anchor's night as the browser inks them |
+| A minute drawn over the last (`tests/native.test.mjs`) | every minute of every hour above, drawn over the minute before (and over a jump of five), is the minute drawn whole |
 | The phone side (`tests/pkjs.test.mjs`, `tests/config-browser.mjs`) | scenes, requests, retries, settings, segments, rise and set |
 | In the emery emulator (firmware 4.33.2, SDK 4.33.1) | the watch's own chart against the browser: 0 pixels differ for the Sun after partial minute redraws, for GPS, the ISS, Landsat 9 (home's acquisition circle and a polar route over the margin) and QZSS's day from live CelesTrak elements; the hour turns with no phone |
 
@@ -135,14 +136,14 @@ uv tool install --python 3.11 pebble-tool==5.0.40   # or pip
 pebble sdk install 4.33.1
 npm run build:native                  # all three faces: native/build/native.pbw, native-plotboard/build/native-plotboard.pbw, native-fuller/build/native-fuller.pbw
 tools/emulator.sh install --emulator emery native/build/native.pbw
-npm run check:emulator                # screenshot, compared with the browser renderer
+npm run check:emulator                # screenshot, compared with the core's frame
 ```
 
 `tools/emulator.sh` stands in for `pebble` for emulator commands. The phone simulator runs JavaScript on STPyV8 13.1, whose ICU loading is broken: when it finds its own copy of `icudtl.dat` in `~/.local/share/stpyv8` it passes V8 a freed string, V8 starts without ICU, and the first `Intl.DateTimeFormat` aborts the simulator. The script moves that copy aside and runs pebble from a directory holding `icudtl.dat`, where V8 falls back to looking. It also runs the emulator without a window. The emulator needs `libsdl2-2.0-0`, `libpixman-1-0` and `libfdt1`; where they can't be installed, unpack them and point `PEBBLE_QEMU_PATH` at a wrapper for `qemu-pebble` that sets `LD_LIBRARY_PATH`.
 
 Regenerate the watch's data after changing its sources: `npm run generate:map-pack` (the map), `node tools/generate-native-data.mjs` (plates, stations, relief heights, figures), `node tools/generate-native-font.mjs` (the chart lettering).
 
-Without the SDK, the host harnesses in `native/host/` (`make -C native/host harness chart_test map_test segments_test fmath_test`) run the watch's C on the desktop; `npm test` uses them.
+Without the SDK, the host harnesses in `native/host/` (`make -C native/host harness build_check map_test segments_test fmath_test`) run the watch's C on the desktop; `npm test` uses them. `tools/build-core.sh` (wasi-sdk) builds the core for the study and the tests that draw.
 
 ## Open questions and next steps
 

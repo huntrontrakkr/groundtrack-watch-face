@@ -1,13 +1,12 @@
-import {EnrouteRenderer,renderEnroute,PLATES,W,H} from './enroute-render.js';
-import {decodeRelief,RELIEF_BYTES} from './relief.js';
+import {PLATES,W,H} from './plates.js';
+import {loadCore,CoreRenderer} from './core.js';
 import {MINUTE} from './ephemeris.js';
 import {clockParts} from './render.js';
 import {CATALOG,registerElements,elementsFor,bodyId,catalogEntry,FRESH,viewOf} from './satellites.js';
 import {HOMES} from './home.js';
 import {STUDY_ORBITS,registerNominal} from './nominal.js';
-import {localDay} from './enroute-render.js';
+import {localDay} from './chart-text.js';
 import {STUDY_EVENTS,uniqueCode,atLocal} from './events.js';
-import {decodeFullerPack,FULLER_BYTES} from './fuller-ground.js';
 const $=id=>document.getElementById(id);
 // Frozen study moments; Moonlight is one Moon over three evenings.
 export const OBSERVATIONS={day:Date.parse('2026-09-15T12:24:00Z'),dusk:Date.parse('2026-09-19T09:24:00Z'),night:Date.parse('2026-09-20T10:24:00Z')};
@@ -27,7 +26,10 @@ function paint(canvas,buf){
 }
 function render(){
   const r=main.render(state);$('enroute-watch').getContext('2d').putImageData(new ImageData(r.rgba,W,H),0,0);
-  for(const plate of Object.keys(PLATES))paint(proofs[plate],plate===state.plate?r.buf:renderEnroute({camera:main.camera,ground:main.ground,relief:main.relief,light:main.light,plate,epoch:state.epoch,timeZone:state.timeZone,clock24:state.clock24,readout:state.readout,home:state.home,events:state.events,tape:state.tape,transfer:state.transfer,numerals:state.numerals,zone:state.zone}).buf);
+  // The proofs: the same hour on every plate, each built by the core in
+  // turn (about 50 ms each), the chosen plate's last so it stays built.
+  for(const plate of Object.keys(PLATES))if(plate!==state.plate)paint(proofs[plate],main.render({...state,plate}).buf);
+  paint(proofs[state.plate],main.render(state).buf);
   $('orbit-span').classList.toggle('muted',viewOf(state.body)!=='day');document.querySelectorAll('[data-span]').forEach(b=>b.disabled=viewOf(state.body)!=='day');
   $('time-scale').classList.toggle('muted',viewOf(state.body)!=='world'||state.projection==='fuller');
   $('transfer').classList.toggle('muted',viewOf(state.body)!=='world'||state.projection==='fuller'||state.tape!=='fixed');
@@ -54,7 +56,7 @@ function render(){
   $('enroute-caption').textContent=`${sat?`${sat.name} · ${age}`:state.body==='iss'?'ISS · archived orbit':state.body==='moon'?'Moon · sublunar route':'Sun · subsolar route'} · ${place}${heard}`;
   $('enroute-watch').setAttribute('aria-label',`${state.body.toUpperCase()} route at ${r.time}, ${state.timeZone}. Hour ${r.figure.hour}, minute ${r.figure.minute}, next hour ${r.figure.next}. ${PLATES[state.plate].name} plate.`);
   const colors=new Set();for(let i=0;i<r.buf.length;i+=3)colors.add((r.buf[i]<<16)|(r.buf[i+1]<<8)|r.buf[i+2]);
-  $('enroute-diagnostics').textContent=`${colors.size} native colors in this frame. ${main.stats.geometryBuilds} chart builds; ${main.stats.lightBuilds} light builds; ${main.stats.renders} renders. No idle redraws.`;
+  $('enroute-diagnostics').textContent=`${colors.size} native colors in this frame. ${main.stats.geometryBuilds} chart builds; ${main.stats.renders} renders. No idle redraws.`;
 }
 for(const [key,pal] of Object.entries(PLATES)){
   const b=document.createElement('button');b.dataset.plate=key;
@@ -68,7 +70,7 @@ for(const [key,pal] of Object.entries(PLATES)){
 }
 async function load(name,bytes){
   const response=await fetch(`${import.meta.env.BASE_URL}${name}`);if(!response.ok)throw new Error(`${name} unavailable (${response.status})`);
-  const data=new Uint8Array(await response.arrayBuffer());if(data.length!==bytes)throw new Error(`Incomplete ${name}`);return data;
+  const data=new Uint8Array(await response.arrayBuffer());if(bytes&&data.length!==bytes)throw new Error(`Incomplete ${name}`);return data;
 }
 for(const [zone,h] of Object.entries(HOMES)){const o=document.createElement('option');o.value=zone;o.textContent=h.name;$('home-select').insertBefore(o,$('home-select').querySelector('[value=here]'));}
 // Home from the browser, only when asked, rounded to about a kilometre and
@@ -111,8 +113,11 @@ async function track(norad){
   }catch(error){$('sat-status').textContent=`Could not track ${c.name}: ${error.message}. The 2019 ISS archive remains available offline.`;}
 }
 try{
-  const [land,relief,fuller]=await Promise.all([load('land.bin',129600),load('relief.bin',RELIEF_BYTES),load('fuller.bin',FULLER_BYTES)]);
-  main=new EnrouteRenderer(land,decodeRelief(relief),decodeFullerPack(fuller));
+  // The core, the watch's own code as WebAssembly, with the watch's
+  // resources (the map pack, the figures, the tables, the Fuller grids and
+  // the coastline).
+  const [wasm,map,figures,tables,grids,land]=await Promise.all(['core.wasm','map.pack','figures.bin','tables.bin','fuller.bin','land.bin'].map(f=>load(f)));
+  main=new CoreRenderer(await loadCore({wasm,map,figures,tables,grids,land}));
   document.querySelectorAll('[data-body]').forEach(b=>b.addEventListener('click',()=>{
     state.body=b.dataset.body;registerNominal();state.epoch=state.body==='moon'?OBSERVATIONS[state.observation]:DEMOS[state.body];studyEpoch=state.epoch;render();
   }));

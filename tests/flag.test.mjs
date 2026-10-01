@@ -1,18 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {EnrouteRenderer,PLATES,W} from '../src/enroute-render.js';
-import {decodeRelief} from '../src/relief.js';
+import {PLATES,W} from '../src/plates.js';
 import {MINUTE} from '../src/ephemeris.js';
+import {renderer} from './core-fixture.mjs';
 
-const atlas=new Uint8Array(readFileSync('public/land.bin')),meters=decodeRelief(new Uint8Array(readFileSync('public/relief.bin')));
 const overlap=(a,b)=>!(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
 
-test('the minute flag flies between the route and the hour figures, all hour',()=>{
+test('the minute flag flies between the route and the hour figures, all hour',async()=>{
+  const r=await renderer();
   for(const [body,hour] of [['sun',Date.parse('2026-09-27T08:00:00Z')],['moon',Date.parse('2026-09-15T12:00:00Z')]]){
-    const r=new EnrouteRenderer(atlas,meters);
     for(let m=0;m<60;m+=3){
-      const out=r.render({body,epoch:hour+m*MINUTE,timeZone:'UTC',clock24:true,plate:'enroute',readout:'flag'}),{readout:flag,box,nextBox,index}=out.figure;
+      const out=r.render({body,epoch:hour+m*MINUTE,timeZone:'UTC',clock24:true,plate:'enroute',readout:'flag'}),{readout:flag,box,nextBox}=out.figure;
       assert.ok(flag&&flag.h===11,`${body} ${m}`);
       // Above the route, under the figures, clear of both, and on the face.
       assert.ok(flag.y+flag.h<=out.marker.y-12&&flag.x>=0&&flag.x+flag.w<=W,`${body} ${m}`);
@@ -29,7 +27,7 @@ test('the minute flag flies between the route and the hour figures, all hour',()
 
 test('on a slow orbit’s steep route the flag leans out on the figures’ side, clear of the figures',async()=>{
   const {registerNominal}=await import('../src/nominal.js');registerNominal();
-  const r=new EnrouteRenderer(atlas,meters),day=Date.parse('2026-09-27T00:00:00Z');
+  const r=await renderer(),day=Date.parse('2026-09-27T00:00:00Z');
   for(let h=0;h<12;h++){
     const out=r.render({body:'sat:36585',epoch:day+h*3600000+24*MINUTE,timeZone:'UTC',clock24:true,plate:'enroute',readout:'flag'}),{readout:flag,box,nextBox}=out.figure;
     assert.ok(flag&&flag.x>=0&&flag.x+flag.w<=W&&flag.y>=0,`hour ${h}`);

@@ -33,25 +33,26 @@ try{
   const before=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));
   await page.locator('#enroute-minute').fill('41');await page.locator('#enroute-minute').dispatchEvent('input');
   assert.equal(await page.locator('#enroute-time').textContent(),'04:41');
-  const after=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));assert.equal(after.geometryBuilds,before.geometryBuilds);assert.ok(after.lightBuilds>before.lightBuilds);
+  const after=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));assert.equal(after.geometryBuilds,before.geometryBuilds);assert.ok(after.renders>before.renders);
   await page.locator('#enroute-plates [data-plate="console"]').click();
-  const plated=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));assert.equal(plated.lightBuilds,after.lightBuilds);assert.equal(await page.locator('#enroute-proofs [data-plate="console"]').getAttribute('aria-pressed'),'true');
+  const plated=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));assert.ok(plated.renders>after.renders);assert.equal(await page.locator('#enroute-proofs [data-plate="console"]').getAttribute('aria-pressed'),'true');
   await page.locator('#enroute-proofs [data-plate="sectional"]').click();assert.equal(await page.locator('#enroute-plates [data-plate="sectional"]').getAttribute('aria-pressed'),'true');
   const idle=await page.evaluate(()=>({...groundtrackEnroute.main.stats}));await page.waitForTimeout(1100);assert.deepEqual(await page.evaluate(()=>groundtrackEnroute.main.stats),idle);
   // Moonlight applies to the Moon only: three evenings, three kinds of light.
   assert.equal(await page.locator('[data-observation="dusk"]').isDisabled(),true);
   await page.locator('[data-body="moon"]').click();assert.equal(await page.locator('[data-observation="dusk"]').isDisabled(),false);
   assert.match(await page.locator('#enroute-caption').textContent(),/TAN/);
-  const zones={};
-  for(const observation of ['day','dusk','night']){await page.locator(`[data-observation="${observation}"]`).click();zones[observation]=await page.evaluate(()=>groundtrackEnroute.main.last.zones);}
-  assert.equal(zones.day[1]+zones.day[2],0);assert.ok(zones.dusk.every(z=>z>0));assert.ok(zones.night[2]>zones.night[0]);
+  // The three Moon observations light the same ground differently.
+  const frames={};
+  for(const observation of ['day','dusk','night']){await page.locator(`[data-observation="${observation}"]`).click();frames[observation]=await page.evaluate(()=>Array.from(groundtrackEnroute.main.last.frame));}
+  assert.notDeepEqual(frames.day,frames.dusk);assert.notDeepEqual(frames.dusk,frames.night);
   await page.locator('#enroute-minute').fill('3');await page.locator('#enroute-minute').dispatchEvent('input');await page.locator('#enroute-reset').click();assert.equal(await page.locator('#enroute-minute').inputValue(),'24');
   await page.locator('[data-body="sun"]').click();await page.locator('.art-options summary').click();await page.locator('#enroute-zone').selectOption('Asia/Kolkata');
   assert.equal(await page.locator('#enroute-time').textContent(),'13:54');
   assert.deepEqual(await page.evaluate(()=>{const f=groundtrackEnroute.main.last.figure;return [f.hour,f.minute,f.next];}),['13','54','14']);
   assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
   await page.locator('#enroute-readout').selectOption('callout');assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
-  await page.locator('#enroute-readout').selectOption('flag');assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout.h===11));
+  await page.locator('#enroute-readout').selectOption('flag');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout.kind),'flag');
   await page.locator('#enroute-readout').selectOption('off');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
   // 24-hour figures are the default; the callout sets four figures, and the
   // margin can give the nautical zone under the body.
