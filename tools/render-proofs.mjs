@@ -87,6 +87,12 @@ const numerals=contactSheet('study-06-numerals',[
 const flag=contactSheet('study-06-flag',[4,24,44,58].map(m=>({name:`m${m}`,caption:`SUN / 04:${String(m).padStart(2,'0')}`,body:'sun',epoch:Date.parse('2026-09-27T08:00:00Z')+m*60000})),
   ['enroute','console','red'].map(k=>[k,PLATES[k].name]),(scene,plate)=>new CoreRenderer(core).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,plate,home,events,readout:'flag'}).buf);
 
+// Plotboard's panel as a clock, in each of the callout's styles.
+const clock=contactSheet('study-06-clock',[
+  {name:'iss',caption:'ISS / 08:24',body:'iss',epoch:Date.parse('2019-06-05T12:24:00Z'),plate:'crt'},
+  {name:'iss-12',caption:'ISS / 8:24, 12-HOUR',body:'iss',epoch:Date.parse('2019-06-05T12:24:00Z'),plate:'enroute',clock24:false}
+],NUMERALS.map(k=>[k,NAMES[k]]),(scene,numerals)=>new CoreRenderer(core).render({timeZone:zone,clock24:true,home,events,...scene,numerals,tape:'clock'}).buf);
+
 // The figure sets: each in the hour figures, a time callout, the world
 // band's tape and a Fuller day's callout.
 const figureSets=contactSheet('study-06-figures',[
@@ -96,4 +102,4 @@ const figureSets=contactSheet('study-06-figures',[
   {name:'sun-day',caption:'SUN DAY / 14:24',body:'sun',epoch:Date.parse('2026-09-27T18:24:00Z'),plate:'odyssey',projection:'fuller'}
 ],FIGURE_SETS.map(([k,name])=>[k,name]),(scene,figures)=>new CoreRenderer(core).render({timeZone:zone,clock24:true,numerals:'even',home,events,...scene,figures}).buf);
 
-console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape, ${gnss} GPS/QZSS, ${numerals} numeral, ${flag} flag and ${figureSets} figure-set native proofs, eight contact sheets and eight 2x enlargements.`);
+console.log(`Wrote ${chart} Study 05, ${enroute} Study 06, ${fuller} rolling-Fuller, ${tape} tape, ${gnss} GPS/QZSS, ${numerals} numeral, ${flag} flag, ${figureSets} figure-set and ${clock} clock native proofs, nine contact sheets and nine 2x enlargements.`);

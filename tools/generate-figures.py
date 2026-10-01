@@ -29,7 +29,9 @@ fonts = root / 'assets/fonts'
 # single-digit hours on the chart.
 HEIGHTS = {'20': 17, '28': 24, '40': 34, '72': 49, '80': 55}
 DIGITS = '0123456789'
-# A set's widest figure may be this much wider than Jost's at that size.
+# A set's widest figure may be this much wider than Jost's at that size
+# (Michroma, an extended face, no wider: its two-digit hours otherwise
+# crowd the hour chart's flag and rose).
 WIDTH_ALLOWANCE = 1.15
 
 
@@ -71,10 +73,10 @@ def glyph(image):
                      for y in range(image.height)]}
 
 
-def font_set(make, widths=None):
+def font_set(make, widths=None, allowance=WIDTH_ALLOWANCE):
     sizes = {}
     for key, height in HEIGHTS.items():
-        f = sized(make, height, widths and round(widths[key] * WIDTH_ALLOWANCE))
+        f = sized(make, height, widths and round(widths[key] * allowance))
         sizes[key] = {c: glyph(mask(f, c)) for c in DIGITS}
     return sizes
 
@@ -90,7 +92,7 @@ SETS = [
     ('b612', 'B612', 'Airbus cockpit displays', 'SIL OFL 1.1',
      font_set(lambda size: truetype(fonts / 'B612-Bold.ttf', size), widths)),
     ('michroma', 'Michroma', 'Eurostile: 2001 and NASA hardware', 'SIL OFL 1.1',
-     font_set(lambda size: truetype(fonts / 'Michroma-Regular.ttf', size, bold=lambda s: 1 if s < 40 else 2), widths)),
+     font_set(lambda size: truetype(fonts / 'Michroma-Regular.ttf', size, bold=lambda s: 1 if s < 40 else 2), widths, allowance=1.0)),
     ('orbitron', 'Orbitron', 'Space-age geometric', 'SIL OFL 1.1',
      font_set(lambda size: truetype(fonts / 'Orbitron-Variable.ttf', size, 900), widths)),
 ]

@@ -1273,7 +1273,12 @@ static bool finish_draw(ChartBuild *b){
   {const int hh=in->clock24?in->local_hour:(in->local_hour%12?in->local_hour%12:12),nh=in->clock24?(in->local_hour+1)%24:((in->local_hour+1)%12?(in->local_hour+1)%12:12);
   put_int(hour,hh,1);put_int(next,nh,1);}
   #define PLACE(end,w) ({int v=(int)js_round((end)-(w)/2.0);v=v<W-4-(w)?v:W-4-(w);v>4?v:4;})
-  if(world&&in->tape){
+  if(world&&in->tape==3){
+    // A clock instead of the tape: the panel plain, ruled off from the
+    // band; the time is the minute's.
+    cv.panel=TAPE_PANEL;for(int y=0;y<TAPE_PANEL;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
+    for(int x=0;x<W;x++)plot(&cv,x,TAPE_PANEL-1,L_SPACE_INK);
+  }else if(world&&in->tape){
     // A sliding tape moves each minute, all of it the minute's.
     cv.panel=TAPE_PANEL;for(int y=0;y<TAPE_PANEL;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
   }else if(world){
@@ -1340,9 +1345,15 @@ static bool finish_draw(ChartBuild *b){
     const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
     Figures fig;if(!load_figures(src,size,hour,next,&fig,room,room_size))FAIL;
     int hx0=PLACE(c0x,hw),hy0=gy,nx0=PLACE(c1x,nw),ny0=gy;
-    if(cam.slow){
+    if(FACE_CHART&&cam.slow){
       // Each figure stands off its station on the route's open side.
-      #define STAND(cx,cy,w,ox,oy) do{const double d=26+fabs(cam.nx)*(w)/2.0+fabs(cam.ny)*fh/2.0;int vx=(int)js_round((cx)+cam.nx*d-(w)/2.0),vy=(int)js_round((cy)+cam.ny*d-fh/2.0);vx=vx<W-4-(w)?vx:W-4-(w);ox=vx>4?vx:4;vy=vy<H-18-fh?vy:H-18-fh;oy=vy>4?vy:4;}while(0)
+      // Held on the face, a wide figure can come back over the rose (20 px
+      // round the station): it then stands off along the route's open side
+      // until it is clear.
+      #define STAND(cx,cy,w,ox,oy) do{double d=26+fabs(cam.nx)*(w)/2.0+fabs(cam.ny)*fh/2.0;\
+        for(int k_=0;k_<40;k_++,d+=2){int vx=(int)js_round((cx)+cam.nx*d-(w)/2.0),vy=(int)js_round((cy)+cam.ny*d-fh/2.0);vx=vx<W-4-(w)?vx:W-4-(w);ox=vx>4?vx:4;vy=vy<H-18-fh?vy:H-18-fh;oy=vy>4?vy:4;\
+          const int nx_=(cx)<ox?ox:(cx)>ox+(w)?ox+(w):(cx),ny_=(cy)<oy?oy:(cy)>oy+fh?oy+fh:(cy);\
+          if((nx_-(cx))*(nx_-(cx))+(ny_-(cy))*(ny_-(cy))>=22*22)break;}}while(0)
       STAND(c0x,c0y,hw,hx0,hy0);STAND(c1x,c1y,nw,nx0,ny0);
       #undef STAND
     }
@@ -1465,8 +1476,8 @@ static bool finish_draw(ChartBuild *b){
   memset(out,0,sizeof *out);
   out->runs=runs;out->owns_runs=true;memcpy(out->row_offset,b->offsets,sizeof out->row_offset);release(b->offsets);b->offsets=NULL;
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
-  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0)|(world&&in->tape?64:0)|(world&&in->tape==2?128:0));
-  out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;
+  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0)|(world&&(in->tape==1||in->tape==2)?64:0)|(world&&in->tape==2?128:0));
+  out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;out->clock=world&&in->tape==3;
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
@@ -1496,7 +1507,11 @@ static bool finish_draw(ChartBuild *b){
   out->numerals=(uint8_t)in->numerals;
   memcpy(out->source,b->source,sizeof out->source);
   out->event_count=(uint8_t)nevents;memcpy(out->events,events,sizeof events[0]*nevents);
-  if(world&&in->tape){
+  if(world&&in->tape==3){
+    // The clock's hour, as the callout's, and its figures.
+    if(in->numerals==ENR_EVEN&&in->clock24&&!hour[1]){out->hour_text[0]='0';out->hour_text[1]=hour[0];}else memcpy(out->hour_text,hour,strlen(hour));
+    if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
+  }else if(world&&in->tape){
     memcpy(out->tape_hour,hour,strlen(hour));memcpy(out->tape_next,next,strlen(next));
     if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
   }
@@ -1587,12 +1602,15 @@ EnrScene *chart_finish(ChartBuild *b){
   return out;
 }
 bool chart_callout_figures(EnrScene *s,MapReadFn read,void *source,void *(*alloc)(size_t)){
-  // The set's 20, 28 and 40 px figures, which lie together in figures.bin.
-  const FigureGlyph *last=&s_glyphs[29];
-  const unsigned from=s_glyphs[0].first,to=last->first+(unsigned)last->height*((last->width+7)/8);
+  // The set's 20, 28 and 40 px figures, which lie together in figures.bin;
+  // for the panel clock, its 28, 40 and 72.
+  const int at=s->clock?1:0;
+  const FigureGlyph *last=&s_glyphs[(at+3)*10-1];
+  const unsigned from=s_glyphs[at*10].first,to=last->first+(unsigned)last->height*((last->width+7)/8);
   s->fig_bits=alloc(to-from);
   if(!s->fig_bits||read(source,from,s->fig_bits,to-from)!=to-from)return false;
-  for(int k=0;k<3;k++)for(int d=0;d<10;d++){const FigureGlyph *g=&s_glyphs[k*10+d];s->figures[k].width[d]=g->width;s->figures[k].height[d]=g->height;s->figures[k].first[d]=(uint16_t)(g->first-from);}
+  for(int k=0;k<3;k++)s->figure_px[k]=FIGURE_SIZES[at+k];
+  for(int k=0;k<3;k++)for(int d=0;d<10;d++){const FigureGlyph *g=&s_glyphs[(at+k)*10+d];s->figures[k].width[d]=g->width;s->figures[k].height[d]=g->height;s->figures[k].first[d]=(uint16_t)(g->first-from);}
   return true;
 }
 EnrScene *chart_build(const ChartInput *in,const ChartSources *src){

@@ -109,6 +109,7 @@ export const ACQUISITION=(acos(EARTH*cos(MASK)/(EARTH+ORBIT))-MASK)/RAD;
 export const NUMERALS=['colon','plain','even','mono','accent'];
 // The figure sets for the hour figures, the callout and the tape, in
 // figures.bin's order (tools/generate-figures.py): key, name, note.
+// Michroma is the default.
 export const FIGURE_SETS=[
   ['jost','Jost','Futura revival: the Apollo 11 plaque'],
   ['b612','B612','Airbus cockpit displays'],

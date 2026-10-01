@@ -657,7 +657,6 @@ static void draw_text(Ctx *c,const char *text,int max,int x,int right,int baseli
 // the same baseline, set in open map at the left, level with the body; its
 // shoulder ruled under it and the leader run to the body like a circuit
 // trace, breaking for lettering.
-static const int FIGURE_PX[3]={20,28,40};
 // A glyph of the callout: a Jost figure, the drawn colon, or a Departure
 // Mono figure at double size; solid in the ink, outlined, or in the
 // route's ink.
@@ -697,19 +696,20 @@ static bool solid_at(const EnrScene *s,const Glyph *g,int n,int group,int x,int 
   for(int i=0;i<n;i++)if(g[i].group==group&&glyph_bit(s,&g[i],x-g[i].x,y-g[i].y))return true;
   return false;
 }
-static int gap_for(int size){return js_round(FIGURE_PX[size]/(enr_real)16);}
+// The space between figures: a sixteenth of the size, in pixels.
+static int gap_for(const EnrScene *s,int size){return js_round(s->figure_px[size]/(enr_real)16);}
 // figurePixels(): a run of figures on a shared top, each glyph bottom-aligned.
 static int figure_run(const EnrScene *s,const char *t,int n,int size,int x,int y,int group,Glyph *out){
   int h=0;for(int i=0;i<n;i++){const int gh=fig_height(s,size,t[i]);if(gh>h)h=gh;}
-  for(int i=0;i<n;i++){out[i]=(Glyph){t[i]==':'?K_COLON:K_JOST,(uint8_t)size,(uint8_t)group,t[i],(int16_t)x,(int16_t)(y+h-fig_height(s,size,t[i]))};x+=fig_width(s,size,t[i])+gap_for(size);}
+  for(int i=0;i<n;i++){out[i]=(Glyph){t[i]==':'?K_COLON:K_JOST,(uint8_t)size,(uint8_t)group,t[i],(int16_t)x,(int16_t)(y+h-fig_height(s,size,t[i]))};x+=fig_width(s,size,t[i])+gap_for(s,size);}
   return n;
 }
-static int run_width(const EnrScene *s,const char *t,int n,int size){int w=0;for(int i=0;i<n;i++)w+=fig_width(s,size,t[i]);return w+gap_for(size)*(n-1);}
+static int run_width(const EnrScene *s,const char *t,int n,int size){int w=0;for(int i=0;i<n;i++)w+=fig_width(s,size,t[i]);return w+gap_for(s,size)*(n-1);}
 // timeFigure(): the glyphs relative to the hour's top left, in the scene's
 // style; returns the width.
 static int time_figure(const EnrScene *s,const EnrMinute *m,int big,int small,Glyph *g,int *count,int *height){
   int hn=0;while(hn<3&&s->hour_text[hn])hn++;
-  const int fh=fig_height(s,big,'0'),gap=gap_for(big),sh=fig_height(s,small,'0');
+  const int fh=fig_height(s,big,'0'),gap=gap_for(s,big),sh=fig_height(s,small,'0');
   int n=figure_run(s,s->hour_text,hn,big,0,0,G_SOLID,g),x=run_width(s,s->hour_text,hn,big);
   switch(s->numerals){
   case ENR_COLON:
@@ -810,6 +810,25 @@ static void sliding_figures(Ctx *c,int which){
       if(g[i].group==G_HOLLOW&&ON(x+1,y)&&ON(x-1,y)&&ON(x,y+1)&&ON(x,y-1))continue;
       #undef ON
       plot(c,x,y,ink);
+    }
+  }
+}
+// The world band's panel as a clock: the time in the callout's figures,
+// the largest that fit, centred in the panel; over space, the outlined
+// figures keeping their edge and accented minutes in the route's ink.
+static void draw_panel_clock(Ctx *c){
+  const EnrScene *s=c->s;
+  if(!s->fig_bits)return;
+  Glyph g[8];int n,fh,fw=time_figure(s,c->m,2,1,g,&n,&fh);
+  if(fw>W-12)fw=time_figure(s,c->m,1,0,g,&n,&fh);
+  const int fx=(W-fw)/2,fy=(TAPE_P-1-fh)/2;
+  for(int i=0;i<n;i++){
+    int x0,y0,w,h;glyph_box(s,&g[i],&x0,&y0,&w,&h);
+    for(int gy=y0;gy<y0+h;gy++)for(int gx=x0;gx<x0+w;gx++){
+      if(!glyph_bit(s,&g[i],gx,gy))continue;
+      const int lx=g[i].x+gx,ly=g[i].y+gy;
+      if(g[i].group==G_HOLLOW&&solid_at(s,g,n,G_HOLLOW,lx+1,ly)&&solid_at(s,g,n,G_HOLLOW,lx-1,ly)&&solid_at(s,g,n,G_HOLLOW,lx,ly+1)&&solid_at(s,g,n,G_HOLLOW,lx,ly-1))continue;
+      plot(c,fx+lx,fy+ly,g[i].group==G_ACCENT?s->zoned[ENR_ROUTE][0]:s->space_ink);
     }
   }
 }
@@ -914,6 +933,9 @@ static int minute_boxes(Ctx *c,Box *out){
     const int nx=js_round(IX+(60-now)*PX-nw/(enr_real)2);int cx=js_round(IX+(0-now)*PX-cw/(enr_real)2);cx=cx>4?cx:4;cx=cx<nx-cw-8?cx:nx-cw-8;
     Glyph g[3];int k=figure_run(s,s->tape_hour,hn,2,0,0,G_SOLID,g);out[n]=glyph_bounds(s,g,k,cx,4,0,W-1);if(out[n].w)n++;
     k=figure_run(s,s->tape_next,nn,2,0,0,G_SOLID,g);out[n]=glyph_bounds(s,g,k,nx,4,0,W-1);if(out[n].w)n++;
+  }else if(VIEW_IS_WORLD(s->view)&&s->clock){
+    // The panel's clock: events' names give way to it.
+    out[n++]=(Box){4,2,W-8,TAPE_P-4};
   }else if(VIEW_IS_WORLD(s->view)&&(s->flags&ENR_MINUTE_FLAG)){
     const int lw=text_width(m->minute,2),want=js_round(m->index-lw/(enr_real)2),lx=want>s->tape_hi?s->tape_hi:want;
     out[n++]=(Box){lx<s->tape_lo?s->tape_lo:lx,s->tape_baseline-18,lw,8};
@@ -974,8 +996,8 @@ static void draw_moving(Ctx *c,int part){
     draw_callout(c);
     if(!part){Ctx box=*c;box.measure=true;box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_callout(&box);draw_late(c,box.box,true);}
   }
-  if(world&&(!part||part==PART_INDEX)){if(s->flags&ENR_SLIDING_TAPE)draw_sliding_tape(c);else draw_index(c);}
-  if(world&&!(s->flags&ENR_SLIDING_TAPE)&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
+  if(world&&(!part||part==PART_INDEX)){if(s->clock)draw_panel_clock(c);else if(s->flags&ENR_SLIDING_TAPE)draw_sliding_tape(c);else draw_index(c);}
+  if(world&&!s->clock&&!(s->flags&ENR_SLIDING_TAPE)&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
   if(!part||part==PART_EVENTS)draw_events(c);
   if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
   if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
@@ -1133,7 +1155,7 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
   case ENR_MEASURE_CALLOUT:s_figures_only=true;if(VIEW_IS_DAY(scene->view)||(VIEW_IS_HOUR(scene->view)&&(scene->flags&ENR_CALLOUT)))draw_callout(&c);s_figures_only=false;break;
   case ENR_MEASURE_TAPE_HOUR:if(world&&(scene->flags&ENR_SLIDING_TAPE))sliding_figures(&c,1);break;
   case ENR_MEASURE_TAPE_NEXT:if(world&&(scene->flags&ENR_SLIDING_TAPE))sliding_figures(&c,2);break;
-  case ENR_MEASURE_INDEX:if(world){if(scene->flags&ENR_SLIDING_TAPE)draw_sliding_tape(&c);else draw_index(&c);}break;
+  case ENR_MEASURE_INDEX:if(world){if(scene->clock)draw_panel_clock(&c);else if(scene->flags&ENR_SLIDING_TAPE)draw_sliding_tape(&c);else draw_index(&c);}break;
   }
   if(c.box[2]>=c.box[0]){out[0]=(int16_t)c.box[0];out[1]=(int16_t)c.box[1];out[2]=(int16_t)(c.box[2]-c.box[0]+1);out[3]=(int16_t)(c.box[3]-c.box[1]+1);}
   // The body is drawn on the band before it is turned.

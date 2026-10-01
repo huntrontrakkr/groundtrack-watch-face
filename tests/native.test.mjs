@@ -31,6 +31,7 @@ const HOURS=[
   ['sat:48274','2026-10-01T06:30:00Z','hypsometric','Asia/Kolkata',{flag:true}],['sat:20580','2026-09-30T20:00:00Z','sunlight','Europe/London',{flag:true}],
   ['sat:49260','2026-10-01T09:00:00Z','console','America/New_York',{flag:true}],['sat:43013','2026-09-30T17:00:00Z','red',null,{}],
   ['sat:49260','2026-09-30T16:00:00Z','crt','America/New_York',{flag:true}],['sun','2026-09-27T08:00:00Z','blueprint','America/New_York',{flag:true}],['sat:25544','2026-09-30T13:00:00Z','amber','America/New_York',{tape:'slide'}],
+  ['sat:25544','2026-09-30T13:00:00Z','crt','America/New_York',{tape:'clock'}],['sat:43013','2026-09-30T17:00:00Z','enroute','UTC',{tape:'clock',numerals:'even',clock24:false}],['sat:25544','2026-09-30T02:00:00Z','console','UTC',{tape:'clock',numerals:'accent',figures:'b612'}],
   ['moon','2026-09-19T09:00:00Z','dotmatrix','America/New_York',{readout:'callout'}],['sat:25544','2026-09-30T13:00:00Z','dotmatrix','America/New_York',{projection:'fuller',flag:true}],['sat:42738','2026-09-27T05:00:00Z','dotmatrix','America/New_York',{}],
   ['sun','2026-09-27T08:00:00Z','airbrush','America/New_York',{flag:true}],['sat:25544','2026-09-30T13:00:00Z','airbrush','America/New_York',{tape:'tape'}],['sun','2026-09-27T08:00:00Z','airbrush','UTC',{projection:'fuller'}],
   ['sun','2026-09-27T08:00:00Z','odyssey','America/New_York',{flag:true}],['moon','2026-09-19T09:00:00Z','odyssey','America/New_York',{readout:'callout'}],['sat:25544','2026-09-30T13:00:00Z','odyssey','America/New_York',{projection:'fuller',flag:true}],

@@ -17,7 +17,7 @@ const NOTES={
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
   iss:'An archived orbit from 5 June 2019. The station laps most of the world in an hour, so the whole world is the chart.'
 };
-const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',figures:'jost',zone:'utc',span:'day'};
+const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',figures:'michroma',zone:'utc',span:'day'};
 let main,studyEpoch=state.epoch;
 const proofs={};
 function paint(canvas,buf){

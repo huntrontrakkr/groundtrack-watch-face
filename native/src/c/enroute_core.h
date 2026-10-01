@@ -111,6 +111,9 @@ typedef struct {
   bool lattice;
   // The Sun drawn as HAL 9000's eye (the Odyssey plate).
   bool hal;
+  // The world band's panel a clock, not a tape: the time in the callout's
+  // figures (numerals, hour_text), centred.
+  bool clock;
   int8_t forward;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;
@@ -133,7 +136,9 @@ typedef struct {
   char hour_text[3];
   uint8_t numerals,avoid_count;
   int16_t avoid[24][4];
-  EnrFigures figures[3];
+  // Their sizes in px: the callout's 20, 28 and 40, or the panel clock's
+  // 28, 40 and 72.
+  EnrFigures figures[3];uint8_t figure_px[3];
   uint8_t *fig_bits;
   // Symbols inked by one point's night (renderEnroute's col(anchor)): the
   // rose and hexagon by this hour's station, the reporting point by the

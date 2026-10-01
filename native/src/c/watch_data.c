@@ -24,11 +24,11 @@ void settings_load(WatchSettings *s){
   // the phone sends one.
   // The Sun on Enroute, the ISS on Plotboard and Fuller.
 #if defined(FACE_PLOTBOARD)
-  const WatchSettings defaults={6,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_WORLD,"ISS",ENR_EVEN,0,0,0,0};
+  const WatchSettings defaults={6,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_WORLD,"ISS",ENR_EVEN,0,0,0,2};
 #elif defined(FACE_FULLER)
-  const WatchSettings defaults={6,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,0};
+  const WatchSettings defaults={6,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2};
 #else
-  const WatchSettings defaults={6,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,0};
+  const WatchSettings defaults={6,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2};
 #endif
   if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=6)*s=defaults;
 }
