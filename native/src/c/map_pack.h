@@ -33,6 +33,20 @@ bool map_pack_open(MapPack *pack,MapReadFn read,void *source,void *(*alloc)(size
 void map_pack_close(MapPack *pack,void (*release)(void *));
 // A mip's cell size in degrees: 0.25 * 2^resolution.
 double map_cell_degrees(int resolution);
-// Decodes tile (tx, ty) of mip m into out (MAP_TILE*MAP_TILE cells, row by
-// row, land bit << 4 | level), reading through buffer (256 bytes).
-bool map_tile(const MapPack *pack,int m,int tx,int ty,uint8_t *out,uint8_t *buffer);
+// A tile decoded a row at a time, in order (the coder is sequential): the
+// chart's ground streams down the map, so a strip of these, one a tile
+// across the chart, gives every cell row once with no tile held whole.
+#define MAP_STREAM_BUFFER 64
+typedef struct {
+  uint32_t x,at,end,from,filled;
+  uint8_t row,flat,value;
+  uint8_t prev[MAP_TILE];        // the row before (the coder's contexts)
+  uint8_t buf[MAP_STREAM_BUFFER];
+} MapTileStream;
+bool map_tile_open(const MapPack *pack,int m,int tx,int ty,MapTileStream *s);
+// The next row's MAP_TILE cells (land bit << 4 | level; 0 beyond the mip's
+// edge); false past the tile's rows.
+bool map_tile_row(const MapPack *pack,int m,int tx,int ty,MapTileStream *s,uint8_t *out);
+// The whole tile (tx, ty) of mip m into out (MAP_TILE*MAP_TILE cells, row
+// by row), through a stream of its own.
+bool map_tile(const MapPack *pack,int m,int tx,int ty,uint8_t *out,MapTileStream *s);

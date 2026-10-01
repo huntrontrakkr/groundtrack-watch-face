@@ -21,9 +21,9 @@ int main(int argc,char **argv){
   MapPack p;if(!map_pack_open(&p,mem_read,&m,malloc)){fprintf(stderr,"bad pack\n");return 2;}
   const int mip=atoi(argv[2]);if(mip<0||mip>=p.mips){fprintf(stderr,"no mip %d\n",mip);return 2;}
   const MapMip *q=&p.mip[mip];
-  uint8_t *rows=malloc((size_t)q->width*q->rows),tile[MAP_TILE*MAP_TILE],buffer[256];
+  uint8_t *rows=malloc((size_t)q->width*q->rows),tile[MAP_TILE*MAP_TILE];MapTileStream stream;
   for(int ty=0;ty<q->trows;ty++)for(int tx=0;tx<q->cols;tx++){
-    if(!map_tile(&p,mip,tx,ty,tile,buffer)){fprintf(stderr,"tile %d,%d failed\n",tx,ty);return 1;}
+    if(!map_tile(&p,mip,tx,ty,tile,&stream)){fprintf(stderr,"tile %d,%d failed\n",tx,ty);return 1;}
     for(int cy=0;cy<MAP_TILE;cy++)for(int cx=0;cx<MAP_TILE;cx++){
       const int x=tx*MAP_TILE+cx,y=ty*MAP_TILE+cy;
       if(x<q->width&&y<q->rows)rows[(size_t)y*q->width+x]=tile[cy*MAP_TILE+cx];

@@ -53,46 +53,62 @@ bool map_pack_open(MapPack *p,MapReadFn read,void *source,void *(*alloc)(size_t)
 }
 void map_pack_close(MapPack *p,void (*release)(void *)){release(p->tables);p->tables=0;}
 
-// Sequential reads through a small buffer.
-typedef struct {const MapPack *p;uint32_t at,end,from,filled;uint8_t *buf;} Reader;
-static uint8_t next_byte(Reader *r){
+// Sequential reads through the stream's small buffer.
+static uint8_t next_byte(const MapPack *p,MapTileStream *r){
   if(r->at>=r->end)return 0;
   if(r->at<r->from||r->at>=r->from+r->filled){
-    r->from=r->at;size_t n=r->end-r->at<256?r->end-r->at:256;
-    r->filled=(uint32_t)r->p->read(r->p->source,r->at,r->buf,n);if(!r->filled)return 0;
+    r->from=r->at;size_t n=r->end-r->at<MAP_STREAM_BUFFER?r->end-r->at:MAP_STREAM_BUFFER;
+    r->filled=(uint32_t)p->read(p->source,r->at,r->buf,n);if(!r->filled)return 0;
   }
   return r->buf[r->at++ - r->from];
 }
-bool map_tile(const MapPack *p,int m,int tx,int ty,uint8_t *out,uint8_t *buffer){
+bool map_tile_open(const MapPack *p,int m,int tx,int ty,MapTileStream *s){
   if(m<0||m>=p->mips)return false;
   const MapMip *q=&p->mip[m];
   if(tx<0||ty<0||tx>=q->cols||ty>=q->trows)return false;
   const uint32_t k=(uint32_t)ty*q->cols+tx;uint8_t o[8];
   if(!read_at(p,q->offsets_at+4*k,o,8))return false;
-  const uint32_t from=q->data+le32(o),end=q->data+le32(o+4);
-  const int x0=tx*MAP_TILE,y0=q->first+ty*MAP_TILE;
-  const int w=q->width-x0<MAP_TILE?q->width-x0:MAP_TILE,h=q->first+q->rows-y0<MAP_TILE?q->first+q->rows-y0:MAP_TILE;
-  if(end-from==2){
-    uint8_t f[2];
-    if(!read_at(p,from,f,2))return false;
-    memset(out,f[0]<<4|f[1],MAP_TILE*MAP_TILE);return true;
+  memset(s,0,sizeof *s);
+  s->at=q->data+le32(o);s->end=q->data+le32(o+4);
+  if(s->end-s->at==2){
+    uint8_t f[2];if(!read_at(p,s->at,f,2))return false;
+    s->flat=1;s->value=(uint8_t)(f[0]<<4|f[1]);return true;
   }
-  Reader r={p,from,end,0,0,buffer};
-  uint32_t x=0;for(int i=0;i<4;i++)x|=(uint32_t)next_byte(&r)<<(8*i);
-  #define CELL(cx,cy) (((cx)<0||(cy)<0||(cx)>=w||(cy)>=h)?0:out[(cy)*MAP_TILE+(cx)])
-  for(int cy=0;cy<h;cy++)for(int cx=0;cx<w;cx++){
-    const int lc=(CELL(cx-1,cy)>>4)|(CELL(cx,cy-1)>>4)<<1|(CELL(cx-1,cy-1)>>4)<<2|(CELL(cx+1,cy-1)>>4)<<3;
+  for(int i=0;i<4;i++)s->x|=(uint32_t)next_byte(p,s)<<(8*i);
+  return true;
+}
+bool map_tile_row(const MapPack *p,int m,int tx,int ty,MapTileStream *s,uint8_t *out){
+  const MapMip *q=&p->mip[m];
+  const int x0=tx*MAP_TILE,y0=q->first+ty*MAP_TILE,cy=s->row;
+  const int w=q->width-x0<MAP_TILE?q->width-x0:MAP_TILE,h=q->first+q->rows-y0<MAP_TILE?q->first+q->rows-y0:MAP_TILE;
+  if(cy>=MAP_TILE)return false;
+  s->row++;
+  if(cy>=h){memset(out,0,MAP_TILE);return true;}
+  if(s->flat){memset(out,s->value,MAP_TILE);return true;}
+  uint32_t x=s->x;const uint8_t *up=s->prev;
+  // The contexts: the cell to the left, and above, above left and above
+  // right in the row before; 0 beyond the tile.
+  #define UP(cx) (((cx)<0||(cx)>=w||cy==0)?0:up[cx])
+  for(int cx=0;cx<w;cx++){
+    const int left=cx?out[cx-1]:0;
+    const int lc=(left>>4)|(UP(cx)>>4)<<1|(UP(cx-1)>>4)<<2|(UP(cx+1)>>4)<<3;
     const uint32_t f=p->land_freq[lc];uint32_t slot=x&(TOTAL-1);
     const int l=slot<TOTAL-f?0:1;const uint32_t start=l?TOTAL-f:0,freq=l?f:TOTAL-f;
-    x=freq*(x>>SCALE_BITS)+slot-start;while(x<RANS_L)x=(x<<8)|next_byte(&r);
-    const int c=(l*L+(CELL(cx-1,cy)&15))*L+(CELL(cx,cy-1)&15);
+    x=freq*(x>>SCALE_BITS)+slot-start;while(x<RANS_L)x=(x<<8)|next_byte(p,s);
+    const int c=(l*L+(left&15))*L+(UP(cx)&15);
     const uint16_t *cum=p->cum[c];if(!cum)return false;
-    slot=x&(TOTAL-1);int s=0;while(cum[s+1]<=slot)s++;
-    x=(uint32_t)(cum[s+1]-cum[s])*(x>>SCALE_BITS)+slot-cum[s];while(x<RANS_L)x=(x<<8)|next_byte(&r);
-    out[cy*MAP_TILE+cx]=(uint8_t)(l<<4|s);
+    slot=x&(TOTAL-1);int sym=0;while(cum[sym+1]<=slot)sym++;
+    x=(uint32_t)(cum[sym+1]-cum[sym])*(x>>SCALE_BITS)+slot-cum[sym];while(x<RANS_L)x=(x<<8)|next_byte(p,s);
+    out[cx]=(uint8_t)(l<<4|sym);
   }
-  #undef CELL
+  #undef UP
   // Beyond the mip's edge, sea at the lowest level.
-  for(int cy=0;cy<MAP_TILE;cy++)for(int cx=0;cx<MAP_TILE;cx++)if(cx>=w||cy>=h)out[cy*MAP_TILE+cx]=0;
+  for(int cx=w;cx<MAP_TILE;cx++)out[cx]=0;
+  s->x=x;memcpy(s->prev,out,MAP_TILE);
+  return true;
+}
+bool map_tile(const MapPack *p,int m,int tx,int ty,uint8_t *out,MapTileStream *s){
+  if(!map_tile_open(p,m,tx,ty,s))return false;
+  for(int cy=0;cy<MAP_TILE;cy++)if(!map_tile_row(p,m,tx,ty,s,out+cy*MAP_TILE))return false;
   return true;
 }

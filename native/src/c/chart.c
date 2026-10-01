@@ -109,24 +109,25 @@ static bool body_place(const ChartSources *src,int body,int64_t t,double *lat,do
 }
 
 // ---------------------------------------------------------------- map tiles
-// The map's tiles under the chart (map_pack.h), decoded as they are first
-// read and kept while there is room, from the mip whose cells are at most
-// a pixel wide. Land and height are read bilinearly between cell centres,
-// as the study always did, in integers: fractions in Q8, heights in Q8
-// metres.
-#define TILE_SLOTS 6
+// The map under the chart (map_pack.h), from the mip whose cells are at
+// most a pixel wide, streamed a cell row at a time: a strip of tile
+// decoders across the chart, each tile decoded once as the ground goes
+// down the map, and the last few cell rows kept flat across the chart's
+// columns, so a cell is an index into a row. Land and height are read
+// bilinearly between cell centres, as the study always did, in integers:
+// fractions in Q8, heights in Q8 metres.
+#define MAP_ROWS 4                       // cell rows kept
+#define MAP_COLS 402                     // cells across (under 400 by the mip rule, and a neighbour)
+#define MAP_ACROSS 15                    // tiles across
 typedef struct {
   MapPack pack;int mip;const MapMip *q;double cell;      // the mip read and its cell size in degrees
-  int16_t tx[TILE_SLOTS],ty[TILE_SLOTS];uint32_t used[TILE_SLOTS],tick;
-  uint8_t cells[TILE_SLOTS][MAP_TILE*MAP_TILE],buffer[256];
+  int c0,ncols;                          // the chart's first cell column (the mip's), and how many
+  int ty,tx0,ntiles;                     // the strip open: its tile row, first tile column, tiles
+  int row_j[MAP_ROWS],newest,next;       // the rows kept (-1 none) and the newest's
+  uint8_t rows[MAP_ROWS][MAP_COLS];
+  MapTileStream tiles[MAP_ACROSS];
   bool failed;
 } Tiles;
-static const uint8_t *tile_of(Tiles *t,int tx,int ty){
-  t->tick++;int slot=0;
-  for(int i=0;i<TILE_SLOTS;i++){if(t->tx[i]==tx&&t->ty[i]==ty){t->used[i]=t->tick;return t->cells[i];}if(t->used[i]<t->used[slot])slot=i;}
-  if(!map_tile(&t->pack,t->mip,tx,ty,t->cells[slot],t->buffer)){t->failed=true;return NULL;}
-  t->tx[slot]=(int16_t)tx;t->ty[slot]=(int16_t)ty;t->used[slot]=t->tick;return t->cells[slot];
-}
 // The mip for a chart's scale (pixels a degree): the coarsest whose cells
 // are at most a pixel wide, else the finest the pack has.
 static void tiles_choose(Tiles *t,double px_per_degree){
@@ -137,31 +138,84 @@ static void tiles_choose(Tiles *t,double px_per_degree){
     if(d*px_per_degree<=1.0&&d>bd){bd=d;best=m;}
   }
   t->mip=best>=0?best:fine;t->q=&t->pack.mip[t->mip];t->cell=map_cell_degrees(t->q->resolution);
-  for(int i=0;i<TILE_SLOTS;i++){t->tx[i]=-1;t->ty[i]=-1;t->used[i]=0;}
-}
-// A cell (land << 4 | level) by column (wrapping round the world) and world
-// row (held to the mip's rows: beyond them, its edge).
-static int cell_at(Tiles *t,int cx,int cy){
-  const MapMip *q=t->q;const int w=q->width;
-  cx=((cx%w)+w)%w;
-  cy=cy<q->first?q->first:cy>=q->first+q->rows?q->first+q->rows-1:cy;
-  const uint8_t *tile=tile_of(t,cx/MAP_TILE,(cy-q->first)/MAP_TILE);
-  if(!tile)return 0;
-  return tile[((cy-q->first)%MAP_TILE)*MAP_TILE+cx%MAP_TILE];
+  for(int k=0;k<MAP_ROWS;k++)t->row_j[k]=-1;
+  t->newest=-1;t->next=0;t->ty=-1;
 }
 // The map's place under a longitude or latitude: the cell centre before the
-// point and the fraction past it (Q8), for bilinear reading.
+// point and the fraction past it (Q8), for bilinear reading. Columns are
+// the chart's own (from c0, wrapping round the world).
 typedef struct {int32_t i,f;} Place;
-static Place place_lon(const Tiles *t,double lon){const double u=(wrap(lon)+180)/t->cell-.5,i=floor(u);return (Place){(int32_t)i,(int32_t)floor((u-i)*256)};}
+static int32_t cell_column(double lon,double cell){return (int32_t)floor((wrap(lon)+180)/cell-.5);}
+static Place place_lon(const Tiles *t,double lon){
+  const double u=(wrap(lon)+180)/t->cell-.5,i=floor(u);const int w=t->q->width;
+  return (Place){((((int32_t)i-t->c0)%w)+w)%w,(int32_t)floor((u-i)*256)};
+}
 static Place place_lat(const Tiles *t,double lat){const double v=(90-lat)/t->cell-.5,j=floor(v);return (Place){(int32_t)j,(int32_t)floor((v-j)*256)};}
+// The chart's columns: from the cell under its left edge to the one past
+// its right edge; a chart wider than the world (the band fitted to a long
+// hour) takes the whole world and the first column again.
+static bool tiles_columns(Tiles *t,const Cam *cam){
+  const int w=t->q->width;
+  const double l=glon(cam,.25),r=glon(cam,W-.25);
+  const int32_t a=(int32_t)floor((l+180)/t->cell-.5),b=(int32_t)floor((r+180)/t->cell-.5);
+  t->c0=cell_column(l,t->cell);
+  int n=(int)(b-a)+2;
+  if(n>w+1)n=w+1;
+  if(n>MAP_COLS)return false;
+  t->ncols=n;return true;
+}
+// A strip of decoders opened for tile row ty.
+static bool tiles_strip(Tiles *t,int ty){
+  const MapMip *q=t->q;
+  t->ty=ty;t->tx0=t->c0/MAP_TILE;
+  // Tiles until the chart's columns are covered (the last tile across the
+  // world may be narrower than the rest).
+  int n=0;for(int covered=-(t->c0%MAP_TILE);covered<t->ncols&&n<q->cols;n++){const int tx=(t->tx0+n)%q->cols,tw=q->width-tx*MAP_TILE;covered+=tw<MAP_TILE?tw:MAP_TILE;}
+  t->ntiles=n;
+  if(t->ntiles>MAP_ACROSS)return false;
+  for(int k=0;k<t->ntiles;k++)if(!map_tile_open(&t->pack,t->mip,(t->tx0+k)%q->cols,ty,&t->tiles[k]))return false;
+  return true;
+}
+// Cell row j (the mip's rows, held to its edge) across the chart's columns.
+// Rows are asked for downward: a new one is decoded on from the newest.
+static const uint8_t *map_row(Tiles *t,int j){
+  const MapMip *q=t->q;const int w=q->width;
+  j=j<q->first?q->first:j>=q->first+q->rows?q->first+q->rows-1:j;
+  for(int k=0;k<MAP_ROWS;k++)if(t->row_j[k]==j)return t->rows[k];
+  if(t->newest>=0&&j<t->newest){t->failed=true;return t->rows[0];}
+  for(int jj=t->newest<0?j:t->newest+1;jj<=j;jj++){
+    const int ty=(jj-q->first)/MAP_TILE,cy=(jj-q->first)%MAP_TILE;
+    if(ty!=t->ty){if(!tiles_strip(t,ty)){t->failed=true;return t->rows[0];}}
+    // Decode forward to this row of every tile in the strip, keeping only
+    // the one asked for.
+    uint8_t *row=t->rows[t->next];
+    for(int k=0;k<t->ntiles;k++){
+      MapTileStream *st=&t->tiles[k];uint8_t cells[MAP_TILE];
+      while(st->row<=cy){
+        if(!map_tile_row(&t->pack,t->mip,(t->tx0+k)%q->cols,ty,st,cells)){t->failed=true;return t->rows[0];}
+      }
+      // The tile's own columns (the last tile across may be partial).
+      const int tx=(t->tx0+k)%q->cols,tw=w-tx*MAP_TILE<MAP_TILE?w-tx*MAP_TILE:MAP_TILE,base=tx*MAP_TILE-t->c0;
+      for(int cx=0;cx<tw;cx++){
+        int ci=((base+cx)%w+w)%w;
+        if(ci<t->ncols)row[ci]=cells[cx];
+        if(ci==0&&t->ncols==w+1)row[w]=cells[cx];
+      }
+    }
+    t->row_j[t->next]=jj;t->newest=jj;t->next=(t->next+1)%MAP_ROWS;
+  }
+  for(int k=0;k<MAP_ROWS;k++)if(t->row_j[k]==j)return t->rows[k];
+  t->failed=true;return t->rows[0];
+}
 // Land (0..256) and height (Q8 metres) bilinear at a place.
 static int32_t land_at(Tiles *t,Place px,Place py){
-  const int32_t c00=cell_at(t,px.i,py.i)>>4,c10=cell_at(t,px.i+1,py.i)>>4,c01=cell_at(t,px.i,py.i+1)>>4,c11=cell_at(t,px.i+1,py.i+1)>>4;
+  const uint8_t *r0=map_row(t,py.i),*r1=map_row(t,py.i+1);
+  const int32_t c00=r0[px.i]>>4,c10=r0[px.i+1]>>4,c01=r1[px.i]>>4,c11=r1[px.i+1]>>4;
   return (((c00*(256-px.f)+c10*px.f)*(256-py.f)+(c01*(256-px.f)+c11*px.f)*py.f)+128)>>8;
 }
 static int32_t height_at(Tiles *t,Place px,Place py){
-  const int16_t *h=t->pack.height;
-  const int32_t h00=h[cell_at(t,px.i,py.i)&15],h10=h[cell_at(t,px.i+1,py.i)&15],h01=h[cell_at(t,px.i,py.i+1)&15],h11=h[cell_at(t,px.i+1,py.i+1)&15];
+  const int16_t *h=t->pack.height;const uint8_t *r0=map_row(t,py.i),*r1=map_row(t,py.i+1);
+  const int32_t h00=h[r0[px.i]&15],h10=h[r0[px.i+1]&15],h01=h[r1[px.i]&15],h11=h[r1[px.i+1]&15];
   return ((h00*(256-px.f)+h10*px.f)*(256-py.f)+(h01*(256-px.f)+h11*px.f)*py.f)>>8;
 }
 
@@ -222,6 +276,7 @@ typedef struct {
   const Cam *cam;const Plate *pal;RunSink *sink;uint8_t crow[W];
   Smooth s1,s2,s3;
   uint8_t land[LAND_RING][W/8+1];int land_rows; // land bits of pixel rows computed
+  uint8_t hdist[LAND_RING][W/2];              // each pixel's distance along its row to land, 0-6, a nibble each
   uint8_t space[LAND_RING][W/8+1];            // a Fuller sheet's pixels off its net
   int32_t e3[E3_RING][W];int e3_rows;         // smoothed relief rows emitted (Q8 metres)
   int32_t row[W];                             // the sampled row, then each stage's output
@@ -232,25 +287,32 @@ static void emit2(void *ctx,int row,const int32_t *v){Ground *g=ctx;(void)row;sm
 static void emit1(void *ctx,int row,const int32_t *v){Ground *g=ctx;(void)row;smooth_push(&g->s2,v);}
 static void emit3(void *ctx,int row,const int32_t *v){Ground *g=ctx;memcpy(g->e3[row%E3_RING],v,sizeof(int32_t)*W);g->e3_rows=row+1;}
 static bool is_land(const Ground *g,int x,int y){return (g->land[y%LAND_RING][x>>3]>>(x&7))&1;}
-// seaDistance(): chessboard distance to the nearest land pixel, capped at 6.
+static int hdist_at(const Ground *g,int x,int y){return (g->hdist[y%LAND_RING][x>>1]>>((x&1)*4))&15;}
+// A sampled row's distances along it to land, capped at 6: a sweep each way.
+static void row_distances(Ground *g,int y){
+  uint8_t *h=g->hdist[y%LAND_RING];uint8_t d[W];int run=6;
+  for(int x=0;x<W;x++){run=is_land(g,x,y)?0:run<6?run+1:6;d[x]=(uint8_t)run;}
+  run=6;
+  for(int x=W-1;x>=0;x--){run=is_land(g,x,y)?0:run<6?run+1:6;if(run<d[x])d[x]=(uint8_t)run;}
+  for(int x=0;x<W;x+=2)h[x>>1]=(uint8_t)(d[x]|d[x+1]<<4);
+}
+// seaDistance(): chessboard distance to the nearest land pixel, capped at 6:
+// the least over the rows round it of the greater of the row's distance
+// away and the distance along it.
 static int sea_distance(const Ground *g,int x,int y){
   int best=6;
-  for(int dy=-5;dy<=5;dy++){
-    const int yy=y+dy,ady=dy<0?-dy:dy;if(yy<0||yy>=H||ady>=best)continue;
-    for(int dx=0;dx<best&&dx<=5;dx++){
-      if((x-dx>=0&&is_land(g,x-dx,yy))||(x+dx<W&&is_land(g,x+dx,yy))){const int d=ady>dx?ady:dx;if(d<best)best=d;break;}
-    }
+  for(int dy=0;dy<best;dy++){
+    if(y+dy<H){const int d=hdist_at(g,x,y+dy);if((d>dy?d:dy)<best)best=d>dy?d:dy;}
+    if(dy&&y-dy>=0){const int d=hdist_at(g,x,y-dy);if((d>dy?d:dy)<best)best=d>dy?d:dy;}
   }
   return best;
 }
 // The waterlines' distance: steps along rows and columns, capped at 6.
 static int shore_distance(const Ground *g,int x,int y){
   int best=6;
-  for(int dy=-5;dy<=5;dy++){
-    const int yy=y+dy,ady=dy<0?-dy:dy;if(yy<0||yy>=H||ady>=best)continue;
-    for(int dx=0;ady+dx<best;dx++){
-      if((x-dx>=0&&is_land(g,x-dx,yy))||(x+dx<W&&is_land(g,x+dx,yy))){best=ady+dx;break;}
-    }
+  for(int dy=0;dy<best;dy++){
+    if(y+dy<H){const int d=dy+hdist_at(g,x,y+dy);if(d<best)best=d;}
+    if(dy&&y-dy>=0){const int d=dy+hdist_at(g,x,y-dy);if(d<best)best=d;}
   }
   return best;
 }
@@ -313,7 +375,10 @@ static int ground_rows_end(Ground *g);
 // ground is done, -1 if the map fails.
 static int ground_step(Ground *g,Tiles *t,int budget){
   const Cam *cam=g->cam;
-  if(g->land_rows==0)for(int x=0;x<W;x++){g->col[0][x]=place_lon(t,glon(cam,x+.25));g->col[1][x]=place_lon(t,glon(cam,x+.5));g->col[2][x]=place_lon(t,glon(cam,x+.75));}
+  if(g->land_rows==0){
+    if(!tiles_columns(t,cam))return -1;
+    for(int x=0;x<W;x++){g->col[0][x]=place_lon(t,glon(cam,x+.25));g->col[1][x]=place_lon(t,glon(cam,x+.5));g->col[2][x]=place_lon(t,glon(cam,x+.75));}
+  }
   for(;budget>0&&g->land_rows<H;budget--){
     const int y=g->land_rows;
     // Land at four points in the pixel, as groundLayer sampled it; height
@@ -330,6 +395,7 @@ static int ground_step(Ground *g,Tiles *t,int budget){
       e0[x]=height_at(t,g->col[1][x],rm);
     }
     if(t->failed)return -1;
+    row_distances(g,y);
     if(!ground_row_done(g))return -1;
   }
   return ground_rows_end(g);
@@ -731,7 +797,7 @@ static int fuller_ground_step(ChartBuild *b,int budget){
       }else is_land=cover>=32640;
       if(is_land)land[x>>3]|=(uint8_t)(1<<(x&7));
     }
-    if(!ground_row_done(g))return -1;
+    row_distances(g,y);if(!ground_row_done(g))return -1;
   }
   return ground_rows_end(g);
 }
