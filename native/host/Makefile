@@ -10,7 +10,7 @@ build_check: build_check.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h 
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 
 # The same for one face alone, as its watch app is built (the all-faces
-# build above peaks elsewhere): build_check-enroute, -plotboard, -fuller.
+# build above peaks elsewhere): build_check-enroute, -fuller.
 build_check-%: build_check.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
 	$(CC) $(CFLAGS) -std=gnu11 -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 

@@ -22,10 +22,8 @@
 void settings_load(WatchSettings *s){
   // The defaults the phone's settings also start from, without a home until
   // the phone sends one.
-  // The Sun on Enroute, the ISS on Plotboard and Fuller.
-#if defined(FACE_PLOTBOARD)
-  const WatchSettings defaults={7,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_WORLD,"ISS",ENR_EVEN,0,0,0,2,0};
-#elif defined(FACE_FULLER)
+  // The Sun on Groundtrack, the ISS on Fuller.
+#if defined(FACE_FULLER)
   const WatchSettings defaults={7,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0};
 #else
   const WatchSettings defaults={7,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0};

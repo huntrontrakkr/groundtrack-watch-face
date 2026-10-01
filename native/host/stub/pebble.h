@@ -108,6 +108,7 @@ void connection_service_unsubscribe(void);
 void app_focus_service_unsubscribe(void);
 ResHandle resource_get_handle(uint32_t resource_id);
 size_t resource_size(ResHandle h);
+size_t resource_load(ResHandle h,uint8_t *buffer,size_t max_length);
 size_t resource_load_byte_range(ResHandle h,uint32_t start_offset,uint8_t *buffer,size_t num_bytes);
 int persist_read_data(const uint32_t key,void *buffer,const size_t buffer_size);
 int persist_write_data(const uint32_t key,const void *data,const size_t size);
@@ -118,4 +119,5 @@ int persist_delete(uint32_t key);
 #define RESOURCE_ID_FIGURES 2
 #define RESOURCE_ID_FULLER_GRIDS 4
 #define RESOURCE_ID_LAND_BITS 5
+#define RESOURCE_ID_FONT 6
 void app_event_loop(void);

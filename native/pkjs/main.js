@@ -1,4 +1,4 @@
-// Groundtrack Enroute and Groundtrack Plotboard, phone side (one source,
+// Groundtrack and Groundtrack Fuller, phone side (one source,
 // bundled for each face: GROUNDTRACK_FACE). The watch draws every chart itself; the
 // phone sends it what it needs for that: its settings, the Sun and Moon as
 // daily segments some weeks ahead, home's rise and set, and a satellite's
@@ -93,7 +93,7 @@ function pump(){
 // and, on the fixed tape, how its minutes fall on the route (0 off, 1 a
 // vernier, 2 a comb, 3 chevrons), and the figure set (FIGURE_SETS' index).
 var FIGURES=FIGURE_SETS.map(function(f){return f[0];});
-// The margins' corner: the day of the year (Plotboard: the height), the
+// The margins' corner: the day of the year (the world band: the height), the
 // body's ground point, the Moon's light.
 var CORNERS=['day','point','light'];
 var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock'],TRANSFERS=['off','vernier','comb','chevrons'];
@@ -238,12 +238,11 @@ function sendEvents(){
 }
 
 // The settings page, offline: a data URL holding the page and the settings.
-// Enroute: the Sun, the Moon, and the satellites on the hour chart or the
-// whole day (GPS, QZSS); Plotboard: the fast satellites on the world band.
 var FACE=typeof GROUNDTRACK_FACE==='string'?GROUNDTRACK_FACE:'enroute';
-// Enroute: the Sun, the Moon, GPS and QZSS; Plotboard: the fast satellites;
-// Fuller: all of them.
-var BODIES=(FACE==='plotboard'?[]:['sun','moon']).concat(CATALOG.filter(function(c){return FACE==='fuller'||(viewOf(bodyId(c.norad))==='world')===(FACE==='plotboard');}).map(function(c){return bodyId(c.norad);}));
+// Both faces: the Sun, the Moon and every satellite. On Groundtrack the
+// body chooses the chart: the hour chart (the Sun, the Moon, GPS), the
+// whole day (QZSS) or the world band (the fast satellites).
+var BODIES=['sun','moon'].concat(CATALOG.map(function(c){return bodyId(c.norad);}));
 // Fuller starts on the ISS's hour, as the watch does.
 var FIRST=FACE==='fuller'?'sat:25544':BODIES[0];
 function currentBody(){var b=setting('body',FIRST);return BODIES.indexOf(b)>=0?b:FIRST;}
@@ -256,7 +255,7 @@ function currentBody(){var b=setting('body',FIRST);return BODIES.indexOf(b)>=0?b
 // satellite's elements not yet fetched) has none.
 function previewInputs(){
   var now=Date.now(),timeZone=zone(),parts=clockParts(now,timeZone),start=Math.floor(now/60000)*60000-Number(parts.m)*60000;
-  var bodies=[currentBody()];if(FACE!=='plotboard')['sun','moon'].forEach(function(b){if(bodies.indexOf(b)<0)bodies.push(b);});
+  var bodies=[currentBody()];['sun','moon'].forEach(function(b){if(bodies.indexOf(b)<0)bodies.push(b);});
   var texts={};
   bodies.forEach(function(body){
     if(body.indexOf('sat:')===0){var kept=null;try{kept=JSON.parse(localStorage.getItem('tle-'+body.slice(4)));}catch(error){}if(kept&&kept.text)try{registerElements(kept.text,'celestrak');}catch(error){}}

@@ -1,9 +1,9 @@
 // Bundle the phone side of the native app, native/pkjs/main.js with the
 // ephemeris and orbit code it fits segments with, into
 // native/src/pkjs/index.js for the Pebble SDK to package; with --face
-// plotboard, Groundtrack Plotboard's into native-plotboard/src/pkjs/index.js.
+// fuller, Groundtrack Fuller's into native-fuller/src/pkjs/index.js.
 //
-//   node tools/build-pkjs.mjs [--face enroute|plotboard|fuller] [out-file]
+//   node tools/build-pkjs.mjs [--face enroute|fuller] [out-file]
 import {readFileSync,mkdirSync} from 'node:fs';
 import {gzipSync} from 'node:zlib';
 import {dirname} from 'node:path';
@@ -12,7 +12,7 @@ import {build} from 'esbuild';
 
 const root=new URL('..',import.meta.url);
 const args=process.argv.slice(2),at=args.indexOf('--face'),face=at>=0?args.splice(at,2)[1]:'enroute';
-if(!['enroute','plotboard','fuller'].includes(face))throw new Error(`No face ${face}`);
+if(!['enroute','fuller'].includes(face))throw new Error(`No face ${face}`);
 const out=args[0]||fileURLToPath(new URL(face==='enroute'?'native/src/pkjs/index.js':`native-${face}/src/pkjs/index.js`,root));
 
 const data={
@@ -30,7 +30,6 @@ const data={
 // base64, with each part's kind (core_api.h's CORE_MAP ... CORE_LAND; -1
 // the core) and place.
 const PARTS={enroute:[[-1,'public/core.wasm'],[0,'native/resources/map.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']],
-  plotboard:[[-1,'public/core.wasm'],[0,'native/resources/map-world.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']],
   fuller:[[-1,'public/core.wasm'],[3,'public/fuller.bin'],[4,'native/resources/land.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']]}[face];
 const pageAssets={
   name:'groundtrack-page-assets',

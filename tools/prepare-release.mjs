@@ -8,7 +8,7 @@ const current=JSON.parse(readFileSync('package.json','utf8')).version;
 const compare=(a,b)=>{for(let i=0;i<3;i++){const d=+a.split('.')[i]-+b.split('.')[i];if(d)return d;}return 0;};
 if(compare(version,current)<=0)throw new Error('Choose a version newer than '+current);
 if(!existsSync(`releases/v${version}.md`))throw new Error(`Write releases/v${version}.md first.`);
-for(const path of ['package.json','native/package.json','native-plotboard/package.json','native-fuller/package.json']){
+for(const path of ['package.json','native/package.json','native-fuller/package.json']){
   const source=readFileSync(path,'utf8');
   writeFileSync(path,source.replace(/("version"\s*:\s*")[^"]+("\s*[,}])/,(_,before,after)=>before+version+after));
 }

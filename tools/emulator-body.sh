@@ -7,8 +7,8 @@
 # the phone's events as it keeps them (JSON [{epoch, title, label}]);
 # ELEMENTS_URL where it fetches element sets.
 set -e
-# FACE=plotboard or fuller for Groundtrack Plotboard or Fuller (default Enroute).
-case "${FACE:-enroute}" in plotboard) project=native-plotboard;; fuller) project=native-fuller;; *) project=native;; esac
+# FACE=fuller for Groundtrack Fuller (default Groundtrack).
+case "${FACE:-enroute}" in fuller) project=native-fuller;; *) project=native;; esac
 uuid=$(python3 -c "import json;print(json.load(open('$(dirname "$0")/../$project/package.json'))['pebble']['uuid'])")
 store="$HOME/.local/share/pebble-sdk/4.33.1/emery/localstorage/$uuid"
 # The emulator too: pebble-tool starts a fresh one when the phone

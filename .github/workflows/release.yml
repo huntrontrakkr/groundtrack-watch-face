@@ -1,7 +1,7 @@
 name: Release watch faces
 
-# Tests, builds and packages both watch faces (Groundtrack Enroute and
-# Groundtrack Plotboard) on every change. A push to main
+# Tests, builds and packages both watch faces (Groundtrack and Groundtrack
+# Fuller) on every change. A push to main
 # releases a new version when package.json names one that has release notes
 # (releases/vX.Y.Z.md) and no tag yet; a pushed version tag releases that tag.
 # After Dymaxion's release workflow. See docs/RELEASING.md.
@@ -88,7 +88,6 @@ jobs:
     env:
       RELEASE_TAG: ${{ needs.verify.outputs.tag }}
       GROUNDTRACK_STORE_APP_ID: ${{ vars.GROUNDTRACK_STORE_APP_ID }}
-      GROUNDTRACK_PLOTBOARD_STORE_APP_ID: ${{ vars.GROUNDTRACK_PLOTBOARD_STORE_APP_ID }}
       GROUNDTRACK_FULLER_STORE_APP_ID: ${{ vars.GROUNDTRACK_FULLER_STORE_APP_ID }}
     steps:
       - uses: actions/checkout@v4
@@ -109,7 +108,7 @@ jobs:
           path: release-artifacts
       # Each face only once its store listing exists (docs/STORE-LISTING*.md).
       - name: Publish the verified packages to Pebble
-        if: env.GROUNDTRACK_STORE_APP_ID != '' || env.GROUNDTRACK_PLOTBOARD_STORE_APP_ID != '' || env.GROUNDTRACK_FULLER_STORE_APP_ID != ''
+        if: env.GROUNDTRACK_STORE_APP_ID != '' || env.GROUNDTRACK_FULLER_STORE_APP_ID != ''
         env:
           PEBBLE_FIREBASE_REFRESH_TOKEN: ${{ secrets.PEBBLE_FIREBASE_REFRESH_TOKEN }}
         run: |
@@ -122,4 +121,4 @@ jobs:
           if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --title "Groundtrack $RELEASE_TAG" --notes-file release-artifacts/release-notes.md
           fi
-          gh release upload "$RELEASE_TAG" release-artifacts/groundtrack-enroute.pbw release-artifacts/groundtrack-plotboard.pbw release-artifacts/groundtrack-fuller.pbw release-artifacts/SHA256SUMS --clobber
+          gh release upload "$RELEASE_TAG" release-artifacts/groundtrack-enroute.pbw release-artifacts/groundtrack-fuller.pbw release-artifacts/SHA256SUMS --clobber

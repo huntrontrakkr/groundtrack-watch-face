@@ -8,6 +8,7 @@
 // face says so plainly rather than showing a stale one.
 #include <pebble.h>
 #include "enroute_core.h"
+#include "departure_font.h"
 #include "watch_data.h"
 #include "chart.h"
 
@@ -228,6 +229,9 @@ static void window_load(Window *window){
 static void window_unload(Window *window){layer_destroy(s_layer);}
 
 static void init(void){
+  // The chart lettering's glyphs, from font.bin, kept for the app's life
+  // (in the heap, not the size-capped code).
+  {uint8_t *font=malloc(ENR_FONT_BYTES);if(font){memset(font,0,ENR_FONT_BYTES);resource_load(resource_get_handle(RESOURCE_ID_FONT),font,ENR_FONT_BYTES);enr_font_load(font);}}
   settings_load(&s_settings);
   s_window=window_create();
   // The window keeps what was drawn: a minute tick draws only what changed.

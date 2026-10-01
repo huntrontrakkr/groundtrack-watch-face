@@ -71,7 +71,7 @@
     <label class="row enroute"><input type="radio" name="readout" value="callout"><span class="name">Time callout<span class="note">The time in full, hung from a leader</span></span></label>
   </fieldset>
   <fieldset><legend>Time figures</legend>
-    <p class="note">The time callout's, and on Plotboard the clock's</p>
+    <p class="note">The time callout's, and the world band's clock's</p>
     <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Four figures, minutes outlined</span></label>
     <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Minutes in route ink</span></label>
     <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Minutes in Departure Mono</span></label>
@@ -79,10 +79,9 @@
     <label class="row"><input type="radio" name="numerals" value="colon"><span class="name">Smaller minutes with colon</span></label>
   </fieldset>
   <fieldset><legend>Corner</legend>
-    <label class="row enroute"><input type="radio" name="corner" value="day"><span class="name">Day of the year<span class="note">DAY 270, at the bottom right</span></span></label>
-    <label class="row plotboard"><input type="radio" name="corner" value="day"><span class="name">Height<span class="note">ISS 411 KM, over the band</span></span></label>
+    <label class="row"><input type="radio" name="corner" value="day"><span class="name">Day of the year<span class="note">DAY 270; on the world band the satellite's height, ISS 411 KM</span></span></label>
     <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
-    <label class="row enroute"><input type="radio" name="corner" value="light"><span class="name">The Moon's light<span class="note">On the Moon's charts: 87% WAX; the day of the year otherwise</span></span></label>
+    <label class="row"><input type="radio" name="corner" value="light"><span class="name">The Moon's light<span class="note">On the Moon's charts: 87% WAX; the day of the year otherwise</span></span></label>
     <p class="note">The corner also tells you when the phone is out of reach (NO LINK), the battery is low (BAT 18) or a satellite's elements are over two days old (EL OLD).</p>
   </fieldset>
   <fieldset><legend>Margin time</legend>
@@ -90,6 +89,7 @@
     <label class="row"><input type="radio" name="margin" value="body"><span class="name">Nautical zone under the body<span class="note">Its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
   </fieldset>
   <fieldset class="plotboard"><legend>Time scale</legend>
+    <p class="note">For the fast satellites' world band</p>
     <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Fixed<span class="note">For the world band: a ruler with a moving pointer</span></span></label>
     <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
     <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Tape + world<span class="note">The map scrolls too, the satellite always under the index; the watch draws the whole chart each minute, which costs battery</span></span></label>
@@ -135,12 +135,12 @@
   // satellites), plates:[[key,name,note]], figureSets:[[key,name,note]], preset, position: the phone's fix
   // {lat, lon} or null}
   var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
-  // Each face shows what it draws: Enroute the hour chart and the whole day,
-  // Plotboard the world band, Fuller rolling Fuller sheets of the hour and
-  // the day (Enroute's options, every satellite).
-  var plotboard=config.face==='plotboard';
-  document.getElementById('title').textContent=plotboard?'Groundtrack Plotboard':config.face==='fuller'?'Groundtrack Fuller':'Groundtrack Enroute';
-  [].forEach.call(document.querySelectorAll(plotboard?'.enroute':'.plotboard'),function(e){e.remove();});
+  // Each face shows what it draws: Groundtrack the hour chart, the whole
+  // day and the fast satellites' world band; Fuller rolling Fuller sheets of
+  // the hour and the day (no world band, so none of its options).
+  var fuller=config.face==='fuller';
+  document.getElementById('title').textContent=fuller?'Groundtrack Fuller':'Groundtrack';
+  if(fuller)[].forEach.call(document.querySelectorAll('.plotboard'),function(e){e.remove();});
   function rows(list,name,into){
     list.forEach(function(p){
       var row=document.createElement('label');row.className='row';

@@ -4,6 +4,19 @@
 #include <stdint.h>
 typedef struct {uint8_t x,y,n;} EnrRun;
 typedef struct {int8_t advance,left,top;uint16_t first,count;} EnrGlyph;
+#define ENR_FONT_GLYPH_COUNT 40
+#define ENR_FONT_RUN_COUNT 453
+// native/resources/font.bin: the glyphs (8 bytes each: advance, left, top,
+// a pad byte, first and count little-endian), then the runs (3 bytes each),
+// as the structs lie in memory.
+#define ENR_FONT_BYTES (8*ENR_FONT_GLYPH_COUNT+3*ENR_FONT_RUN_COUNT)
+_Static_assert(sizeof(EnrGlyph)==8&&sizeof(EnrRun)==3,"font.bin is the structs as they lie in memory");
 extern const char ENR_FONT_CHARS[41];
-extern const EnrGlyph ENR_FONT_GLYPHS[40];
-extern const EnrRun ENR_FONT_RUNS[453];
+// The glyphs and runs: on the watch read from font.bin at start
+// (enr_font_load: they are not in its size-capped code), elsewhere compiled in.
+extern const EnrGlyph *enr_font_glyphs;
+extern const EnrRun *enr_font_runs;
+#define ENR_FONT_GLYPHS enr_font_glyphs
+#define ENR_FONT_RUNS enr_font_runs
+// Points the lettering at font.bin's ENR_FONT_BYTES bytes.
+void enr_font_load(const uint8_t *bytes);

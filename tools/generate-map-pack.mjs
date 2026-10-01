@@ -1,8 +1,7 @@
 // The watch's map resource (tools/map-pack.mjs): land bits and relief
 // levels in tiles at 0.25°, 0.5° and 1°, cropped to the latitudes the
 // watch's views can show (tests/map-pack.test.mjs checks that they stay
-// inside). Groundtrack Plotboard, whose world band is about a pixel a
-// degree, takes the 1° cells alone (map-world.pack).
+// inside). The world band, about a pixel a degree, reads its 1° cells.
 //
 //   node tools/generate-map-pack.mjs
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -21,7 +20,7 @@ export function mips(){
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
   const all=mips(),dir=new URL('../native/resources/',import.meta.url);mkdirSync(dir,{recursive:true});
-  for(const [name,list] of [['map.pack',all],['map-world.pack',[all[2]]]]){
+  for(const [name,list] of [['map.pack',all]]){
     const pack=encodePack(list);writeFileSync(new URL(name,dir),pack);
     console.log(`native/resources/${name}: ${pack.length} bytes (${list.map(m=>`${m.cells.width}x${m.rows} cells`).join(', ')})`);
   }

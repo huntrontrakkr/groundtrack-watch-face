@@ -22,7 +22,7 @@ def build(ctx):
         ctx.env = ctx.all_envs[platform]
         # Arithmetic as the JavaScript does it: no fused multiply-adds.
         # This project is Groundtrack Enroute (see src/c/face.h;
-        # native-plotboard/ builds the same sources as Plotboard).
+        # native-fuller/ builds the same sources as Groundtrack Fuller).
         # Optimised across the sources at link time: about 1.3 KB smaller,
         # and every byte of the app is a byte of its heap.
         ctx.env.append_value('CFLAGS', ['-ffp-contract=off', '-flto', '-D' + FACE])

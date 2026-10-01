@@ -11,7 +11,7 @@ ${script}`],{stdio:'pipe'}).toString();
 
 test('versions agree, and a tag must name the version',()=>{
   const version=JSON.parse(readFileSync('package.json','utf8')).version;
-  for(const face of ['native','native-plotboard','native-fuller'])assert.equal(JSON.parse(readFileSync(`${face}/package.json`,'utf8')).version,version);
+  for(const face of ['native','native-fuller'])assert.equal(JSON.parse(readFileSync(`${face}/package.json`,'utf8')).version,version);
   assert.equal(python(`print(release.version_for('v${version}'))`).trim(),version);
   python(`
 for tag in ['v0.0.9','${version}','v99.0.0']:
@@ -21,15 +21,14 @@ for tag in ['v0.0.9','${version}','v99.0.0']:
 });
 
 test('each face asks for the settings page and the phone\'s location, with its own identity and the same messages and resources',()=>{
-  const [a,b,c]=['native','native-plotboard','native-fuller'].map(f=>JSON.parse(readFileSync(`${f}/package.json`,'utf8')).pebble);
-  for(const p of [a,b,c])assert.ok(p.capabilities.includes('configurable')&&p.capabilities.includes('location'));
-  assert.equal(new Set([a.uuid,b.uuid,c.uuid]).size,3);assert.deepEqual([a.displayName,b.displayName,c.displayName],['Groundtrack Enroute','Groundtrack Plotboard','Groundtrack Fuller']);
-  assert.deepEqual(a.messageKeys,b.messageKeys);assert.deepEqual(a.messageKeys,c.messageKeys);
-  // Plotboard's map is the 1° cells alone; Fuller reads the faces' grids and
-  // the coastline instead of the map.
-  assert.deepEqual(a.resources.media.map(m=>m.name),b.resources.media.map(m=>m.name));
-  assert.deepEqual(b.resources.media.map(m=>m.file),['map-world.pack','figures.bin','tables.bin']);
-  assert.deepEqual(c.resources.media.map(m=>m.name),['FULLER_GRIDS','LAND_BITS','FIGURES','TABLES']);
+  const [a,c]=['native','native-fuller'].map(f=>JSON.parse(readFileSync(`${f}/package.json`,'utf8')).pebble);
+  for(const p of [a,c])assert.ok(p.capabilities.includes('configurable')&&p.capabilities.includes('location'));
+  assert.notEqual(a.uuid,c.uuid);assert.deepEqual([a.displayName,c.displayName],['Groundtrack','Groundtrack Fuller']);
+  assert.deepEqual(a.messageKeys,c.messageKeys);
+  // Groundtrack reads the map; Fuller the faces' grids and the coastline
+  // instead; both the figures, the tables and the chart lettering.
+  assert.deepEqual(a.resources.media.map(m=>m.file),['map.pack','figures.bin','tables.bin','font.bin']);
+  assert.deepEqual(c.resources.media.map(m=>m.name),['FULLER_GRIDS','LAND_BITS','FIGURES','TABLES','FONT']);
 });
 
 test('a package is checked for identity, platform, capabilities and the store\'s limits',()=>{
@@ -44,7 +43,7 @@ def pbw(info={}, resources=1000, binary=1000):
         z.writestr('emery/pebble-app.bin',b'0'*binary);z.writestr('emery/app_resources.pbpack',b'0'*resources);z.writestr('emery/manifest.json','{}')
     return path
 release.validate_pbw(pbw(),'1.2.3',release.FACES['enroute'])
-for bad in [dict(info={'uuid':'9c30165f-5852-4e13-8806-9809ab3d4fe3'}),dict(info={'uuid':release.FACES['plotboard'].uuid}),dict(info={'versionLabel':'1.2.4'}),
+for bad in [dict(info={'uuid':'9c30165f-5852-4e13-8806-9809ab3d4fe3'}),dict(info={'uuid':release.FACES['fuller'].uuid}),dict(info={'versionLabel':'1.2.4'}),
             dict(info={'targetPlatforms':['emery','basalt']}),dict(info={'capabilities':['configurable']}),
             dict(resources=256*1024+1),dict(binary=64*1024+1)]:
     try: release.validate_pbw(pbw(**bad),'1.2.3',release.FACES['enroute'])
@@ -55,7 +54,7 @@ for bad in [dict(info={'uuid':'9c30165f-5852-4e13-8806-9809ab3d4fe3'}),dict(info
 test('the store description fits, and publishing refuses without a listing',()=>{
   python(`
 for face in release.FACES.values(): assert 0<len(release.description(face))<=1600
-face=release.FACES['plotboard'];face.store_id=''
+face=release.FACES['fuller'];face.store_id=''
 try: release.publish('1.2.3',face)
 except RuntimeError as e: assert 'listing' in str(e)
 else: raise AssertionError('Published without a listing')`);

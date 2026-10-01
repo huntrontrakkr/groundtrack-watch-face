@@ -1,17 +1,13 @@
-// Which watch face a build is: Groundtrack Enroute (FACE_ENROUTE: the hour
-// chart and the whole day), Groundtrack Plotboard (FACE_PLOTBOARD: the
-// world band) or Groundtrack Fuller (FACE_FULLER: rolling Fuller sheets of
-// the hour and the whole day). Each leaves out the other's code, as constants the compiler
-// can see; the host harnesses (neither defined) keep both.
+// Which watch face a build is: Groundtrack (FACE_ENROUTE: the hour chart
+// and the whole day of Enroute, and Plotboard's world band for the fast
+// satellites) or Groundtrack Fuller (FACE_FULLER: rolling Fuller sheets of
+// the hour and the whole day). Each leaves out the other's code, as
+// constants the compiler can see; the host harnesses (neither defined)
+// keep both.
 #pragma once
-#if defined(FACE_PLOTBOARD)
-#define FACE_HOUR 0
-#define FACE_WORLD 1
-#define FACE_ROLL 0
-#define FACE_CHART 1
-#elif defined(FACE_ENROUTE)
+#if defined(FACE_ENROUTE)
 #define FACE_HOUR 1
-#define FACE_WORLD 0
+#define FACE_WORLD 1
 #define FACE_ROLL 0
 #define FACE_CHART 1
 #elif defined(FACE_FULLER)

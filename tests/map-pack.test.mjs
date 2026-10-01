@@ -11,12 +11,11 @@ import {chartCamera,WORLD} from '../src/chart-render.js';
 import {registerNominal} from '../src/nominal.js';
 import {CONTOURS,SHELF,PLATES,H} from '../src/plates.js';
 
-const committed=new Uint8Array(readFileSync('native/resources/map.pack')),world=new Uint8Array(readFileSync('native/resources/map-world.pack'));
+const committed=new Uint8Array(readFileSync('native/resources/map.pack'));
 const all=mips();
 
 test('the committed map packs are the ones the generator writes',()=>{
   assert.ok(Buffer.from(encodePack(all)).equals(Buffer.from(committed)),'run npm run generate:map-pack');
-  assert.ok(Buffer.from(encodePack([all[2]])).equals(Buffer.from(world)));
   // The levels are every height the plates read: the shelf, the contours, the tints.
   const read=new Set([SHELF,...CONTOURS,...Object.values(PLATES).flatMap(p=>[...(p.tints||[]),...(p.depths||[])].map(([l])=>l).filter(Number.isFinite))]);
   for(const l of read)assert.ok(LEVELS.includes(l),`${l} m is not a level`);
@@ -38,7 +37,7 @@ test('every tile decodes to its cells, in JavaScript and in C, and the packs fit
     if(cc){const c=execFileSync('native/host/map_test',['native/resources/map.pack',String(m)],{maxBuffer:1<<26});assert.ok(Buffer.from(raw).equals(c),`mip ${m}: the C decoder differs`);}
   }
   // The app store allows 256 KB of resources; the type and grids need some.
-  assert.ok(committed.length<=64*1024,`${committed.length} bytes`);assert.ok(world.length<=8*1024,`${world.length} bytes`);
+  assert.ok(committed.length<=64*1024,`${committed.length} bytes`);
 });
 let cc=true;try{execFileSync('make',['-s','-C','native/host','map_test'],{stdio:'pipe'});}catch{cc=false;}
 

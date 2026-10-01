@@ -54,6 +54,11 @@
           "type": "raw",
           "name": "TABLES",
           "file": "tables.bin"
+        },
+        {
+          "type": "raw",
+          "name": "FONT",
+          "file": "font.bin"
         }
       ]
     }

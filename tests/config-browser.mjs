@@ -62,8 +62,10 @@ try{
   await page.check('input[name=plate][value=crt]');
   assert.equal(await page.locator('input[name=plate]:checked').getAttribute('value'),'crt');
   assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
-  // Enroute's: the Sun, the Moon, GPS and QZSS (Plotboard has the fast satellites).
-  assert.deepEqual(await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value)),['sun','moon','sat:36585','sat:42738']);
+  // The Sun, the Moon and every satellite: the fast ones on the world band,
+  // whose time scale's options the page shows too.
+  assert.deepEqual((await page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value))).sort(),['moon','sat:20580','sat:25544','sat:36585','sat:42738','sat:43013','sat:48274','sat:49260','sun']);
+  assert.equal(await page.locator('input[name=tape]').count(),4);
   assert.equal(await page.locator('input[name=readout]:checked').getAttribute('value'),'flag');
   assert.equal(await page.locator('input[name=numerals]:checked').getAttribute('value'),'even');
   // The corner, the day of the year chosen (and on Enroute no height).
@@ -72,11 +74,11 @@ try{
   assert.equal(await page.locator('input[name=figures]').count(),4);
   assert.equal(await page.locator('input[name=figures]:checked').getAttribute('value'),'michroma');
   assert.ok(await page.locator('input[name=clock24]').isChecked());
-  // Enroute's options only: no time scale for the world band, nor how its
-  // minutes fall on the route.
-  assert.equal(await page.locator('input[name=tape]').count(),0);
-  assert.equal(await page.locator('input[name=transfer]').count(),0);
-  assert.equal(await page.locator('#title').textContent(),'Groundtrack Enroute');
+  // The world band's options too: its time scale, and how its minutes fall
+  // on the route.
+  assert.equal(await page.locator('input[name=tape]:checked').getAttribute('value'),'fixed');
+  assert.equal(await page.locator('input[name=transfer]').count(),4);
+  assert.equal(await page.locator('#title').textContent(),'Groundtrack');
   assert.match(await page.locator('#preset-note').textContent(),/Greenwich/);
   assert.ok(await page.locator('#coords').isHidden());
   // Nothing wider than a small phone.

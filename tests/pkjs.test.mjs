@@ -116,12 +116,14 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     const pe=phone(bundle,now,{body:'sun',timeZone:zone,events});pe.listeners.ready({});await pe.quiet();
     const ebytes=pe.messages.find(m=>m.Events).Events,et=(now+3600000)/1000;
     assert.equal(JSON.stringify(ebytes),JSON.stringify([et&255,(et>>8)&255,(et>>16)&255,(et>>>24)&255,...'RUNNN'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
-    // A satellite: its catalog number, kind (on the hour chart) and code; a
-    // body of the other face (the ISS) is not taken.
+    // A satellite: its catalog number, kind (on the hour chart) and code; the
+    // ISS is taken too (on the world band), a body no face has is not.
     const q=phone(bundle,now,{body:'sat:36585',plate:'crt',flag:'0',timeZone:zone});q.listeners.ready({});await q.quiet();
     assert.equal(JSON.stringify(q.messages[0].Settings.slice(13,21)),JSON.stringify([36585&255,36585>>8,0,0,0,...'GPS'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
     const o=phone(bundle,now,{body:'sat:25544',timeZone:zone});o.listeners.ready({});await o.quiet();
-    assert.equal(o.messages[0].Settings[0],0);
+    assert.equal(o.messages.find(m=>m.Settings).Settings[0],2);
+    const u=phone(bundle,now,{body:'sat:99999',timeZone:zone});u.listeners.ready({});await u.quiet();
+    assert.equal(u.messages.find(m=>m.Settings).Settings[0],0);
     // Asked from a day, the Sun and Moon to 45 days ahead, and home's rise
     // and set for 45 local dates.
     const today=Math.floor(now/86400000);p.messages.length=0;
@@ -141,15 +143,14 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
-test('Groundtrack Plotboard\'s phone side: the fast satellites, the ISS first, the world band\'s options',async()=>{
+test('the world band on Groundtrack: the fast satellites beside the Sun and Moon, and the band\'s options',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
   try{
-    const out=join(dir,'index.js');execFileSync(process.execPath,['tools/build-pkjs.mjs','--face','plotboard',out],{stdio:'pipe'});
+    const out=join(dir,'index.js');execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});
     const bundle=readFileSync(out,'utf8').replace(/\n/g,'\n\t'),now=Date.parse('2026-09-29T22:30:00Z');
-    // With nothing set, the ISS on the world band; a body of the other face
-    // is not taken.
-    for(const stored of [{timeZone:'UTC'},{timeZone:'UTC',body:'sun'}]){
-      const p=phone(bundle,now,stored);p.listeners.ready({});await p.quiet();
+    // With nothing set, the Sun; the ISS, chosen, on the world band.
+    {const p=phone(bundle,now,{timeZone:'UTC'});p.listeners.ready({});await p.quiet();assert.equal(p.messages.find(m=>m.Settings).Settings[0],0);}
+    {const p=phone(bundle,now,{timeZone:'UTC',body:'sat:25544'});p.listeners.ready({});await p.quiet();
       const set=p.messages.find(m=>m.Settings).Settings;
       assert.equal(JSON.stringify([set[0],set[13]|set[14]<<8,set[17],String.fromCharCode(...set.slice(18,21))]),JSON.stringify([2,25544,1|1<<1,'ISS']));
     }
@@ -170,15 +171,15 @@ test('Groundtrack Plotboard\'s phone side: the fast satellites, the ISS first, t
       const p=phone(bundle,now,{timeZone:'UTC',figures});p.listeners.ready({});await p.quiet();
       const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set[25],code);
     }
-    // The settings page: the five fast satellites, no Sun or Moon.
+    // The settings page: every satellite (the Sun and Moon are its own rows).
     let opened=null;const listeners={};
     const context=vm.createContext({console:{log:()=>{}},setTimeout,navigator:{},localStorage:{getItem:()=>null,setItem:()=>{}},
       Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{opened=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
     vm.runInContext(`Date.now=()=>${now};`,context);vm.runInContext(bundle,context);
     listeners.showConfiguration({});for(let i=0;i<300&&!opened;i++)await new Promise(r=>setTimeout(r,20));
     const config=JSON.parse(/var config=(\{.*?\}),s=config/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
-    assert.equal(config.face,'plotboard');
-    assert.deepEqual(config.bodies.map(b=>b[0]),['sat:25544','sat:48274','sat:20580','sat:49260','sat:43013']);
+    assert.equal(config.face,'enroute');
+    assert.deepEqual(config.bodies.map(b=>b[0]).sort(),['sat:20580','sat:25544','sat:36585','sat:42738','sat:43013','sat:48274','sat:49260']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 

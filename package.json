@@ -15,7 +15,7 @@
     "generate:relief": "node tools/generate-relief.mjs",
     "generate:map-pack": "node tools/generate-map-pack.mjs",
     "build:pkjs": "node tools/build-pkjs.mjs",
-    "build:native": "node tools/build-pkjs.mjs && cd native && pebble clean && pebble build && cd .. && node tools/build-pkjs.mjs --face plotboard && cd native-plotboard && pebble clean && pebble build && cd .. && node tools/build-pkjs.mjs --face fuller && cd native-fuller && pebble clean && pebble build",
+    "build:native": "node tools/build-pkjs.mjs && cd native && pebble clean && pebble build && cd .. && node tools/build-pkjs.mjs --face fuller && cd native-fuller && pebble clean && pebble build",
     "check:emulator": "node tools/emulator-check.mjs",
     "release:prepare": "node tools/prepare-release.mjs",
     "build:core": "tools/build-core.sh"

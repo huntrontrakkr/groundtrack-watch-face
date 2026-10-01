@@ -954,7 +954,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   if(FACE_ROLL&&(!FACE_CHART||in->fuller)){if(!fuller_begin(b))FAIL;return b;}
   // chartCamera(). The track is kept only while the camera is set, and made
   // again for the drawing: the ground needs the memory.
-  TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*((track_to(in)-track_from(in))/track_step(in)+1));if(!track)FAIL;
+  TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*(size_t)(q64(track_to(in)-track_from(in),track_step(in))+1));if(!track)FAIL;
   const int count=make_track(in,src,track);if(count<0||count>401)FAIL;
   b->step=track_step(in);b->t0=(int)(track_from(in)-in->start);
   double maxlat=-INFINITY,minlat=INFINITY,maxlon=-INFINITY,minlon=INFINITY;int h0=-1,h1=-1;

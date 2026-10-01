@@ -8,7 +8,7 @@
 //   node tools/check-app-size.mjs   (after npm run build:native)
 import {readFileSync} from 'node:fs';
 const CAP=65535,BUDGET=64800;let bad=false;
-for(const face of ['native','native-plotboard','native-fuller']){
+for(const face of ['native','native-fuller']){
   const bin=readFileSync(`${face}/build/emery/pebble-app.bin`);
   if(bin.toString('latin1',0,6)!=='PBLAPP'){console.log(`${face}: no app header at the start of the binary`);bad=true;continue;}
   // PebbleProcessInfo: the size the app takes in memory, loaded and zeroed.

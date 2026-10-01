@@ -48,7 +48,7 @@ async function window(name,ms){
 // moon or sat:<catalog number>; the Sun by default) on MEASURE_PLATE
 // (Enroute), 24-hour, home New York; the minute flag as given. They must be
 // the phone's own, or the phone's next settings build the hour again.
-// MEASURE_FACE (enroute, plotboard, fuller) names the face installed.
+// MEASURE_FACE (enroute, fuller) names the face installed.
 const FACE=process.env.MEASURE_FACE||'enroute',PROJECT=FACE==='enroute'?'native':`native-${FACE}`;
 const KEY=JSON.parse(readFileSync(process.argv[4]||`${PROJECT}/build/js/message_keys.json`,'utf8'));
 const BODY=process.env.MEASURE_BODY||'sun',PLATE=Object.keys(PLATES).indexOf(process.env.MEASURE_PLATE||'enroute');

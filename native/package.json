@@ -3,17 +3,59 @@
   "author": "Groundtrack",
   "version": "0.1.0",
   "private": true,
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "dependencies": {},
   "pebble": {
-    "displayName": "Groundtrack Enroute",
+    "displayName": "Groundtrack",
     "uuid": "a0f61ba3-4580-4bf9-a71c-0a83f3d35600",
     "sdkVersion": "3",
     "enableMultiJS": true,
-    "targetPlatforms": ["emery"],
-    "watchapp": {"watchface": true},
-    "capabilities": ["configurable", "location"],
-    "messageKeys": ["Status", "Settings", "Segments", "RiseSets", "DataRequest", "DataBody", "SatSegments", "Passes", "Events"],
-    "resources": {"media": [{"type": "raw", "name": "MAP_PACK", "file": "map.pack"}, {"type": "raw", "name": "FIGURES", "file": "figures.bin"}, {"type": "raw", "name": "TABLES", "file": "tables.bin"}]}
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "configurable",
+      "location"
+    ],
+    "messageKeys": [
+      "Status",
+      "Settings",
+      "Segments",
+      "RiseSets",
+      "DataRequest",
+      "DataBody",
+      "SatSegments",
+      "Passes",
+      "Events"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "raw",
+          "name": "MAP_PACK",
+          "file": "map.pack"
+        },
+        {
+          "type": "raw",
+          "name": "FIGURES",
+          "file": "figures.bin"
+        },
+        {
+          "type": "raw",
+          "name": "TABLES",
+          "file": "tables.bin"
+        },
+        {
+          "type": "raw",
+          "name": "FONT",
+          "file": "font.bin"
+        }
+      ]
+    }
   }
 }
