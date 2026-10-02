@@ -208,3 +208,14 @@ double f_atan2(double y,double x){
   if(k>60)z=PI_O_2+0.5*PI_LO;else if(hx<0&&k<-60)z=0.0;else z=f_atan(fabs(y/x));
   switch(m){case 0:return z;case 1:return -z;case 2:return PI_-(z-PI_LO);default:return (z-PI_LO)-PI_;}
 }
+
+double f_floor(double x){
+  if(!(x>-9.0e15&&x<9.0e15))return x;
+  const double t=(double)(int64_t)x;
+  return t>x?t-1:t;
+}
+double f_ceil(double x){
+  if(!(x>-9.0e15&&x<9.0e15))return x;
+  const double t=(double)(int64_t)x;
+  return t<x?t+1:t;
+}

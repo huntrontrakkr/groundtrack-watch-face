@@ -236,7 +236,7 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
     .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc};
   #undef days
   ChartBuild *build=chart_begin(&in,&src);
-  if(!build){APP_LOG(APP_LOG_LEVEL_ERROR,"No chart started (%u bytes free)",(unsigned)heap_bytes_free());local_chart_done();}
+  if(!build){app_note("no chart started",0);local_chart_done();}
   return build;
   #undef in
 }

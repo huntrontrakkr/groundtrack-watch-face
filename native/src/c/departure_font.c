@@ -12,3 +12,5 @@ static const EnrRun RUNS[453]={{1,0,3},{0,1,1},{4,1,1},{0,2,1},{3,2,2},{0,3,1},{
 const EnrGlyph *enr_font_glyphs=GLYPHS;
 const EnrRun *enr_font_runs=RUNS;
 #endif
+
+int enr_font_index(char ch){if(ch)for(int k=0;ENR_FONT_CHARS[k];k++)if(ENR_FONT_CHARS[k]==ch)return k;return -1;}

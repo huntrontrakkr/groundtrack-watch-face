@@ -15,7 +15,7 @@ static const double RAD=PI/180;
 static const int EDGES[3][2]={{0,1},{1,2},{2,0}};
 
 // JavaScript's Math.round.
-static double js_round(double v){const double r=floor(v);return v-r>=0.5?r+1:r;}
+static double js_round(double v){const double r=f_floor(v);return v-r>=0.5?r+1:r;}
 static double dot3(const double *a,const double *b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
 static double hypot2(double x,double y){return f_sqrt(x*x+y*y);}
 

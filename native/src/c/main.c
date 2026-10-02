@@ -124,6 +124,11 @@ static unsigned stack_deepest(void){
   return (unsigned)(top-a);
 }
 #endif
+// The app's log, one line's worth of text for all of it (every byte of the
+// app is a byte of its heap): what happened, a number that goes with it,
+// the heap free and the stack's deepest. "build", "built" (milliseconds of
+// work), a failure's place in chart.c, "no room to draw", "stack".
+void app_note(const char *what,unsigned n){APP_LOG(APP_LOG_LEVEL_INFO,"%s %u; heap %u; stack %u of %u",what,n,(unsigned)heap_bytes_free(),stack_deepest(),(unsigned)STACK_BYTES);}
 static uint32_t now_ms(void){time_t t;uint16_t ms;time_ms(&t,&ms);return (uint32_t)t*1000+ms;}
 static void build_step(void *data);
 static void build_abort(void){
@@ -137,7 +142,7 @@ static void build_abort(void){
 static void build(time_t now){
   if(s_build)return;
   chart_free(&s_now);
-  APP_LOG(APP_LOG_LEVEL_INFO,"Building the chart; heap free %u",(unsigned)heap_bytes_free());
+  app_note("build",0);
   s_build=local_chart(now,&s_settings);s_build_ms=0;s_zone=zone_minutes(now);
   if(s_build)s_build_timer=app_timer_register(1,build_step,NULL);
   else{if(!s_status_phone)set_status("AWAITING EPHEMERIS");layer_mark_dirty(s_layer);}
@@ -151,12 +156,12 @@ static void build_step(void *data){
   do r=chart_step(s_build);while(r>0&&now_ms()-t0<80);
   s_build_ms+=now_ms()-t0;
   if(r>0){s_build_timer=app_timer_register(10,build_step,NULL);return;}
-  if(r<0){APP_LOG(APP_LOG_LEVEL_ERROR,"Chart failed: %s; heap free %u",chart_failure(),(unsigned)heap_bytes_free());build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
+  if(r<0){app_note(chart_failure(),0);build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
-  if(scene){s_now.scene=scene;s_chart_serial++;s_status[0]=0;s_status_phone=false;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: about %lu ms of work; heap free %u; stack %u of %u",(unsigned long)s_build_ms,(unsigned)heap_bytes_free(),stack_deepest(),(unsigned)STACK_BYTES);}
-  else{s_status_phone=false;set_status("NO ROOM FOR THE CHART");APP_LOG(APP_LOG_LEVEL_ERROR,"Chart not finished: %s; heap free %u",chart_failure(),(unsigned)heap_bytes_free());}
+  if(scene){s_now.scene=scene;s_chart_serial++;s_status[0]=0;s_status_phone=false;app_note("built",(unsigned)s_build_ms);}
+  else{s_status_phone=false;set_status("NO ROOM FOR THE CHART");app_note(chart_failure(),1);}
   layer_mark_dirty(s_layer);
   // A build that ran over the hour's end made the last hour's chart.
   if(scene)check(time(NULL));
@@ -194,13 +199,13 @@ static void update(Layer *layer,GContext *ctx){
   if(drawn<0&&partial)drawn=enr_render_update(s_now.scene,-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
   graphics_release_frame_buffer(ctx,frame);
   // Without the memory to draw, the next tick tries the whole minute again.
-  if(drawn<0){APP_LOG(APP_LOG_LEVEL_WARNING,"No room to draw; heap free %u",(unsigned)heap_bytes_free());s_drawn_minute=-1;s_tick_redraw=false;return;}
+  if(drawn<0){app_note("no room to draw",0);s_drawn_minute=-1;s_tick_redraw=false;return;}
   s_drawn_serial=s_chart_serial;s_drawn_minute=minute;s_tick_redraw=false;s_painted=true;
 }
 
 static void tick(struct tm *when,TimeUnits changed){
   // (The stack's deepest, logged when it has grown: a minute's drawing too.)
-  {static unsigned logged;const unsigned d=stack_deepest();if(d>logged){logged=d;APP_LOG(APP_LOG_LEVEL_INFO,"Stack %u of %u",d,(unsigned)STACK_BYTES);}}
+  {static unsigned logged;const unsigned d=stack_deepest();if(d>logged){logged=d;app_note("stack",d);}}
   check(time(NULL));
   s_tick_redraw=true;
   layer_mark_dirty(s_layer);

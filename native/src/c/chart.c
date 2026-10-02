@@ -22,7 +22,7 @@ enum {L_PLAIN,L_CONTOUR,L_COAST,L_SHELF,L_WATERLINE,L_CLEARED,L_GRID,L_ROUTE,L_I
 enum {M_SEA,M_LAND,M_COAST,M_WAVE};
 
 // JavaScript's Math.round: the nearest integer, halves up.
-static double js_round(double v){const double r=floor(v);return v-r>=0.5?r+1:r;}
+static double js_round(double v){const double r=f_floor(v);return v-r>=0.5?r+1:r;}
 // geometry.js wrap(): longitude into -180..180.
 static double wrap(double lon){return f_fmod(f_fmod(lon+180,360)+360,360)-180;}
 
@@ -145,19 +145,19 @@ static void tiles_choose(Tiles *t,double px_per_degree){
 // point and the fraction past it (Q8), for bilinear reading. Columns are
 // the chart's own (from c0, wrapping round the world).
 typedef struct {int32_t i,f;} Place;
-static int32_t cell_column(double lon,double cell){return (int32_t)floor((wrap(lon)+180)/cell-.5);}
+static int32_t cell_column(double lon,double cell){return (int32_t)f_floor((wrap(lon)+180)/cell-.5);}
 static Place place_lon(const Tiles *t,double lon){
-  const double u=(wrap(lon)+180)/t->cell-.5,i=floor(u);const int w=t->q->width;
-  return (Place){((((int32_t)i-t->c0)%w)+w)%w,(int32_t)floor((u-i)*256)};
+  const double u=(wrap(lon)+180)/t->cell-.5,i=f_floor(u);const int w=t->q->width;
+  return (Place){((((int32_t)i-t->c0)%w)+w)%w,(int32_t)f_floor((u-i)*256)};
 }
-static Place place_lat(const Tiles *t,double lat){const double v=(90-lat)/t->cell-.5,j=floor(v);return (Place){(int32_t)j,(int32_t)floor((v-j)*256)};}
+static Place place_lat(const Tiles *t,double lat){const double v=(90-lat)/t->cell-.5,j=f_floor(v);return (Place){(int32_t)j,(int32_t)f_floor((v-j)*256)};}
 // The chart's columns: from the cell under its left edge to the one past
 // its right edge; a chart wider than the world (the band fitted to a long
 // hour) takes the whole world and the first column again.
 static bool tiles_columns(Tiles *t,const Cam *cam){
   const int w=t->q->width;
   const double l=glon(cam,.25),r=glon(cam,W-.25);
-  const int32_t a=(int32_t)floor((l+180)/t->cell-.5),b=(int32_t)floor((r+180)/t->cell-.5);
+  const int32_t a=(int32_t)f_floor((l+180)/t->cell-.5),b=(int32_t)f_floor((r+180)/t->cell-.5);
   // (Within the world's columns: half a cell east of the date line is the
   // last column, not one before the first.)
   t->c0=((cell_column(l,t->cell)%w)+w)%w;
@@ -543,7 +543,7 @@ static void letter(Canvas *cv,const Px *px,int n,int layer,int halo){
     plot(cv,px[i].x,px[i].y,ground_at(cv,cx,cy)==G_SPACE?L_SPACE_INK:layer);
   }
 }
-static const EnrGlyph *glyph(char ch){const char *p=strchr(ENR_FONT_CHARS,ch);return p&&ch&&ENR_FONT_GLYPHS?&ENR_FONT_GLYPHS[p-ENR_FONT_CHARS]:0;}
+static const EnrGlyph *glyph(char ch){const int k=enr_font_index(ch);return k>=0&&ENR_FONT_GLYPHS?&ENR_FONT_GLYPHS[k]:0;}
 static int text_width(const char *t){int w=0;for(;*t;t++){const EnrGlyph *g=glyph(*t);if(g)w+=g->advance;}return w;}
 static int text_pixels(const char *t,int x,int baseline,Px *out){
   int n=0,cx=x;
@@ -922,7 +922,7 @@ static void grid_direction(const ChartBuild *b,int t,int64_t qx,int64_t qy,int32
 }
 // fuller-ground.js coverage().
 static double land_coverage(GridCache *gc,double lat,double lon,bool *ok){
-  const double u=(wrap(lon)+180)*4-.5,v=(90-lat)*4-.5,i=floor(u),j=floor(v),fu=u-i,fv=v-j;
+  const double u=(wrap(lon)+180)*4-.5,v=(90-lat)*4-.5,i=f_floor(u),j=f_floor(v),fu=u-i,fv=v-j;
   const int b00=land_bit(gc,(int)i,(int)j),b10=land_bit(gc,(int)i+1,(int)j),b01=land_bit(gc,(int)i,(int)j+1),b11=land_bit(gc,(int)i+1,(int)j+1);
   if(b00<0||b10<0||b01<0||b11<0)*ok=false;
   return ((double)b00*(1-fu)+(double)b10*fu)*(1-fv)+((double)b01*(1-fu)+(double)b11*fu)*fv;
@@ -1017,7 +1017,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     // round, W columns to 360 degrees: the minute renderer turns it under
     // the index (enr_render), so the hour is built once.
     if(in->tape==2)cam.scale=W/360.0;
-    cam.top=(int)ceil(sy(&cam,WORLD_NORTH));cam.bottom=(int)floor(sy(&cam,WORLD_SOUTH));
+    cam.top=(int)f_ceil(sy(&cam,WORLD_NORTH));cam.bottom=(int)f_floor(sy(&cam,WORLD_SOUTH));
   }
   else if(!VIEW_IS_HOUR(in->view))FAIL;
   else if(in->body<2){
@@ -1193,15 +1193,15 @@ static bool finish_draw(ChartBuild *b){
     }
   }else
   {const double g0lat=glat(cam,bottom),g0lon=glon(cam,0),g1lat=glat(cam,top),g1lon=glon(cam,W);
-  for(double lat=ceil(g0lat/step)*step;lat<=g1lat;lat+=step)for(double lon=ceil(g0lon/step)*step;lon<=g1lon;lon+=step){
+  for(double lat=f_ceil(g0lat/step)*step;lat<=g1lat;lat+=step)for(double lon=f_ceil(g0lon/step)*step;lon<=g1lon;lon+=step){
     const double x=js_round(sx(cam,lon)),y=js_round(sy(cam,lat));if(!(y>=top&&y<=bottom))continue;
     for(int d=-2;d<=2;d++){plot(&cv,x+d,y,L_GRID);plot(&cv,x,y+d,L_GRID);}
   }
-  for(double lon=ceil(g0lon/minor)*minor;lon<=g1lon;lon+=minor){
+  for(double lon=f_ceil(g0lon/minor)*minor;lon<=g1lon;lon+=minor){
     const double x=js_round(sx(cam,lon));const int len=f_fmod(lon,step)==0?4:2;
     for(int d=0;d<len;d++){plot(&cv,x,top+d,L_GRID);plot(&cv,x,bottom-d,L_GRID);}
   }
-  for(double lat=ceil(g0lat/minor)*minor;lat<=g1lat;lat+=minor){
+  for(double lat=f_ceil(g0lat/minor)*minor;lat<=g1lat;lat+=minor){
     const double y=js_round(sy(cam,lat));const int len=f_fmod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
     for(int d=0;d<len;d++){plot(&cv,d,y,L_GRID);plot(&cv,W-1-d,y,L_GRID);}
   }}
@@ -1351,7 +1351,7 @@ static bool finish_draw(ChartBuild *b){
       if(m%60==0)for(int d=1;d<=6;d++)plot(&cv,x,B-d,L_SPACE_INK);
       if(m%15==0&&m%60){
         char label[4];label[0]=(char)('0'+m/10);label[1]=(char)('0'+m%10);label[2]=0;
-        const int lw=text_width(label),n=text_pixels(label,(int)x-(int)floor(lw/2.0)+1,B+17,scratch);
+        const int lw=text_width(label),n=text_pixels(label,(int)x-(int)f_floor(lw/2.0)+1,B+17,scratch);
         for(int i=0;i<n;i++)plot(&cv,scratch[i].x,scratch[i].y,L_SPACE_INK);
       }
     }
@@ -1588,7 +1588,7 @@ static bool finish_draw(ChartBuild *b){
   if(!world){
     // The time callout's place, hour and the lettering it breaks for; its
     // figures, when it is drawn.
-    if(day){out->callout_left=(int16_t)(floor(least)-8);out->callout_top=(int16_t)(4+(in->home?14:0));out->callout_bottom=H-18;}
+    if(day){out->callout_left=(int16_t)(f_floor(least)-8);out->callout_top=(int16_t)(4+(in->home?14:0));out->callout_bottom=H-18;}
     memset(out->hour_text,0,3);
     if(in->numerals==ENR_EVEN&&in->clock24&&!hour[1]){out->hour_text[0]='0';out->hour_text[1]=hour[0];}else memcpy(out->hour_text,hour,strlen(hour));
     out->avoid_count=(uint8_t)avoid_n;

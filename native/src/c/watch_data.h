@@ -67,6 +67,8 @@ int32_t civil_date(int year,int month,int day);
 // for data both go by it.
 typedef struct {int64_t start,day_start,day_end,sat0,sat1;int32_t day0,day1;uint8_t view;} ChartNeeds;
 void chart_needs(time_t now,const WatchSettings *s,ChartNeeds *n);
+// The app's log (main.c).
+void app_note(const char *what,unsigned n);
 
 // Starts building the local hour holding `now` for the Sun or Moon (see
 // chart.h: step it, then finish it). NULL without the segments or memory.

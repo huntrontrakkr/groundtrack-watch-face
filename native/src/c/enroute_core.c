@@ -23,7 +23,7 @@ enum {L_PLAIN,L_CONTOUR,L_COAST,L_SHELF,L_WATERLINE,L_CLEARED,L_GRID,L_ROUTE,L_I
 enum {G_WATER,G_LAND,G_SPACE,G_TINT0,G_DEPTH0=8};
 
 // JavaScript's Math.round: half-way cases round up.
-static int js_round(enr_real v){return (int)floor(v+(enr_real)0.5);}
+static int js_round(enr_real v){return (int)f_floor(v+(enr_real)0.5);}
 static int sign(enr_real v){return (v>0)-(v<0);}
 
 typedef struct {
@@ -105,7 +105,7 @@ static __attribute__((noinline)) void night_ready(const EnrScene *s,Night *n,con
   n->m=m;for(int k=0;k<NIGHT_ROWS;k++)n->held[k]=-100;
   if(ROLLED(s)){
     const EnrFuller *f=s->fuller;const enr_real *u=m->sun;
-    for(int t=0;t<f->tile_count;t++){const double *b=f->bases[f->tile_face[t]];for(int k=0;k<3;k++){const double v=(u[0]*b[3*k]+u[1]*b[3*k+1]+u[2]*b[3*k+2])*32768,r=floor(v);n->sun[t][k]=(int32_t)(v-r>=0.5?r+1:r);}}
+    for(int t=0;t<f->tile_count;t++){const double *b=f->bases[f->tile_face[t]];for(int k=0;k<3;k++){const double v=(u[0]*b[3*k]+u[1]*b[3*k+1]+u[2]*b[3*k+2])*32768,r=f_floor(v);n->sun[t][k]=(int32_t)(v-r>=0.5?r+1:r);}}
     return;
   }
   for(int b=0;b<BLOCKS;b++){n->lo[b]=INT32_MAX;n->hi[b]=INT32_MIN;}
@@ -562,7 +562,7 @@ static void draw_body(Ctx *c){
 }
 
 // Lettering in Departure Mono, and the chart's knockout under it.
-static const EnrGlyph *glyph(char ch){const char *p=strchr(ENR_FONT_CHARS,ch);return p&&ch&&ENR_FONT_GLYPHS?&ENR_FONT_GLYPHS[p-ENR_FONT_CHARS]:0;}
+static const EnrGlyph *glyph(char ch){const int k=enr_font_index(ch);return k>=0&&ENR_FONT_GLYPHS?&ENR_FONT_GLYPHS[k]:0;}
 static int text_width(const char *text,int n){int w=0;for(int i=0;i<n;i++){const EnrGlyph *g=glyph(text[i]);if(g)w+=g->advance;}return w;}
 static int text_pixels(const char *text,int n,int x,int baseline,Px *out){
   int count=0,cx=x;
@@ -873,7 +873,7 @@ static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
     // whose leader crosses least lettering.
     const int fs=fig_height(s,2,'0'),head=s->callout_top-4;const double net=s->fuller->net_top;
     const bool room=net-head>=fs+16,up=room||by-26-fs>=4+head;
-    const double mid=(net-head-fs)/2,low=floor(mid);
+    const double mid=(net-head-fs)/2,low=f_floor(mid);
     const int reach=room?by-(head+(int)(mid-low>=0.5?low+1:low)+fs+3):26,sy=up?by-reach:by+reach;
     const int fw=time_figure(s,m,2,1,g,n,&fh);
     int best=0,score[2];

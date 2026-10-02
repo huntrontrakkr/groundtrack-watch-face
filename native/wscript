@@ -28,6 +28,9 @@ def build(ctx):
         ctx.env.append_value('CFLAGS', ['-ffp-contract=off', '-flto', '-D' + FACE])
         # (The app's header is referenced by nothing: -u keeps it through the link.)
         ctx.env.append_value('LINKFLAGS', ['-flto', '-Os', '-ffp-contract=off', '-Wl,-u,__pbl_app_info'])
+        import os
+        ctx.env.append_value('CFLAGS', os.environ.get('GT_FLAGS','').split())
+        ctx.env.append_value('LINKFLAGS', os.environ.get('GT_FLAGS','').split())
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         # Doubles throughout, as the JavaScript: the SDK builds for the

@@ -12,6 +12,10 @@ double f_cos(double x);
 // The square root, correctly rounded (Math.sqrt), and the exact remainder
 // (JavaScript's %): the watch's libm has neither.
 double f_sqrt(double x);
+// floor and ceil (exact for any double: past 2^53 every double is whole),
+// a fraction of the library's size.
+double f_floor(double x);
+double f_ceil(double x);
 double f_fmod(double x,double y);
 // Arcsine, arccosine and arctangents, to the same bits as src/fmath.js.
 double f_asin(double x);

@@ -12,6 +12,8 @@ typedef struct {int8_t advance,left,top;uint16_t first,count;} EnrGlyph;
 #define ENR_FONT_BYTES (8*ENR_FONT_GLYPH_COUNT+3*ENR_FONT_RUN_COUNT)
 _Static_assert(sizeof(EnrGlyph)==8&&sizeof(EnrRun)==3,"font.bin is the structs as they lie in memory");
 extern const char ENR_FONT_CHARS[41];
+// A character's place among them, or -1.
+int enr_font_index(char ch);
 // The glyphs and runs: on the watch read from font.bin at start
 // (enr_font_load: they are not in its size-capped code), elsewhere compiled in.
 extern const EnrGlyph *enr_font_glyphs;
