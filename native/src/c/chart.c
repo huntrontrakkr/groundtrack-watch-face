@@ -986,6 +986,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   if(FACE_ROLL&&(!FACE_CHART||in->fuller)){if(!fuller_begin(b))FAIL;return b;}
   // chartCamera(). The track is kept only while the camera is set, and made
   // again for the drawing: the ground needs the memory.
+  again:;
   TrackPoint *const track=b->track=alloc(sizeof(TrackPoint)*(size_t)(q64(track_to(in)-track_from(in),track_step(in))+1));if(!track)FAIL;
   const int count=make_track(in,src,track);if(count<0||count>401)FAIL;
   b->step=track_step(in);b->t0=(int)(track_from(in)-in->start);
@@ -998,6 +999,11 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     if(track[i].b>maxlon)maxlon=track[i].b;
     if(track[i].b<minlon)minlon=track[i].b;
   }
+  // A satellite on the hour chart that this hour runs further than the
+  // chart can hold (an oval orbit at its low, fast end; one in a low orbit
+  // sent here by mistake) has the hour on the world band instead.
+  #define HOUR_HOLDS 90
+  if(FACE_WORLD&&FACE_HOUR&&in->body>=2&&in->view==0&&(maxlon-minlon>HOUR_HOLDS||maxlat-minlat>HOUR_HOLDS)){release(track);b->track=NULL;b->in.view=1;goto again;}
   Cam cam;memset(&cam,0,sizeof cam);cam.top=0;cam.bottom=H;
   if(VIEW_IS_DAY(in->view)){
     // The whole local day, north up, its shape fitted and set to the right.
