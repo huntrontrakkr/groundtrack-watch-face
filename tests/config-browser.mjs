@@ -47,6 +47,14 @@ try{
   const searches=[];
   await page.route('https://geocoding-api.open-meteo.com/**',route=>{searches.push(route.request().url());
     route.fulfill({contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({results:[{name:'Norfolk',admin1:'Virginia',country:'United States',latitude:36.84681,longitude:-76.28522},{name:'Norfolk',admin1:'England',country:'United Kingdom',latitude:52.66667,longitude:1}]})});});
+  // The satellite search goes to CelesTrak: answered here with what it
+  // gave for the name HIMAWARI on 2 October 2026, and for a catalog number
+  // with the one set.
+  const asked=[],himawari=readFileSync('tests/fixtures/celestrak-name-himawari.txt','utf8');
+  await page.route('https://celestrak.org/**',route=>{const url=route.request().url();asked.push(url);
+    const number=/CATNR=(\d+)/.exec(url),lines=himawari.split(/\r?\n/);let body=/NAME=HIMAWARI/.test(url)?himawari:'No GP data found';
+    if(number)for(let i=0;i+2<lines.length;i+=3)if(Number(lines[i+1].slice(2,7))===Number(number[1]))body=lines.slice(i,i+3).join('\r\n')+'\r\n';
+    route.fulfill({contentType:'text/plain',headers:{'access-control-allow-origin':'*'},body});});
   await page.setContent(html);
   // The sections fold: the face, what it follows and its own settings open,
   // each closed one saying what it holds.
@@ -84,52 +92,108 @@ try{
   assert.ok(await page.locator('input[name=clock24]').isChecked());
   assert.match(await page.locator('#preset-note').textContent(),/Greenwich/);
   assert.ok(await page.locator('#place').isHidden());
-  // Two faces. Enroute follows the Sun, the Moon and the slow satellites,
-  // and says of each fast one why it is not here and where it is; the
-  // Plotboard the other way about. Each keeps the body it last followed.
-  const followed=()=>page.locator('input[name=body]').evaluateAll(e=>e.map(x=>x.value));
-  assert.deepEqual(await followed(),['sun','moon','sat:36585','sat:42738']);
-  assert.equal(await page.locator('#others-title').textContent(),'Not on Enroute (5)');
-  assert.match(await page.locator('#others-why').textContent(),/^Too fast for Enroute: .* They are on the Plotboard\.$/);
-  assert.deepEqual(await page.locator('#unsuited li').evaluateAll(e=>e.map(li=>[li.firstChild.textContent,li.lastChild.textContent])),
-    [['International Space Station','Round the Earth in 93 minutes'],['Tiangong','Round the Earth in 92 minutes'],['Hubble Space Telescope','Round the Earth in 95 minutes'],['Landsat 9','Round the Earth in 99 minutes'],['NOAA-20','Round the Earth in 101 minutes']]);
-  await page.check('input[name=face][value=plotboard]');
-  assert.deepEqual(await followed(),['sat:25544','sat:48274','sat:20580','sat:49260','sat:43013']);
-  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sat:25544');
+  // Two faces, and every body listed whichever is in view: the Sun and
+  // Moon, then the catalog's satellites in their groups. A satellite too
+  // fast for Enroute is put on the Plotboard, with why; the face asked for
+  // comes back with a body it can show.
+  const {CATALOG,GROUPS}=await import('../src/satellites.js');
+  assert.equal(await page.locator('input[name=body]').count(),2+CATALOG.length);
+  assert.deepEqual(await page.locator('#groups details').evaluateAll(e=>e.map(d=>d.id)),GROUPS.map(g=>'group-'+g[0]));
+  assert.match(await page.locator('#group-starlink summary').textContent(),/^Starlink 6 · SL1, SL5, SL2?P?/);
+  const faceNow=()=>page.locator('input[name=face]:checked').getAttribute('value');
+  assert.equal(await faceNow(),'enroute');
+  assert.ok(await page.locator('#face-why').isHidden());
+  await page.check('input[name=body][value="sat:25544"]');
+  assert.equal(await faceNow(),'plotboard');
+  assert.ok(await page.locator('input[name=face][value=enroute]').isDisabled());
+  assert.equal(await page.locator('#face-why').textContent(),'International Space Station is on the Plotboard. Too fast for Enroute: round the Earth in 93 minutes, more of the world in an hour than its chart can hold.');
   assert.equal(await page.locator('#chart-title').textContent(),'Plotboard');
-  assert.equal(await page.locator('#others-title').textContent(),'Not on the Plotboard (4)');
-  assert.match(await page.locator('#others-why').textContent(),/^Too slow for the Plotboard: .* They are on Enroute\.$/);
-  assert.deepEqual(await page.locator('#unsuited li').evaluateAll(e=>e.map(li=>[li.firstChild.textContent,li.lastChild.textContent])),
-    [['Sun','Comes round in 24 hours'],['Moon','Comes round in 25 hours'],['GPS BIIF-1 (PRN 25)','Comes round in 12 hours'],['QZS-2 (Michibiki)','Comes round in 24 hours']]);
-  await page.check('input[name=body][value="sat:20580"]');
-  await page.check('input[name=face][value=enroute]');
-  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
+  assert.match(await page.locator('#chart-note').textContent(),/^World band\. /);
+  await page.check('input[name=body][value="sat:36585"]');
+  assert.equal(await faceNow(),'enroute');
+  assert.ok(await page.locator('input[name=face][value=enroute]').isEnabled());
+  assert.ok(await page.locator('#face-why').isHidden());
+  // The Plotboard shows a slow body's whole day, marked in hours.
   await page.check('input[name=face][value=plotboard]');
-  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sat:20580');
+  assert.match(await page.locator('#chart-note').textContent(),/^World band, the whole day\. /);
+  assert.match(await page.locator('#route-note').textContent(),/^A ruler of the day/);
+  // The Sun and Moon can be marked beside what is followed, not beside
+  // themselves; the preview shows them.
+  {const before=await pixels('preview');
+  await page.check('input[name=also][value=sun]');await page.check('input[name=also][value=moon]');
+  assert.notDeepEqual(await pixels('preview'),before,'the Sun and Moon are marked on the preview');
+  assert.equal(await page.locator('#now-follow').textContent(),'GPS · with the Sun and Moon');
+  await page.check('input[name=body][value="sat:25544"]');
+  assert.match(await page.locator('#route-note').textContent(),/^A ruler as long as the hour's run/);
+  await page.check('input[name=body][value=sun]');
+  assert.deepEqual(await page.locator('input[name=also]').evaluateAll(e=>e.map(x=>x.offsetParent!==null)),[false,true]);
+  await page.uncheck('input[name=also][value=moon]');}
+  // Any other satellite, from CelesTrak: by name, the one meant chosen from
+  // the answers, added under Your satellites and followed; by catalog
+  // number; and one already listed is only chosen.
+  await page.fill('#find','hi');await page.click('#find-go');
+  assert.match(await page.locator('#find-note').textContent(),/^Three letters or more/);
+  await page.fill('#find','http://example.com/gp.php?CATNR=5');await page.click('#find-go');
+  assert.match(await page.locator('#find-note').textContent(),/^Only CelesTrak's links/);
+  assert.equal(asked.length,0);
+  await page.fill('#find','HIMAWARI');await page.press('#find','Enter');
+  await page.waitForSelector('#found button');
+  assert.match(asked[0],/gp\.php\?NAME=HIMAWARI&FORMAT=TLE$/);
+  assert.equal(await page.locator('#found button').count(),13);
+  assert.match(await page.locator('#found button').nth(10).textContent(),/^HIMAWARI-8Catalog number 40267 · round the Earth in 24 hours · either face$/);
+  await page.locator('#found button').nth(10).click();
+  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sat:40267');
+  assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 1$/);
+  assert.equal(await page.locator('#now-follow').textContent(),'HIM · with the Sun');
+  assert.match(await page.locator('#preview-note').textContent(),/^No preview of this satellite yet/);
+  // (The same question is not put to CelesTrak twice.)
+  await page.fill('#find','HIMAWARI');await page.click('#find-go');await page.waitForSelector('#found button');
+  assert.equal(asked.length,1);
+  await page.fill('#find','41836');await page.click('#find-go');
+  await page.waitForFunction(()=>document.querySelectorAll('#found button').length===1);
+  assert.match(asked[1],/gp\.php\?CATNR=41836&FORMAT=TLE$/);
+  await page.locator('#found button').first().click();
+  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sat:41836');
+  assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 1$/);
+  await page.fill('#find','https://celestrak.org/NORAD/elements/gp.php?NAME=NOSUCH&FORMAT=JSON');await page.click('#find-go');
+  await page.waitForFunction(()=>/^Nothing found/.test(document.getElementById('find-note').textContent));
+  assert.match(asked[2],/NAME=NOSUCH&FORMAT=TLE$/);
+  // One added can be removed; here a second is, and the first kept.
+  await page.fill('#find','HIMAWARI');await page.click('#find-go');await page.waitForSelector('#found button');
+  await page.locator('#found button').first().click();
+  assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 2$/);
+  await page.evaluate(()=>{document.getElementById('group-yours').open=true;});
+  await page.locator('#group-yours button.drop').nth(1).click();
+  assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 1$/);
+  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
+  await page.evaluate(()=>document.querySelectorAll('details').forEach(d=>{d.open=true;}));
   // Each body's chart offers the settings it takes and no others, by the
   // rules the watch's own code is held to (tests/settings.test.mjs); a
   // setting out of sight keeps its value.
-  {const {settingsFor,faceOf}=await import('../src/settings-rules.js'),{viewOf}=await import('../src/satellites.js');
+  {const {settingsFor}=await import('../src/settings-rules.js'),{viewOf,plotOf}=await import('../src/satellites.js');
   const offered=()=>page.evaluate(()=>{
     const seen=e=>!!e&&e.offsetParent!==null,group=n=>[...document.querySelectorAll(`input[name=${n}]`)].filter(seen).map(e=>e.value),chosen=n=>document.querySelector(`input[name=${n}]:checked`)?.value;
     return {readout:group('readout'),readoutShown:chosen('readout'),numerals:group('numerals').length>0,tape:group('tape').length>0,transfer:group('transfer').length>0,span:group('span').length>0,light:group('corner').includes('light'),note:document.getElementById('chart-note').textContent,
       rest:['plate','figures','margin','corner'].every(n=>group(n).length>1)&&seen(document.querySelector('input[name=clock24]'))};
   });
-  const KIND={hour:'Hour chart',day:'Whole-day chart',world:'World band'};
-  for(const body of ['sun','moon','sat:36585','sat:42738','sat:25544','sat:43013'])for(const readout of ['off','flag','callout'])for(const tape of viewOf(body)==='world'?['fixed','tape','slide','clock','route']:['fixed'])for(const span of viewOf(body)==='day'?['day','hour']:['day']){
-    await page.check(`input[name=face][value=${faceOf(viewOf(body))}]`);
+  const KIND={hour:'Hour chart.',day:'Whole-day chart.',world:'World band.',worldday:'World band, the whole day.'};
+  // (The Sun, the Moon, GPS, QZSS, the ISS, NOAA-20, and Meridian 7 in its
+  // oval orbit, each on each face that can show it.)
+  for(const body of ['sun','moon','sat:36585','sat:42738','sat:25544','sat:43013','sat:40296'])for(const face of viewOf(body)==='world'?['plotboard']:['enroute','plotboard'])
+  for(const readout of ['off','flag','callout'])for(const tape of face==='plotboard'?['fixed','tape','slide','clock','route']:['fixed'])for(const span of viewOf(body)==='day'&&face==='enroute'?['day','hour']:['day']){
     await page.check(`input[name=body][value="${body}"]`);
+    await page.check(`input[name=face][value=${face}]`);
     // (Set where the control shows; a hidden one keeps what it had.)
     for(const [name,value] of [['span',span],['tape',tape],['readout',readout]])if(await page.locator(`input[name=${name}][value=${value}]`).isVisible())await page.check(`input[name=${name}][value=${value}]`);
     const got=await offered(),chosen={span,tape,readout:got.readout.includes(readout)?readout:undefined};
-    const want=settingsFor('enroute',body,viewOf(body),{span,tape,readout:chosen.readout??(got.readoutShown||'flag')});
-    const at=`${body} ${readout} ${tape} ${span}`;
+    const want=settingsFor(face,body,viewOf(body),{span,tape,readout:chosen.readout??(got.readoutShown||'flag'),plot:plotOf(body)});
+    const at=`${body} ${face} ${readout} ${tape} ${span}`;
     assert.deepEqual(got.readout,want.readout,`${at}: the readouts offered`);
     assert.deepEqual([got.numerals,got.tape,got.transfer,got.span,got.light,got.note.startsWith(KIND[want.chart]),got.rest],[want.numerals,want.tape,want.transfer,want.span,want.light,true,true],`${at}: the settings offered`);
   }
   // Back to the ISS under the ruler with its flag, and Enroute's Sun.
-  await page.check('input[name=face][value=plotboard]');await page.check('input[name=body][value="sat:25544"]');await page.check('input[name=tape][value=fixed]');await page.check('input[name=readout][value=flag]');
-  await page.check('input[name=face][value=enroute]');await page.check('input[name=body][value=sun]');
+  await page.check('input[name=body][value="sat:25544"]');await page.check('input[name=tape][value=fixed]');await page.check('input[name=readout][value=flag]');
+  await page.check('input[name=body][value=sun]');await page.check('input[name=face][value=enroute]');
   assert.equal(await page.locator('input[name=readout]:checked').getAttribute('value'),'flag');}
   // Nothing wider than a small phone.
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'the page scrolls sideways at 320 px');
@@ -176,11 +240,16 @@ try{
   // again in them, with home's rise and set for the new home.
   listeners.webviewclosed({response});
   for(let i=0;i<200&&!messages.some(m=>m.RiseSets);i++)await new Promise(r=>setTimeout(r,20));
-  assert.deepEqual([stored.bodyEnroute,stored.bodyPlotboard,stored.calendar],['moon','sat:25544','webcal://calendar.example/private-abc/basic.ics']);
+  assert.deepEqual([stored.face,stored.also,stored.calendar],['enroute','sun','webcal://calendar.example/private-abc/basic.ics']);
+  // The satellite added is kept, with the elements it came with, as if the
+  // phone had fetched them itself.
+  assert.deepEqual(JSON.parse(stored.sats),[{norad:40267,name:'HIMAWARI-8',code:'HIM',period:1436.2,ecc:0,still:true}]);
+  assert.match(JSON.parse(stored['tle-40267']).text,/^HIMAWARI-8\n1 40267U /);
+  assert.equal(JSON.parse(stored['tle-40267']).fetched,now);
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1]));
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1]));
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
   // The calendar's link is read at once (as https), and its timed event,
   // named by the phone, goes to the watch; the all-day one does not.
@@ -209,8 +278,8 @@ try{
   await page2.evaluate(()=>document.querySelectorAll('details').forEach(d=>{d.open=true;}));
   assert.equal(await page2.locator('#title').textContent(),'Groundtrack Fuller');
   assert.equal(await page2.locator('#sec-face').count(),0);
-  assert.equal(await page2.locator('input[name=body]').count(),9);
-  assert.ok(await page2.locator('#others').isHidden());
+  assert.equal(await page2.locator('input[name=body]').count(),2+CATALOG.length);
+  assert.ok(await page2.locator('#group-stations').evaluate(d=>d.open),'the chosen satellite\'s group is open');
   assert.equal(await page2.locator('#chart-title').textContent(),'Sheet');
   assert.equal(await page2.locator('input[name=body]:checked').getAttribute('value'),'sat:25544');
   const shown=n=>page2.locator(`input[name=${n}]`).evaluateAll(e=>e.filter(x=>x.offsetParent!==null).map(x=>x.value));

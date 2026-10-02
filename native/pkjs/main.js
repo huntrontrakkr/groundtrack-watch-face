@@ -8,7 +8,12 @@
 // This is the source; tools/build-pkjs.mjs bundles it into
 // native/src/pkjs/index.js.
 // Settings are kept in localStorage:
-//   body, plate, readout ('off', 'flag' or 'callout'; before it, flag '1' or
+//   body ('sun', 'moon' or 'sat:' and a catalog number), face ('enroute' or
+//   'plotboard': which of Groundtrack's two faces; without it, the body's
+//   own), also ('sun', 'moon' or both, comma-separated: marked beside the
+//   body), sats (JSON [{norad, name, code, period, ecc, still}]: satellites added
+//   from CelesTrak on the settings page),
+//   plate, readout ('off', 'flag' or 'callout'; before it, flag '1' or
 //   '0'), numerals (the callout's figures: colon, plain, even, mono, accent),
 //   margin ('utc' or 'body'), span ('day' or 'hour': QZSS's chart), tape
 //   ('fixed', 'tape', 'slide' or 'clock': the world band's time scale), clock24
@@ -23,7 +28,8 @@
 // hours each (as CelesTrak asks) and kept, under tle-<catalog number>.
 import {HOMES} from '../../src/home.js';
 import {PLATES,FIGURE_SETS} from '../../src/plates.js';
-import {registerElements,viewOf,periodOf,CATALOG,catalogEntry,bodyId} from '../../src/satellites.js';
+import {registerElements,elementsFor,viewOf,plotOf,periodOf,CATALOG,GROUPS,catalogEntry,bodyId,addSatellite,forgetSatellites,addedSatellites} from '../../src/satellites.js';
+import {chartOf,faceFor,VIEW_CODES} from '../../src/settings-rules.js';
 import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
 import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
 import {localDay,localDate} from '../../src/chart-text.js';
@@ -95,23 +101,31 @@ function pump(){
 // Moon, 2 a satellite), plate, the minute readout (0 none, 1 the flag, 2 a
 // time callout), 24-hour, home, then home's latitude and longitude in
 // hundredths of a degree (i32 each), then a satellite's catalog number
-// (i32), its kind (1 a station, plus its view, 0 the hour chart, 1 the world
-// band, 2 the whole day, times 2) and its code (3 characters), then the
+// (i32), the body's kind (1 a station, plus its view, 0 the hour chart, 1
+// the world band, 2 the whole day, 3 the world band's whole day, times 2)
+// and its code (3 characters), then the
 // callout's figures (0 colon, 1 plain, 2 even, 3 mono, 4 accent), the
 // margin's time (0 Zulu, 1 the nautical zone under the body) and the world
 // band's time scale (0 fixed, 1 a sliding tape, 2 the world sliding too,
 // 3 a clock)
 // and, on the fixed tape, how its minutes fall on the route (0 off, 1 a
-// vernier, 2 a comb, 3 chevrons), and the figure set (FIGURE_SETS' index).
+// vernier, 2 a comb, 3 chevrons), the figure set (FIGURE_SETS' index), the
+// margins' corner, and which of the Sun (1) and Moon (2) are marked beside
+// the body.
 var FIGURES=FIGURE_SETS.map(function(f){return f[0];});
 // The margins' corner: the day of the year (the world band: the height), the
 // body's ground point, the Moon's light.
 var CORNERS=['day','point','light'];
-var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock','route'],TRANSFERS=['off','vernier','comb','chevrons'];
+var READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock','route'],TRANSFERS=['off','vernier','comb','chevrons'];
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
-// On Groundtrack Fuller every satellite's chart is a rolling Fuller sheet of
-// its hour (QZSS's of its day, unless its hour is chosen).
-function view(body){var v=viewOf(body);if(FACE==='fuller'&&v==='world')v='hour';return v==='day'&&setting('span','day')==='hour'?'hour':v;}
+// The chart a body has (src/settings-rules.js chartOf): on Groundtrack by
+// the face chosen (a fast satellite's is the Plotboard, whichever was) and
+// the body's orbit; on Groundtrack Fuller a rolling Fuller sheet of a
+// satellite's hour (QZSS's of its day, unless its hour is chosen).
+function face(body){return FACE==='fuller'?'fuller':faceFor(setting('face',''),viewOf(body));}
+function chart(body){return chartOf(face(body),body,viewOf(body),setting('span','day'),plotOf(body));}
+function daily(body){var c=chart(body);return c==='day'||c==='worldday';}
+function also(){return setting('also','').split(',').filter(function(k){return k==='sun'||k==='moon';});}
 function watchSettings(){
   var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
   var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null,numerals=NUMERALS.indexOf(setting('numerals','even'));
@@ -119,12 +133,14 @@ function watchSettings(){
   function i32(v){bytes.push(v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255);}
   i32(h?Math.round(h.lat*100):0);i32(h?Math.round(h.lon*100):0);
   i32(sat?Number(body.slice(4)):0);
-  bytes.push((entry&&entry.symbol==='station'?1:0)|(sat?VIEWS.indexOf(view(body)):0)<<1);
+  // (Groundtrack Fuller's Sun and Moon have the one chart: no view is sent.)
+  bytes.push((entry&&entry.symbol==='station'?1:0)|(sat||FACE!=='fuller'?VIEW_CODES[chart(body)]:0)<<1);
   var code=entry?entry.code:'';for(var k=0;k<3;k++)bytes.push(k<code.length?code.charCodeAt(k):0);
   var tape=TAPES.indexOf(setting('tape','fixed'));
   var transfer=TRANSFERS.indexOf(setting('transfer','off'));
   var figures=FIGURES.indexOf(setting('figures','michroma')),corner=CORNERS.indexOf(setting('corner','day'));
-  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?FIGURES.indexOf('michroma'):figures,corner<0?0:corner);
+  bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?FIGURES.indexOf('michroma'):figures,corner<0?0:corner,
+    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0));
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -142,7 +158,7 @@ function sendSatellite(norad){
     // starts at local midnight).
     // (The hour's chart starts 40 minutes before its local hour, which the
     // watch may be 59 minutes into.)
-    var span,now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=view(body)==='day'?26*3600:6000;
+    var span,now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=daily(body)?26*3600:6000;
     try{span=satelliteSpan(body);}catch(error){console.log('No orbit for '+body+': '+error.message);return;}
     for(var t=Math.floor((now-back)/span)*span;t<now+SAT_DAYS*86400;t+=span){
       var seg;try{seg=encodeSatelliteSegment(satelliteSegmentFor(body,t*1000));}catch(error){break;}
@@ -150,6 +166,9 @@ function sendSatellite(norad){
       if(bytes.length>=12*seg.length){enqueue({SatSegments:bytes});bytes=[];}
     }
     if(bytes.length)enqueue({SatSegments:bytes});
+    // (Elements that place it nowhere, a decayed satellite's say: the watch
+    // is told, not left waiting.)
+    if(!sent){status('NO ELEMENTS: DATA');return;}
     var timeZone=zone(),h=home(timeZone);
     if(h)for(var b=Math.floor(Date.now()/PASS_BLOCK)*PASS_BLOCK;b<Date.now()+SAT_DAYS*DAY;b+=PASS_BLOCK){
       // (With whose they are: the watch may have chosen another since.)
@@ -213,8 +232,9 @@ function elements(body,done){
   function fallback(reason,why,answer){
     // (Kept elements still serve within their time: three days in a low
     // orbit, a fortnight in a high one.)
-    if(kept&&kept.text&&Date.now()-kept.epoch<(viewOf(body)==='world'?3:14)*86400000&&use(kept.text,'celestrak'))return answer(null,reason);
-    answer(viewOf(body)==='world'?'NO ELEMENTS: '+why:null,reason);
+    if(kept&&kept.text&&Date.now()-kept.epoch<(periodOf(body)>480?30:3)*86400000&&use(kept.text,'celestrak'))return answer(null,reason);
+    // (GPS and QZSS have their nominal orbits; the rest have nothing.)
+    answer(elementsFor(body)?null:'NO ELEMENTS: '+why,reason);
   }
   if(kept&&kept.text&&Date.now()-kept.fetched<ELEMENTS_AGE&&use(kept.text,'celestrak'))return done(null);
   if(fetching[norad]){fetching[norad].push(done);return;}
@@ -342,13 +362,21 @@ function fetchCalendar(force){
 
 // The settings page, offline: a data URL holding the page and the settings.
 var FACE=typeof GROUNDTRACK_FACE==='string'?GROUNDTRACK_FACE:'enroute';
-// Both faces: the Sun, the Moon and every satellite. On Groundtrack the
-// body chooses the chart: the hour chart (the Sun, the Moon, GPS), the
-// whole day (QZSS) or the world band (the fast satellites).
-var BODIES=['sun','moon'].concat(CATALOG.map(function(c){return bodyId(c.norad);}));
+// Both faces: the Sun, the Moon and any satellite: the catalog's, and those
+// added on the settings page from CelesTrak (kept under sats).
+function loadSatellites(){
+  var list=[];try{list=JSON.parse(setting('sats','[]'));}catch(error){}
+  forgetSatellites();
+  if(Array.isArray(list))list.slice(0,40).forEach(function(e){try{addSatellite(e);}catch(error){}});
+}
+loadSatellites();
+// (An added satellite as it is kept and given to the page.)
+function kept(c){return {norad:c.norad,name:c.name,code:c.code,period:c.period,ecc:c.ecc||0,still:!!c.still};}
+function known(body){return body==='sun'||body==='moon'||(typeof body==='string'&&!!catalogEntry(body));}
+function bodies(){return ['sun','moon'].concat(CATALOG.concat(addedSatellites()).map(function(c){return bodyId(c.norad);}));}
 // Fuller starts on the ISS's hour, as the watch does.
-var FIRST=FACE==='fuller'?'sat:25544':BODIES[0];
-function currentBody(){var b=setting('body',FIRST);return BODIES.indexOf(b)>=0?b:FIRST;}
+var FIRST=FACE==='fuller'?'sat:25544':'sun';
+function currentBody(){var b=setting('body',FIRST);return known(b)?b:FIRST;}
 // A data-URL page can't reliably ask for the phone's location itself (as
 // Dymaxion found), so the phone takes a coarse fix first, waiting at most
 // five seconds, and passes it in, rounded to 0.01°.
@@ -359,17 +387,29 @@ function currentBody(){var b=setting('body',FIRST);return BODIES.indexOf(b)>=0?b
 function previewInputs(){
   var now=Date.now(),timeZone=zone(),parts=clockParts(now,timeZone),start=Math.floor(now/60000)*60000-Number(parts.m)*60000;
   // Every body the phone can draw now: the Sun and Moon, GPS and QZSS (on
-  // their nominal orbits if nothing better is kept), and each satellite
-  // whose elements it has kept. QZSS's hour has an input of its own.
-  var texts={};
-  BODIES.forEach(function(body){
-    if(body.indexOf('sat:')===0){var kept=null;try{kept=JSON.parse(localStorage.getItem('tle-'+body.slice(4)));}catch(error){}if(kept&&kept.text)try{registerElements(kept.text,'celestrak');}catch(error){}}
-    (viewOf(body)==='day'?['day','hour']:[setting('span','day')]).forEach(function(span){
-      try{
-        texts[body+(viewOf(body)==='day'&&span==='hour'?'/hour':'')]=chartInput({body:body,start:start,plate:setting('plate','enroute'),readout:readout()==='off'?false:readout(),numerals:setting('numerals','even'),margin:setting('margin','utc'),
-          span:span,tape:setting('tape','fixed'),transfer:setting('transfer','off'),figures:setting('figures','michroma'),corner:setting('corner','day'),
-          events:calendarLink()?storedEvents():[],clock24:setting('clock24','1')!=='0',zone:timeZone,home:home(timeZone),projection:FACE==='fuller'?'fuller':'chart'});
-      }catch(error){console.log('No preview for '+body+': '+error.message);}
+  // their nominal orbits if nothing better is kept), the satellite chosen
+  // and the few others whose elements it fetched last. Each on each face
+  // it can be on (under body@face); a day chart's hour has an input of its
+  // own (body@face/hour).
+  var texts={},kept=[];
+  bodies().forEach(function(body){
+    if(body.indexOf('sat:')!==0)return;
+    var k=null;try{k=JSON.parse(localStorage.getItem('tle-'+body.slice(4)));}catch(error){}
+    if(k&&k.text)kept.push([body,k]);
+  });
+  kept.sort(function(a,b){return (b[1].fetched||0)-(a[1].fetched||0);});
+  var shown=['sun','moon','sat:36585','sat:42738',currentBody()];
+  kept.forEach(function(k){if(shown.length<11||k[0]===currentBody()){try{registerElements(k[1].text,'celestrak');if(shown.indexOf(k[0])<0)shown.push(k[0]);}catch(error){}}});
+  shown.filter(function(b,i){return shown.indexOf(b)===i;}).forEach(function(body){
+    var v=viewOf(body);
+    (FACE==='fuller'?['fuller']:v==='world'?['plotboard']:['enroute','plotboard']).forEach(function(f){
+      (v==='day'&&f!=='plotboard'?['day','hour']:['day']).forEach(function(span){
+        try{
+          texts[body+'@'+f+(span==='hour'?'/hour':'')]=chartInput({body:body,start:start,plate:setting('plate','enroute'),readout:readout()==='off'?false:readout(),numerals:setting('numerals','even'),margin:setting('margin','utc'),
+            span:span,tape:setting('tape','fixed'),transfer:setting('transfer','off'),figures:setting('figures','michroma'),corner:setting('corner','day'),also:also(),
+            events:calendarLink()?storedEvents():[],clock24:setting('clock24','1')!=='0',zone:timeZone,home:home(timeZone),projection:FACE==='fuller'?'fuller':'chart',face:f});
+        }catch(error){console.log('No preview for '+body+': '+error.message);}
+      });
     });
   });
   return {assets:PAGE_ASSETS,sunlight:SUNLIGHT.colors,texts:texts,minute:Number(parts.m)};
@@ -378,14 +418,18 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),bodyEnroute:setting('bodyEnroute','sun'),bodyPlotboard:setting('bodyPlotboard','sat:25544'),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
-      // (Each body with its chart and the minutes it takes a lap: the page
-      // says by them which face it is on, and why not the other.)
-      face:FACE,bodies:[['sun','Sun','Its ground point, where it stands overhead','hour',periodOf('sun')],['moon','Moon','In its calculated phase','hour',periodOf('moon')]].concat(
-        BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note,viewOf(b),c.period];})),
+      // (Each body with its chart, the minutes it takes a lap, its group and
+      // what the Plotboard shows of it: the page says by them which face it
+      // can be on and what each shows. The satellites added are the page's
+      // to list and to add to: elementsUrl is where it looks for more.)
+      face:FACE,bodies:[['sun','Sun','Its ground point, where it stands overhead','hour',periodOf('sun'),'','day'],['moon','Moon','In its calculated phase','hour',periodOf('moon'),'','day']].concat(
+        CATALOG.map(function(c){var b=bodyId(c.norad);return [b,c.code+' · '+c.name,c.note,viewOf(b),c.period,c.group,plotOf(b)];})),
+      groups:GROUPS,sats:addedSatellites().map(kept),
+      elementsUrl:setting('elementsUrl','https://celestrak.org/NORAD/elements/gp.php'),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),figureSets:FIGURE_SETS,preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
     // (Both in one pass: an event's title may spell either mark.)
@@ -400,10 +444,22 @@ Pebble.addEventListener('webviewclosed',function(e){
   var chosen;
   try{chosen=JSON.parse(e.response.charAt(0)==='{'?e.response:decodeURIComponent(e.response));}catch(error){console.log('Unreadable settings');return;}
   if(!chosen||typeof chosen!=='object')return;
-  if(BODIES.indexOf(chosen.body)>=0)localStorage.setItem('body',chosen.body);
-  // (Each of Groundtrack's two faces keeps the body it last showed.)
-  if(BODIES.indexOf(chosen.bodyEnroute)>=0)localStorage.setItem('bodyEnroute',chosen.bodyEnroute);
-  if(BODIES.indexOf(chosen.bodyPlotboard)>=0)localStorage.setItem('bodyPlotboard',chosen.bodyPlotboard);
+  // The satellites added from CelesTrak (each checked as it is taken), and
+  // the elements the page fetched for them, kept as the phone's own would
+  // be: it does not ask CelesTrak again for two hours.
+  if(Array.isArray(chosen.sats)){
+    forgetSatellites();
+    chosen.sats.slice(0,40).forEach(function(e){try{addSatellite(e);}catch(error){}});
+    localStorage.setItem('sats',JSON.stringify(addedSatellites().map(kept)));
+  }
+  if(chosen.tles&&typeof chosen.tles==='object')Object.keys(chosen.tles).slice(0,40).forEach(function(norad){
+    var text=chosen.tles[norad];
+    if(typeof text!=='string'||text.length>400||!known('sat:'+norad))return;
+    try{var e=registerElements(text,'celestrak');if(e.norad===Number(norad))localStorage.setItem('tle-'+norad,JSON.stringify({text:text,fetched:Date.now(),epoch:e.epoch}));}catch(error){}
+  });
+  if(known(chosen.body))localStorage.setItem('body',chosen.body);
+  if(chosen.face==='enroute'||chosen.face==='plotboard')localStorage.setItem('face',chosen.face);
+  if(Array.isArray(chosen.also))localStorage.setItem('also',chosen.also.filter(function(k){return k==='sun'||k==='moon';}).join(','));
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
   if(READOUTS.indexOf(chosen.readout)>=0)localStorage.setItem('readout',chosen.readout);
   if(NUMERALS.indexOf(chosen.numerals)>=0)localStorage.setItem('numerals',chosen.numerals);

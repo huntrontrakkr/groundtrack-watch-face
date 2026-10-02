@@ -24,11 +24,11 @@ void settings_load(WatchSettings *s){
   // the phone sends one.
   // The Sun on Groundtrack, the ISS on Fuller.
 #if defined(FACE_FULLER)
-  const WatchSettings defaults={7,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0};
+  const WatchSettings defaults={8,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0};
 #else
-  const WatchSettings defaults={7,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0};
+  const WatchSettings defaults={8,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0};
 #endif
-  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=7)*s=defaults;
+  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=8)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
@@ -151,9 +151,9 @@ void chart_needs(time_t now,const WatchSettings *s,ChartNeeds *n){
   const bool sat=s->body==BODY_SATELLITE;
   // On Groundtrack Fuller every chart is a rolling Fuller sheet, of the day
   // for the Sun and Moon.
-  n->view=(uint8_t)(sat?s->view:FACE_ROLL?VIEW_DAY:0);
+  n->view=(uint8_t)(sat||!FACE_ROLL?s->view:VIEW_DAY);
   n->start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);n->day_start=n->day_end=0;
-  const bool day=n->view==VIEW_DAY;
+  const bool day=n->view>=VIEW_DAY;
   if(day)local_day(now,&n->day_start,&n->day_end);
   const int64_t from=day&&n->day_start<n->start-2400?n->day_start:n->start-2400,to=day&&n->day_end>n->start+6000?n->day_end:n->start+6000;
   n->day0=(int32_t)q64(from,86400);n->day1=(int32_t)q64(to,86400);
@@ -180,7 +180,7 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
   const struct tm *lt=localtime(&now);
   memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
+  in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.also=s->also;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
   in.local_hour=lt->tm_hour;
   in.weekday=lt->tm_wday;in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
@@ -197,12 +197,12 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
   Days *const d_=s_days;
   #define days (*d_)
   days.n=days.nsat=0;days.pass_len[0]=days.pass_len[1]=0;
-  if(in.view==VIEW_DAY){
+  if(in.view>=VIEW_DAY){
     for(int k=0;k<27;k++){const time_t t=(time_t)(in.day_start+k*3600);in.day_hours[k]=(uint8_t)localtime(&t)->tm_hour;}
   }
   // The events on the chart's track.
   {uint8_t *const e=as->events;const int n=persist_read_data(EVENTS_KEY,e,sizeof as->events);
-  const int64_t from=in.view==VIEW_DAY?in.day_start:in.start-2400,to=in.view==VIEW_DAY?in.day_end:in.start+6000;
+  const int64_t from=in.view>=VIEW_DAY?in.day_start:in.start-2400,to=in.view>=VIEW_DAY?in.day_end:in.start+6000;
   for(int k=0;k+9<=n&&in.event_count<16;k+=9){
     const int64_t t=le32(e+k);if(t<from||t>to)continue;
     in.events[in.event_count].t=t;memcpy(in.events[in.event_count].name,e+k+4,5);in.events[in.event_count].name[5]=0;in.event_count++;

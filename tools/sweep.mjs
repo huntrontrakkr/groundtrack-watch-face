@@ -20,8 +20,15 @@ import {PLATES,FIGURE_SETS} from '../src/plates.js';
 import {registerLiveFixture} from '../tests/tle-fixture.mjs';
 import {registerNominal} from '../src/nominal.js';
 import {nameCode} from '../src/events.js';
+import {readFileSync} from 'node:fs';
+import {registerElements,elementsFor} from '../src/satellites.js';
 
 registerLiveFixture();registerNominal();
+// The catalog's other satellites, on CelesTrak's elements of 2 October 2026:
+// every kind of orbit (low, medium, a day long, standing still, oval, far).
+const LATER=[];
+{const l=readFileSync(new URL('../tests/fixtures/celestrak-2026-10-02.tle',import.meta.url),'utf8').trim().split('\n');
+for(let i=0;i+2<l.length;i+=3){const body='sat:'+Number(l[i+1].slice(2,7));if(!elementsFor(body)||elementsFor(body).source==='nominal'){registerElements(l.slice(i,i+3).join('\n')+'\n','fixture');LATER.push(body);}}}
 const args=process.argv.slice(2),starve=args[0]==='--starve',least=args[0]==='--heap',single=args[0]==='--case'?JSON.parse(args[1]):null;
 if(starve||least||single)args.shift();
 const count=Number(args[0])||(starve?12:300),seed=Number(args[1])||1;
@@ -40,21 +47,23 @@ const TITLES=['Run','Standup','Dinner','Launch','A very long event title indeed'
 const HOMES=[[90,0],[-90,0],[89.99,179.99],[-89.99,-180],[0,0],[0,180],[0,-180],[78.22,15.65],[-77.85,166.67],[66.56,25],[40.71,-74.01],[-33.87,151.21],[51.48,0],[1.35,103.82]];
 
 function randomCase(){
-  const fuller=chance(.35),sat=chance(.55),body=sat?pick(SATS):pick(['sun','moon']),zone=pick(ZONES);
+  const fuller=chance(.35),sat=chance(.6),later=sat&&chance(.5),body=later?pick(LATER):sat?pick(SATS):pick(['sun','moon']),zone=pick(ZONES);
   // Satellites inside the fixture's elements' three days; the Sun and Moon
   // anywhere from 2024 to 2037, or at one of the awkward dates.
-  let t=sat?Date.parse('2026-09-29T20:00:00Z')+Math.floor(rand()*60)*3600e3:chance(.4)?pick(DATES)+Math.floor(rand()*5-2)*3600e3:Date.parse('2024-01-01T00:00:00Z')+Math.floor(rand()*13*365.25*24)*3600e3;
+  let t=later?Date.parse('2026-10-02T12:00:00Z')+Math.floor(rand()*48)*3600e3:sat?Date.parse('2026-09-29T20:00:00Z')+Math.floor(rand()*60)*3600e3:chance(.4)?pick(DATES)+Math.floor(rand()*5-2)*3600e3:Date.parse('2024-01-01T00:00:00Z')+Math.floor(rand()*13*365.25*24)*3600e3;
   const c=clockParts(t,zone);t-=Number(c.m)*60e3;t-=t%60e3;
   const home=chance(.75)?(([lat,lon])=>({code:'HOM',name:'Home',lat,lon}))(chance(.5)?pick(HOMES):[Math.round((rand()*180-90)*100)/100,Math.round((rand()*360-180)*100)/100]):null;
   const events=[];
   if(chance(.4))for(let n=Math.floor(rand()*20);n>0;n--)events.push({epoch:t+Math.floor(rand()*150-45)*60e3,label:nameCode(pick(TITLES))});
   return {body,start:t,plate:pick(Object.keys(PLATES)),zone,home,projection:fuller?'fuller':'chart',readout:pick(['flag','callout',false]),numerals:pick(['colon','plain','even','mono','accent']),margin:pick(['utc','body']),
-    span:pick(['day','hour']),tape:pick(['fixed','tape','slide','clock','route']),transfer:pick(['off','vernier','comb','chevrons']),figures:pick(FIGURE_SETS)[0],corner:pick(['day','point','light']),clock24:chance(.5),events};
+    span:pick(['day','hour']),tape:pick(['fixed','tape','slide','clock','route']),transfer:pick(['off','vernier','comb','chevrons']),figures:pick(FIGURE_SETS)[0],corner:pick(['day','point','light']),clock24:chance(.5),events,
+    // (Groundtrack's face, and the Sun and Moon marked beside the body.)
+    face:pick(['enroute','plotboard']),also:pick([[],[],['sun'],['moon'],['sun','moon']])};
 }
 
 const face=c=>c.projection==='fuller'?'fuller':'enroute';
 // The watch's heap: what 128 KB leaves after each app and the system's share.
-const HEAPS={enroute:62100,fuller:62700};
+const HEAPS={enroute:62600,fuller:62400};
 // What a finished chart may keep: the heap less what drawing a minute
 // whole takes (about 11 KB, and 12 KB on a Fuller sheet; drawn over the
 // last, 3.6 KB more) and some to spare.

@@ -13,7 +13,7 @@
 // i32 day (days since 1970-01-01), then per series its coefficients as f32,
 // in SERIES order.
 import {Body,GeoVector,RotateVector,Rotation_EQJ_EQD,EquatorFromVector,SiderealTime,Illumination,MoonPhase} from 'astronomy-engine';
-import {elementsFor,propagatePosition,freshFor} from './satellites.js';
+import {elementsFor,propagatePosition,freshFor,catalogEntry,plotFor} from './satellites.js';
 
 export const DAY=86400000;
 export const SERIES=[['sunLat',10],['sunLon',10],['moonLat',10],['moonLon',10],['moonFraction',8],['moonPhase',8],['sunDistance',4],['moonDistance',8]];
@@ -91,8 +91,9 @@ export function segmentMoonLight(t){
 
 // Satellites the same way: their SGP4 positions from the phone's element
 // set as segments, which the browser draws from too, so the watch and the
-// browser agree to the bit. A segment spans an hour for a low orbit (a
-// period under 225 minutes, SGP4's own boundary) and six hours otherwise,
+// browser agree to the bit. A segment spans an hour for an orbit that is
+// somewhere fast (a low one, or an oval one's low end: satellites.js
+// plotFor) and six hours otherwise,
 // with the sub-satellite latitude and unwrapped longitude (14 terms each)
 // and the altitude in km (8). SGP4's geodetic latitude is itself only good to
 // about 5e-5°; the segments are within about 0.03° of it for the ISS and
@@ -101,7 +102,12 @@ export const SAT_SERIES=[['lat',14],['lon',14],['altitude',8]];
 // Bytes: i32 catalog number, first second, span and the elements' epoch (in
 // Unix seconds), then the coefficients as f32 in SAT_SERIES order.
 export const SAT_SEGMENT_BYTES=16+4*SAT_SERIES.reduce((n,[,k])=>n+k,0);
-export function satelliteSpan(body){return 2*Math.PI/elementsFor(body).satrec.no<225?3600:21600;}
+// (By the catalog's account of the orbit where it has one, as the chart is
+// chosen: a day's chart needs the six-hour segments.)
+export function satelliteSpan(body){
+  const e=elementsFor(body),c=catalogEntry(body);
+  return (c?plotFor(c.period,c.ecc):plotFor(2*Math.PI/e.satrec.no,e.satrec.ecco))==='hour'?3600:21600;
+}
 export function fitSatelliteSegment(body,start,span){
   const m=22,nodes=[];
   for(let k=0;k<m;k++){const u=Math.cos(Math.PI*(k+.5)/m),p=propagatePosition(body,(start+(u+1)/2*span)*1000);nodes.push({u,v:{lat:p.lat,lon:p.lon,altitude:p.altitude}});}

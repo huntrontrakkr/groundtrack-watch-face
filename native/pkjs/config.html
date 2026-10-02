@@ -63,11 +63,20 @@
   [hidden]{display:none!important}
   .field{display:block;padding:6px 14px}
   .field input{width:100%;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px -apple-system,system-ui,Roboto,sans-serif;color:var(--ink)}
-  #others>summary{padding:12px 14px;font-size:14px;opacity:.8;cursor:pointer}
-  #unsuited{list-style:none;margin:0;padding:0 14px 6px}
-  #unsuited li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid #edf1f5;font-size:13px;opacity:.75}
-  #unsuited strong{font-size:14px;font-weight:500}
-  #unsuited span{flex:none}
+  details.sub>summary{display:flex;align-items:baseline;gap:8px;padding:12px 14px;cursor:pointer;list-style:none;font-weight:600;font-size:15px}
+  details.sub>summary::-webkit-details-marker{display:none}
+  details.sub>summary::after{content:'+';margin-left:auto;font:600 16px/1 ui-monospace,Menlo,monospace;color:var(--route)}
+  details.sub[open]>summary::after{content:'−'}
+  details.sub>summary small{font-weight:400;font-size:13px;opacity:.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  label.row.off{opacity:.5}
+  label.row button.drop{flex:none;padding:6px 10px;border:1px solid var(--line);background:var(--water);color:var(--ink);font-size:13px}
+  .find{display:flex;gap:8px;padding:6px 14px}
+  .find input{flex:1;min-width:0;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px -apple-system,system-ui,Roboto,sans-serif;color:var(--ink)}
+  .find button{flex:none;padding:10px 14px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
+  #found{list-style:none;margin:0;padding:0 14px}
+  #found li button{display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
+  #found small{display:block;opacity:.7}
+  #face-why{color:var(--route);opacity:1}
   #places{list-style:none;margin:0;padding:0 14px}
   #places li button{display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
   #places small{display:block;opacity:.7}
@@ -87,25 +96,36 @@
 <p id="preview-note" class="note" style="text-align:center"></p>
 <form id="form">
   <details class="card" id="sec-face" open><summary><span class="title">Face</span><span class="now" id="now-face"></span></summary>
-    <p class="note field">Groundtrack is two faces. Each follows the bodies it suits and has settings of its own.</p>
-    <label class="row"><input type="radio" name="face" value="enroute"><span class="name">Enroute<span class="note">The hour as a chart: the route across a zoomed map, from this hour's compass rose to the next. For the Sun, the Moon and the slow, high satellites.</span></span></label>
-    <label class="row"><input type="radio" name="face" value="plotboard"><span class="name">Plotboard<span class="note">Mission control's wall: the orbit across a band of the whole world, the hour in a panel above. For the fast, low satellites.</span></span></label>
+    <p class="note field">Groundtrack is two faces, each with settings of its own. What you follow says which can show it.</p>
+    <label class="row"><input type="radio" name="face" value="enroute"><span class="name">Enroute<span class="note">The hour as a chart: the route across a zoomed map, from this hour's compass rose to the next. For the Sun, the Moon and the slower, higher satellites.</span></span></label>
+    <label class="row"><input type="radio" name="face" value="plotboard"><span class="name">Plotboard<span class="note">Mission control's wall: the route across a band of the whole world, the time in a panel above. A fast satellite's hour; the whole day of the Sun, the Moon and the slow ones.</span></span></label>
+    <p class="note field" id="face-why" hidden></p>
   </details>
   <details class="card" id="sec-follow" open><summary><span class="title">Follow</span><span class="now" id="now-follow"></span></summary>
     <div class="group" id="bodies"></div>
-    <details class="group" id="others"><summary id="others-title"></summary><p class="note field" id="others-why"></p><ul id="unsuited"></ul></details>
+    <div id="groups"></div>
+    <div class="group" id="find-group"><h3>Any other satellite</h3>
+      <p class="note field">Its name, its catalog number, or a CelesTrak link to a satellite or a list of them.</p>
+      <div class="find"><input id="find" type="search" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="NOAA 19, or 33591" aria-label="A satellite's name, catalog number or CelesTrak link"><button type="button" id="find-go">Search</button></div>
+      <ul id="found"></ul>
+      <p class="note field" id="find-note">The search goes to CelesTrak, which keeps the orbit of everything tracked round the Earth.</p>
+    </div>
+    <div class="group" id="also-group"><h3>Also marked on the chart</h3>
+      <label class="row"><input type="checkbox" name="also" value="sun"><span class="name">The Sun<span class="note">Where it stands overhead, when that is on the chart</span></span></label>
+      <label class="row"><input type="checkbox" name="also" value="moon"><span class="name">The Moon<span class="note">In its phase, where it stands overhead</span></span></label>
+    </div>
   </details>
   <details class="card" id="sec-chart" open><summary><span class="title" id="chart-title">Chart</span><span class="now" id="now-chart"></span></summary>
     <p class="note field" id="chart-note"></p>
-    <div class="group" id="span-group"><h3>QZSS's chart</h3>
-      <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">Its figure-8, the day's hours along it</span></span></label>
-      <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">Zoomed far in over Japan or Australia</span></span></label>
+    <div class="group" id="span-group"><h3>The chart</h3>
+      <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">The shape it draws over its part of the world, the day's hours along it</span></span></label>
+      <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">Zoomed far in on the hour's short run</span></span></label>
     </div>
     <div class="group" id="tape-group"><h3>The panel above the world</h3>
       <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Ruler<span class="note">The hour as a fixed ruler, a pointer moving along it</span></span></label>
       <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Sliding tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
-      <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Sliding tape and world<span class="note">The map scrolls too, the satellite always under the pointer. Drawn whole each minute, which costs battery</span></span></label>
-      <label class="row"><input type="radio" name="tape" value="route"><span class="name">The route's ruler<span class="note">A ruler as long as the hour's run across the world: each minute's mark stands over that minute's place on the orbit, the pointer over the satellite</span></span></label>
+      <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Sliding tape and world<span class="note">The map scrolls too, the body always under the pointer. Drawn whole each minute, which costs battery</span></span></label>
+      <label class="row"><input type="radio" name="tape" value="route"><span class="name">The route's ruler<span class="note" id="route-note"></span></span></label>
       <label class="row"><input type="radio" name="tape" value="clock"><span class="name">Clock<span class="note">The time in large figures instead of a scale</span></span></label>
     </div>
     <div class="group" id="readout-group"><h3 id="readout-title">The minute, marked on the route</h3>
@@ -178,32 +198,40 @@
 <script>
 (function(){
   // Filled in by the phone app: {face ('enroute': Groundtrack, its two
-  // faces; 'fuller'), settings, bodies: [[key, name, note, view, period]]
-  // (the Sun, the Moon and the satellites; view: the body's chart, 'hour',
-  // 'day' or 'world'; period: the minutes it takes a lap), plates and
-  // figureSets: [[key, name, note]], events (the calendar's, as last read)
-  // and calendarStatus, preset (the zone's city) and position (the phone's
-  // fix {lat, lon} or null)}.
+  // faces; 'fuller'), settings, bodies: [[key, name, note, view, period,
+  // group, plot]] (the Sun, the Moon and the catalog's satellites; view:
+  // the body's own chart, 'hour', 'day', 'world' or 'still'; period: the minutes it
+  // takes a lap; plot: what the Plotboard shows of it, its 'hour' or its
+  // 'day'), groups: [[key, title]], sats (the satellites added from
+  // CelesTrak: [{norad, name, code, period, ecc, still}]) and elementsUrl (where
+  // more are looked for), plates and figureSets: [[key, name, note]],
+  // events (the calendar's, as last read) and calendarStatus, preset (the
+  // zone's city) and position (the phone's fix {lat, lon} or null)}.
   var config=__CONFIG__,form=document.getElementById('form'),fuller=config.face==='fuller';
-  // Which settings a chart takes, and which face a body is on:
-  // src/settings-rules.js, as the phone and the tests have it.
+  // Which settings a chart takes, which face a body can be on and how an
+  // orbit is charted: src/settings-rules.js, as the phone and the tests
+  // have it.
   var RULES=(function(){__RULES__
-    return {settingsFor:settingsFor,faceOf:faceOf,unsuited:unsuited,UNSUITED:UNSUITED};})();
+    return {settingsFor:settingsFor,faceFor:faceFor,unsuited:unsuited,lapOf:lapOf,chartFor:chartFor,plotFor:plotFor,standsStill:standsStill,codeFor:codeFor};})();
   document.getElementById('title').textContent=fuller?'Groundtrack Fuller':'Groundtrack';
   // The settings as they stand on this page. A setting the chart in view
-  // does not take keeps its value, for the charts that do; each of
-  // Groundtrack's two faces keeps the body it last followed.
-  var s={},views={},periods={};
-  ['body','plate','figures','readout','numerals','corner','margin','span','tape','transfer'].forEach(function(k){s[k]=config.settings[k];});
+  // does not take keeps its value, for the charts that do; the face asked
+  // for is kept while a satellite too fast for it is on the other.
+  var s={},info={};
+  ['body','face','plate','figures','readout','numerals','corner','margin','span','tape','transfer'].forEach(function(k){s[k]=config.settings[k];});
   s.clock24=config.settings.clock24!=='0';
-  config.bodies.forEach(function(b){views[b[0]]=b[3];periods[b[0]]=b[4];});
-  function on(face,body){return body in views&&RULES.faceOf(views[body])===face;}
-  s.face=fuller?'fuller':RULES.faceOf(views[s.body]);
-  s.bodyOf={enroute:on('enroute',config.settings.bodyEnroute)?config.settings.bodyEnroute:'sun',plotboard:on('plotboard',config.settings.bodyPlotboard)?config.settings.bodyPlotboard:'sat:25544'};
-  if(!fuller)s.bodyOf[s.face]=s.body;
+  s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
+  config.bodies.forEach(function(b){info[b[0]]={name:b[1],note:b[2],view:b[3],period:b[4],group:b[5],plot:b[6]};});
+  // (A satellite added from CelesTrak is charted by its orbit, as the
+  // catalog's are.)
+  function added(e){info['sat:'+e.norad]={name:e.code+' · '+e.name,note:'Catalog number '+e.norad+'. Round the Earth in '+RULES.lapOf(e.period)+'.',view:e.still?'still':RULES.chartFor(e.period,e.ecc),period:e.period,group:'yours',plot:RULES.plotFor(e.period,e.ecc)};}
+  s.sats.forEach(added);
+  if(!info[s.body])s.body=fuller?'sat:25544':'sun';
+  function face(){return fuller?'fuller':RULES.faceFor(s.face,info[s.body].view);}
   var KINDS={hour:['Hour chart','The route across the map for this hour, from the compass rose to the next hour\'s point.'],
     day:['Whole-day chart','The whole day\'s route on one chart, the time beside the body.'],
-    world:['World band','The orbit across a band of the whole world, with the tracking stations; the hour in a panel above.']};
+    world:['World band','The hour\'s run across a band of the whole world, with the tracking stations; the hour in a panel above.'],
+    worldday:['World band, the whole day','The day\'s route across a band of the whole world, marked in hours; the time in a panel above.']};
   if(fuller){KINDS.hour=['Hour sheet','The hour\'s route on a Fuller map unrolled along it.'];KINDS.day=['Whole-day sheet','The day\'s route on a Fuller map unrolled along it, the time beside the body.'];}
   var FACES={enroute:'Enroute',plotboard:'Plotboard',fuller:'Sheet'};
   if(fuller)document.getElementById('sec-face').remove();
@@ -218,19 +246,40 @@
   }
   config.plates.forEach(function(p){document.getElementById('plates').appendChild(row('plate',p[0],p[1],p[2]));});
   (config.figureSets||[]).forEach(function(f){document.getElementById('figure-sets').appendChild(row('figures',f[0],f[1],f[2]));});
-  // The bodies the face in view follows, and under them the ones it does
-  // not, each with why (and where it is).
+  // The bodies: the Sun and Moon, then the satellites in their groups (the
+  // chosen one's open), each with the laps it takes and, on Groundtrack,
+  // the faces that can show it; last the ones added from CelesTrak, which
+  // can be dropped.
+  function bodyRow(key){
+    var b=info[key],fast=!fuller&&b.view==='world';
+    var r=row('body',key,b.name,(fuller?KINDS[RULES.settingsFor('fuller',key,b.view,{span:'day'}).chart][0]+'. ':'')+short(b.note)+(fuller||key==='sun'||key==='moon'?'':(fast?' Plotboard.':' Either face.')));
+    return r;
+  }
   function bodies(){
-    var list=document.getElementById('bodies'),rest=document.getElementById('unsuited');list.textContent='';rest.textContent='';
-    config.bodies.forEach(function(b){
-      var why=fuller?'':RULES.unsuited(s.face,b[3],b[4]);
-      if(!why){list.appendChild(row('body',b[0],b[1],(fuller?KINDS[RULES.settingsFor('fuller',b[0],b[3],{span:'day'}).chart][0]+'. ':'')+short(b[2])));return;}
-      var li=document.createElement('li'),name=document.createElement('strong'),text=document.createElement('span');
-      name.textContent=b[1].split(' · ').pop();text.textContent=why;li.appendChild(name);li.appendChild(text);rest.appendChild(li);
+    var top=document.getElementById('bodies'),groups=document.getElementById('groups');top.textContent='';groups.textContent='';
+    ['sun','moon'].forEach(function(k){top.appendChild(bodyRow(k));});
+    config.groups.concat([['yours','Your satellites']]).forEach(function(g){
+      var keys=Object.keys(info).filter(function(k){return info[k].group===g[0];});
+      if(!keys.length)return;
+      var d=document.createElement('details'),sum=document.createElement('summary'),names=document.createElement('small');
+      d.className='group sub';d.id='group-'+g[0];d.open=keys.indexOf(s.body)>=0;
+      sum.textContent=g[1]+' ';names.textContent=keys.length+(g[0]==='yours'?'':' · '+keys.slice(0,4).map(function(k){return info[k].name.split(' · ')[0];}).join(', ')+(keys.length>4?'…':''));sum.appendChild(names);d.appendChild(sum);
+      keys.forEach(function(k){
+        var r=bodyRow(k);
+        if(g[0]==='yours'){
+          var drop=document.createElement('button');drop.type='button';drop.className='drop';drop.textContent='Remove';
+          drop.addEventListener('click',function(e){
+            e.preventDefault();
+            s.sats=s.sats.filter(function(x){return 'sat:'+x.norad!==k;});delete info[k];delete s.tles[k.slice(4)];
+            if(s.body===k)s.body=fuller?'sat:25544':'sun';
+            bodies();render();paint();
+          });
+          r.appendChild(drop);
+        }
+        d.appendChild(r);
+      });
+      groups.appendChild(d);
     });
-    document.getElementById('others').hidden=!rest.childNodes.length;
-    document.getElementById('others-title').textContent='Not on '+(s.face==='enroute'?'Enroute':'the Plotboard')+' ('+rest.childNodes.length+')';
-    document.getElementById('others-why').textContent=RULES.UNSUITED[s.face]||'';
   }
   function radios(name){var e=form.elements[name];return e?(e.length===undefined?[e]:[].slice.call(e)):[];}
   function picked(name){var r=radios(name);for(var i=0;i<r.length;i++)if(r[i].checked)return r[i].value;return null;}
@@ -240,33 +289,41 @@
   }
   function hide(id,hidden){document.getElementById(id).hidden=hidden;}
   function label(name){var c=form.querySelector('input[name='+name+']:checked');return c?c.parentNode.querySelector('.name').firstChild.nodeValue.trim():'';}
-  function rules(){return RULES.settingsFor(config.face,s.body,views[s.body],{span:s.span,readout:s.readout,tape:s.tape});}
-  var drawnFace=null;
+  function rules(){return RULES.settingsFor(face(),s.body,info[s.body].view,{span:s.span,readout:s.readout,tape:s.tape,plot:info[s.body].plot});}
   function render(){
-    if(drawnFace!==s.face){bodies();drawnFace=s.face;}
-    var r=rules(),kind=KINDS[r.chart],world=r.chart==='world';
-    if(!fuller){show('face',s.face);document.getElementById('now-face').textContent=FACES[s.face];}
+    var r=rules(),kind=KINDS[r.chart],world=r.chart==='world'||r.chart==='worldday',daily=r.chart==='worldday',sat=s.body.indexOf('sat:')===0;
+    if(!fuller){
+      // A satellite too fast for Enroute is on the Plotboard, and says why.
+      var why=RULES.unsuited('enroute',info[s.body].view,info[s.body].period);
+      show('face',face());document.getElementById('now-face').textContent=FACES[face()];
+      radios('face').forEach(function(f){f.disabled=f.value==='enroute'&&!!why;f.parentNode.classList.toggle('off',f.disabled);});
+      document.getElementById('face-why').hidden=!why;document.getElementById('face-why').textContent=why?info[s.body].name.split(' · ').pop()+' is on the Plotboard. '+why:'';
+    }
+    // (The Sun or Moon followed is not marked beside itself.)
+    radios('also').forEach(function(a){a.checked=s.also.indexOf(a.value)>=0;a.parentNode.hidden=a.value===s.body;});
+    document.getElementById('route-note').textContent=daily?'A ruler of the day: each hour\'s mark stands over the body\'s place at that hour, the pointer over the body':'A ruler as long as the hour\'s run across the world: each minute\'s mark stands over that minute\'s place on the orbit, the pointer over the satellite';
     show('body',s.body);show('plate',s.plate);show('figures',s.figures);show('margin',s.margin);
-    document.getElementById('chart-title').textContent=FACES[s.face];
+    document.getElementById('chart-title').textContent=FACES[face()];
     document.getElementById('chart-note').textContent=kind[0]+'. '+kind[1];
     hide('span-group',!r.span);show('span',s.span);
     hide('tape-group',!r.tape);show('tape',s.tape);
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
     hide('readout-group',!r.readout.length);show('readout',r.readoutShown,r.readout);
-    document.getElementById('readout-title').textContent=world?'The minute, marked on the orbit':'The minute, marked on the route';
+    document.getElementById('readout-title').textContent=world?'The minute, marked on the panel':'The minute, marked on the route';
     var fixed=document.getElementById('readout-fixed');
     fixed.hidden=!!r.readout.length;
     fixed.textContent=r.chart==='day'?'The whole-day chart always carries the time in full beside the body.':'The panel carries the time. (Under a ruler the minute can also be marked with a flag.)';
     hide('numerals-group',!r.numerals);show('numerals',s.numerals);
     document.getElementById('numerals-title').textContent=world?'The clock\'s figures':'The time\'s figures';
     show('corner',s.corner==='light'&&!r.light?'day':s.corner,r.light?null:['day','point']);
-    document.getElementById('corner-day').firstChild.nodeValue=world?'The satellite\'s height':'Day of the year';
-    document.getElementById('corner-day').lastChild.textContent=world?'ISS 411 KM':'DAY 270';
+    document.getElementById('corner-day').firstChild.nodeValue=world&&sat?'The satellite\'s height':'Day of the year';
+    document.getElementById('corner-day').lastChild.textContent=world&&sat?'ISS 411 KM':'DAY 270';
     // Each section's settings in a line, read with the section closed.
     document.getElementById('plate-note').textContent=named(config.plates,s.plate)[2];
     document.getElementById('figures-note').textContent=named(config.figureSets||[],s.figures)[2];
-    document.getElementById('now-follow').textContent=named(config.bodies,s.body)[1].split(' · ')[0];
+    var marked=s.also.filter(function(k){return k!==s.body;}).map(function(k){return k==='sun'?'Sun':'Moon';});
+    document.getElementById('now-follow').textContent=info[s.body].name.split(' · ')[0]+(marked.length?' · with the '+marked.join(' and '):'');
     document.getElementById('now-chart').textContent=[r.span?label('span'):null,r.tape?label('tape'):null,r.readout.length?label('readout'):null].filter(Boolean).join(' · ')||kind[0];
     document.getElementById('now-time').textContent=(s.clock24?'24-hour':'12-hour')+' · '+(s.margin==='body'?'Zone time':'Zulu');
     document.getElementById('now-look').textContent=named(config.plates,s.plate)[1]+' · '+named(config.figureSets||[],s.figures)[1];
@@ -274,11 +331,79 @@
   form.addEventListener('change',function(e){
     var t=e.target;
     if(t.name==='clock24')s.clock24=t.checked;
-    else if(t.name==='face'){s.face=t.value;s.body=s.bodyOf[s.face];}
-    else if(t.name==='body'){s.body=t.value;if(!fuller)s.bodyOf[s.face]=s.body;}
+    else if(t.name==='also')s.also=radios('also').filter(function(a){return a.checked;}).map(function(a){return a.value;});
     else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;
     render();
   });
+  // ---- Any other satellite, from CelesTrak: by name, by catalog number,
+  // or by a CelesTrak link (to one satellite or to a list). Its answer is
+  // element sets, three lines each; a satellite chosen is added with the
+  // set it came with, which the phone keeps as if it had fetched it.
+  var findBox=document.getElementById('find'),foundList=document.getElementById('found'),findNote=document.getElementById('find-note'),findAsked=0,findKept={};
+  function findUrl(q){
+    var base=config.elementsUrl;
+    if(/^\d{1,6}$/.test(q))return base+'?CATNR='+q+'&FORMAT=TLE';
+    if(/^https?:\/\//i.test(q)){
+      // (CelesTrak's own links only, asked for as element sets.)
+      if(!/^https:\/\/([a-z0-9-]+\.)?celestrak\.(org|com)\//i.test(q)&&q.indexOf(base)!==0)return null;
+      if(/[?&]FORMAT=/i.test(q))q=q.replace(/([?&])FORMAT=[^&]*/i,'$1FORMAT=TLE');else if(q.indexOf('?')>=0)q+='&FORMAT=TLE';
+      return q;
+    }
+    return base+'?NAME='+encodeURIComponent(q.slice(0,60))+'&FORMAT=TLE';
+  }
+  function elementSets(text){
+    var lines=String(text).split(/\r?\n/),out=[];
+    for(var i=0;i+1<lines.length;i++){
+      var l1=lines[i],l2=lines[i+1];
+      if(l1.slice(0,2)!=='1 '||l2.slice(0,2)!=='2 '||l1.length<69||l2.length<69||l1.slice(2,7)!==l2.slice(2,7))continue;
+      var norad=Number(l1.slice(2,7)),motion=parseFloat(l2.slice(52,63)),ecc=parseFloat('0.'+l2.slice(26,33).trim()),incl=parseFloat(l2.slice(8,16)),title=i>0&&!/^[12] /.test(lines[i-1])?lines[i-1].replace(/^0 /,'').trim():'';
+      if(!(norad>0)||!(motion>0.001)||!(ecc>=0&&ecc<1))continue;
+      out.push({norad:norad,name:(title||'Satellite '+norad).slice(0,40),period:Math.round(14400/motion)/10,ecc:Math.round(ecc*1000)/1000,still:RULES.standsStill(1440/motion,ecc,incl),tle:(title||'Satellite '+norad)+'\n'+l1.slice(0,69)+'\n'+l2.slice(0,69)+'\n'});
+      i++;
+    }
+    return out;
+  }
+  function choose(e){
+    var key='sat:'+e.norad;
+    if(!info[key]){
+      if(s.sats.length>=40){findNote.textContent='Forty satellites are kept at most: remove one first.';return;}
+      var entry={norad:e.norad,name:e.name,code:RULES.codeFor(e.name),period:e.period,ecc:e.ecc,still:e.still};
+      s.sats.push(entry);added(entry);
+    }
+    s.tles[e.norad]=e.tle;s.body=key;
+    foundList.textContent='';findBox.value='';findNote.textContent=e.name+' chosen.'+(info[key].group==='yours'?' It is kept under Your satellites.':'');
+    bodies();render();paint();
+  }
+  function listFound(list,message){
+    foundList.textContent='';
+    list.slice(0,50).forEach(function(e){
+      var li=document.createElement('li'),b=document.createElement('button'),more=document.createElement('small');
+      b.type='button';b.textContent=e.name;
+      more.textContent='Catalog number '+e.norad+' · round the Earth in '+RULES.lapOf(e.period)+(fuller?'':RULES.chartFor(e.period,e.ecc)==='world'?' · Plotboard':' · either face');b.appendChild(more);
+      b.addEventListener('click',function(){choose(e);});
+      li.appendChild(b);foundList.appendChild(li);
+    });
+    findNote.textContent=message;
+  }
+  function find(){
+    var q=findBox.value.trim(),mine=++findAsked;
+    if(!/^\d+$/.test(q)&&q.length<3){listFound([],'Three letters or more, or a catalog number.');return;}
+    var url=findUrl(q);
+    if(!url){listFound([],'Only CelesTrak\'s links can be read here (https://celestrak.org/…).');return;}
+    function answer(list){if(mine===findAsked)listFound(list,!list.length?'Nothing found at CelesTrak by that. It lists what is in orbit now, under the names it uses (NOAA 19, not NOAA-19).':list.length>50?list.length+' found: the first fifty shown. A longer name finds fewer.':'Choose the one you mean.');}
+    // (The same question is not put to CelesTrak twice.)
+    if(findKept[url]){answer(findKept[url]);return;}
+    if(!window.fetch){listFound([],'The search is not available here.');return;}
+    findNote.textContent='Asking CelesTrak…';
+    var stop=typeof AbortController==='function'?new AbortController():null,late=setTimeout(function(){if(stop)stop.abort();},20000);
+    fetch(url,stop?{signal:stop.signal}:{})
+      .then(function(r){if(!r.ok)throw new Error('search');return r.text();})
+      .then(function(text){findKept[url]=elementSets(text);answer(findKept[url]);})
+      .catch(function(){if(mine===findAsked)listFound([],'CelesTrak is out of reach. The satellites listed above need no search.');})
+      .then(function(){clearTimeout(late);});
+  }
+  document.getElementById('find-go').addEventListener('click',find);
+  findBox.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();find();}});
   // ---- Home: a place of one's own (searched for, the phone's own, or its
   // coordinates), the time zone's city, or none.
   var home=null;try{home=config.settings.home?JSON.parse(config.settings.home):null;}catch(e){}
@@ -390,13 +515,14 @@
     set('tape',TAPES.indexOf(s.tape));set('transfer',TRANSFERS.indexOf(s.transfer));
     set('figures',(config.figureSets||[]).map(function(f){return f[0];}).indexOf(s.figures));
     set('corner',CORNERS.indexOf(s.corner));set('clock24',s.clock24?1:0);
+    set('also',(s.also.indexOf('sun')>=0?1:0)|(s.also.indexOf('moon')>=0?2:0));
     if(picked('home')==='none')set('home',0);
     return lines.join('\n');
   }
   function paint(){
     if(!core)return;
-    // (QZSS's hour has its own input.)
-    var text=PV.texts[s.body+(rules().span&&s.span==='hour'?'/hour':'')]||PV.texts[s.body];
+    // (Each face has its own input, and a day chart's hour another.)
+    var text=PV.texts[s.body+'@'+face()+(rules().span&&s.span==='hour'?'/hour':'')];
     var box=document.querySelector('.preview');
     if(!text){box.style.display='none';note('No preview of this satellite yet: the phone has not fetched its orbit. It will once you save.');return;}
     box.style.display='';
@@ -419,7 +545,7 @@
     });
     note('');
   }
-  render();
+  bodies();render();
   // (Whatever stops the preview, a throw included, stops only the preview:
   // Save and Cancel below are still wired.)
   new Promise(function(done){done(boot());}).then(paint).catch(function(error){document.querySelector('.preview').style.display='none';console.log(error&&error.message);});
@@ -436,7 +562,9 @@
     }
     var link=form.elements.calendar.value.trim();
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
-    close(JSON.stringify({body:s.body,bodyEnroute:s.bodyOf.enroute,bodyPlotboard:s.bodyOf.plotboard,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    // (The elements that came with the satellites added here go with them.)
+    var tles={};s.sats.forEach(function(e){if(s.tles[e.norad])tles[e.norad]=s.tles[e.norad];});if(s.tles[s.body.slice(4)])tles[s.body.slice(4)]=s.tles[s.body.slice(4)];
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,sats:s.sats,tles:tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

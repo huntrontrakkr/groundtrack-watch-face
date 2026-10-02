@@ -34,14 +34,15 @@ test.after(()=>rmSync(dir,{recursive:true,force:true}));
 // runs every satellite on today's elements.)
 const TLE_FILE=process.env.WATCH_TLE||'tests/fixtures/celestrak-2026-09-29.tle';
 if(process.env.WATCH_TLE){const {registerElements}=await import('../src/satellites.js');const l=readFileSync(TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<l.length;i+=3)registerElements(l.slice(i,i+3).join('\n')+'\n','celestrak');}
-const TLES=Object.fromEntries(readFileSync(TLE_FILE,'utf8').trim().split('\n').reduce((sets,line,i)=>{if(i%3===0)sets.push([]);sets.at(-1).push(line);return sets;},[]).map(l=>[Number(l[1].slice(2,7)),l.join('\n')+'\n']));
-// The watch's heap: what its 128 KB leaves after the app (about 64.7 KB of
-// code and data on Groundtrack, 64.0 on Fuller) and the system's own share,
+const sets=file=>Object.fromEntries(readFileSync(file,'utf8').trim().split('\n').reduce((sets,line,i)=>{if(i%3===0)sets.push([]);sets.at(-1).push(line);return sets;},[]).map(l=>[Number(l[1].slice(2,7)),l.join('\n')+'\n']));
+let TLES=sets(TLE_FILE);
+// The watch's heap: what its 128 KB leaves after the app (about 64.1 KB of
+// code and data on Groundtrack, 64.3 on Fuller) and the system's own share,
 // as the emulator reports it free when a build starts, with the lettering's
 // glyphs; modelled as the watch's is (native/host/heap_model.h), a block
 // taking the first stretch that holds it, so a heap left in pieces by a
 // build fails here as it does there. The tests run in 2 KB less.
-const HEAPS={enroute:62100+1687-2000,fuller:62700+1687-2000};
+const HEAPS={enroute:62600+1687-2000,fuller:62400+1687-2000};
 // What the app holds for its life: the lettering's glyphs (1,679 bytes, in a
 // block of the heap's).
 const GLYPHS=1688;
@@ -100,7 +101,7 @@ async function answer(w,ph,rounds=4){
 // A phone's storage for a case: its settings, home, events and (kept as
 // fetched an hour before) the fixture's elements.
 function storage(c,t){
-  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',
+  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),
     home:c.home?JSON.stringify({lat:c.home.lat,lon:c.home.lon}):JSON.stringify({none:true}),events:JSON.stringify((c.events||[]).map(([minutes,title])=>({epoch:t+minutes*60000,title,label:nameCode(title)})))};
   // (Events come from a calendar's link: read a moment ago, as the phone keeps it.)
   if((c.events||[]).length){s.calendar='https://calendar.example/private/basic.ics';s['calendar-fetched']=String(t);}
@@ -122,7 +123,7 @@ const what=(face,c,t)=>`${face} ${JSON.stringify(c)} at ${new Date(t).toISOStrin
 async function expected(face,c,t){
   const r=await renderer();
   r.render({body:c.body,epoch:t,timeZone:c.zone,clock24:c.clock24!==false,plate:c.plate||'enroute',readout:c.readout==='off'?false:c.readout||'flag',numerals:c.numerals||'even',zone:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',
-    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart'});
+    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart',face:c.face,also:c.also||[]});
   return Buffer.from(r.last.frame);
 }
 async function same(face,c,w,label){
@@ -183,15 +184,19 @@ test('a new watch, sent what it asks for, draws its hour as the core draws the p
 });
 
 test('every satellite draws on each face, each in every form its chart takes',{skip:!cc&&'no C compiler',timeout:900000},async()=>{
-  const t=Date.parse(process.env.WATCH_NOW||'2026-09-30T13:07:00Z'),{CATALOG,viewOf}=await import('../src/satellites.js');
-  for(const face of ['enroute','fuller'])for(const entry of CATALOG){
-    const body='sat:'+entry.norad,world=face==='enroute'&&viewOf(body)==='world';
-    const forms=world?[{tape:'fixed',readout:'flag'},{tape:'tape'},{tape:'slide'},{tape:'clock',readout:'callout'}]:viewOf(body)==='day'?[{span:'day'},{span:'hour',readout:'callout'}]:[{readout:'flag'},{readout:'callout'}];
+  const t=Date.parse(process.env.WATCH_NOW||'2026-09-30T13:07:00Z'),{viewOf}=await import('../src/satellites.js');
+  // (The app: Groundtrack, on Enroute or the Plotboard, or Groundtrack
+  // Fuller. The Sun and Moon too, on the Plotboard and marked beside.)
+  for(const app of ['enroute','fuller'])for(const body of ['sun','moon',...Object.keys(TLES).map(n=>'sat:'+n)]){
+    const sat=body.startsWith('sat:'),fast=viewOf(body)==='world';
+    const band=[{tape:'fixed',readout:'flag'},{tape:'tape',also:['sun','moon']},{tape:'slide',also:['moon']},{tape:'clock',readout:'callout'},{tape:'route',also:['sun']}].map(f=>({face:'plotboard',...f}));
+    const chart=viewOf(body)==='day'?[{span:'day'},{span:'hour',readout:'callout'}]:[{readout:'flag',also:['sun','moon']},{readout:'callout'}];
+    const forms=app==='fuller'?(sat?chart:[{also:['sun','moon']}]):fast?band:sat?[...chart.map(f=>({face:'enroute',...f})),...band]:band;
     for(const form of forms){
-      const c={body,zone:'America/New_York',home:NY,plate:'console',...form,t0:t},label=what(face,c,t);
-      const {w}=await fresh(face,c,t);
+      const c={body,zone:'America/New_York',home:NY,plate:'console',...form,t0:t},label=what(app,c,t);
+      const {w}=await fresh(app,c,t);
       assert.equal(w.state.chart,true,`${label}: the screen holds ${JSON.stringify(w.state.note)}`);
-      await same(face,c,w,label);
+      await same(app,c,w,label);
       await w.close();
     }
   }
@@ -275,5 +280,33 @@ test('settings changed while a chart is being built, and a watch short of memory
     const {w:s}=await fresh(face,c,t,heap);
     assert.ok(s.state.chart||s.state.note,`${face} with ${heap} bytes`);
     assert.ok(await s.close()<=GLYPHS,`${face} with ${heap} bytes holds memory at the close`);
+  }
+});
+
+// (Last: it puts the whole catalog on October's elements.)
+test('the whole catalog draws: every satellite listed, on each face that can show it',{skip:!cc&&'no C compiler',timeout:1800000},async()=>{
+  // CelesTrak's elements of 2 October 2026 for every satellite in the
+  // catalog: the low orbits, the navigation satellites' twelve hours, the
+  // geostationary ones standing still, a Molniya orbit, and the far ones
+  // days long. Each is followed from a new watch on the Plotboard, on
+  // Enroute where its orbit suits it, and on Groundtrack Fuller, and draws
+  // what the core draws from the phone's input.
+  const {CATALOG,viewOf,registerElements}=await import('../src/satellites.js');
+  TLES=sets('tests/fixtures/celestrak-2026-10-02.tle');
+  for(const text of Object.values(TLES))registerElements(text,'fixture');
+  assert.equal(Object.keys(TLES).length,CATALOG.length);
+  const t=Date.parse('2026-10-02T19:07:00Z'),tapes=['fixed','tape','slide','route','clock'];let n=0;
+  for(const entry of CATALOG){
+    const body='sat:'+entry.norad,fast=viewOf(body)==='world';
+    const cases=[['enroute',{face:'plotboard',tape:tapes[n%5],also:n%2?['sun','moon']:[]}],['fuller',{readout:n%2?'flag':'callout'}]];
+    if(!fast)cases.push(['enroute',{face:'enroute',span:n%2?'hour':'day',readout:n%3?'flag':'callout'}]);
+    n++;
+    for(const [app,form] of cases){
+      const c={body,zone:n%2?'Asia/Tokyo':'America/New_York',home:n%2?{lat:35.68,lon:139.69}:NY,plate:n%3?'enroute':'console',...form,t0:t},label=`${entry.code} ${what(app,c,t)}`;
+      const {w}=await fresh(app,c,t);
+      assert.equal(w.state.chart,true,`${label}: the screen holds ${JSON.stringify(w.state.note)}`);
+      await same(app,c,w,label);
+      await w.close();
+    }
   }
 });

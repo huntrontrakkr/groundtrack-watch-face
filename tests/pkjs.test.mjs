@@ -9,6 +9,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import vm from 'node:vm';
 import {HOMES} from '../src/home.js';
+import {CATALOG} from '../src/satellites.js';
 
 // (The phone's waits pass a thousand times as fast, in their order; one of
 // an hour or more, the calendar's next reading, never comes.)
@@ -139,7 +140,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
     // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0]},{Events:[0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0]},{Events:[0]}]));
     // The browser's other options, as set: a time callout in Departure Mono,
     // the 12-hour clock, the nautical zone; QZSS on the hour chart.
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
@@ -210,7 +211,7 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
     // How the tape's minutes fall on the route: the settings' 25th byte.
     for(const [transfer,code] of [['vernier',1],['comb',2],['chevrons',3],['wavy',0]]){
       const p=phone(bundle,now,{timeZone:'UTC',transfer});p.listeners.ready({});await p.quiet();
-      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,27);assert.equal(set[24],code);
+      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,28);assert.equal(set[24],code);
     }
     // The margins' corner: the last byte, the day of the year for one the
     // phone doesn't know.
@@ -244,8 +245,12 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
     assert.doesNotThrow(()=>new vm.Script(script),'the page\'s script parses');
     assert.equal(JSON.parse(/var config=(\{.*?\}),form=document/s.exec(html)[1]).events[0].title,'__PREVIEW__ __CONFIG__ </script>\u2028');
     // (Each with the chart its body has: the settings page's rules go by it.)
-    assert.deepEqual(config.bodies.map(b=>b[0]).sort(),['moon','sat:20580','sat:25544','sat:36585','sat:42738','sat:43013','sat:48274','sat:49260','sun']);
-    assert.deepEqual(Object.fromEntries(config.bodies.map(b=>[b[0],b[3]])),{sun:'hour',moon:'hour','sat:25544':'world','sat:48274':'world','sat:20580':'world','sat:49260':'world','sat:43013':'world','sat:36585':'hour','sat:42738':'day'});
+    // (Each with its own chart, its group and what the Plotboard shows of it.)
+    assert.deepEqual(config.bodies.map(b=>b[0]),['sun','moon',...CATALOG.map(c=>'sat:'+c.norad)]);
+    const about=Object.fromEntries(config.bodies.map(b=>[b[0],[b[3],b[5],b[6]]]));
+    assert.deepEqual([about.sun,about.moon,about['sat:25544'],about['sat:43013'],about['sat:36585'],about['sat:42738'],about['sat:40296']],
+      [['hour','','day'],['hour','','day'],['world','stations','hour'],['world','weather','hour'],['hour','navigation','day'],['day','navigation','day'],['hour','curios','hour']]);
+    assert.deepEqual([config.groups.length,config.sats,config.settings.face,config.settings.also,config.elementsUrl],[8,[],'enroute',[],'https://celestrak.org/NORAD/elements/gp.php']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -326,6 +331,69 @@ test('Groundtrack Fuller\'s phone side: every body, each satellite\'s hour a Ful
     listeners.showConfiguration({});for(let i=0;i<300&&!opened;i++)await new Promise(r=>setTimeout(r,20));
     const config=JSON.parse(/var config=(\{.*?\}),form=document/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
     assert.equal(config.face,'fuller');
-    assert.deepEqual(config.bodies.map(b=>b[0]),['sun','moon','sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585','sat:42738']);
+    assert.deepEqual(config.bodies.map(b=>b[0]),['sun','moon',...CATALOG.map(c=>'sat:'+c.norad)]);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('Groundtrack\'s two faces, the Sun and Moon beside the body, and satellites from elsewhere',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
+  try{
+    const bundle=bundled(dir),now=Date.parse('2026-10-02T19:07:00Z'),today=Math.floor(now/86400000);
+    const run=(stored,answer=()=>null,at=now)=>{
+      const requests=[],listeners={},messages=[];let pending=0;
+      class XMLHttpRequest{open(method,url){this.url=url;}send(){requests.push(this.url);pending++;setTimeout(()=>{pending--;const a=answer(this.url);if(a){this.status=200;this.responseText=a;this.onload();}else this.onerror();},1);}}
+      const context=vm.createContext({console:{log:()=>{}},XMLHttpRequest,
+        setTimeout:(f,ms)=>{if(ms>=3600000)return 0;pending++;setTimeout(()=>{pending--;f();},Math.min(ms/1000,50));return 1;},clearTimeout:()=>{},
+        localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:(k,v)=>{stored[k]=String(v);},removeItem:k=>{delete stored[k];}},
+        Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},sendAppMessage:(m,ok)=>{messages.push(m);pending++;setTimeout(()=>{pending--;ok();},0);}}});
+      vm.runInContext(`Date.now=()=>${at};`,context);vm.runInContext(bundle,context);
+      const quiet=async()=>{for(let idle=0;idle<3;){await new Promise(r=>setTimeout(r,20));idle=pending?0:idle+1;}};
+      return {requests,listeners,messages,quiet,stored};
+    };
+    const settings=async stored=>{const p=run({timeZone:'UTC',...stored});p.listeners.ready({});await p.quiet();return p.messages.find(m=>m.Settings).Settings;};
+    // The chart the watch is told (byte 17: a station's bit, and twice the
+    // view): on Enroute the hour chart (0) or the whole day (2); on the
+    // Plotboard the hour's run (1) of the fast, the day's (3) of the slow.
+    // A fast satellite is on the Plotboard whichever face was asked for, and
+    // one in an oval orbit there shows its hour.
+    for(const [stored,view] of [[{body:'sun'},0],[{body:'sun',face:'plotboard'},3<<1],[{body:'moon',face:'plotboard'},3<<1],[{body:'sat:36585'},0],[{body:'sat:36585',face:'plotboard'},3<<1],
+      [{body:'sat:25544',face:'enroute'},1|1<<1],[{body:'sat:43013'},1<<1],[{body:'sat:42738'},2<<1],[{body:'sat:42738',span:'hour'},0],[{body:'sat:42738',face:'plotboard',span:'hour'},3<<1],
+      [{body:'sat:60133',face:'plotboard'},3<<1],[{body:'sat:60133',span:'hour'},2<<1],[{body:'sat:40296'},0],[{body:'sat:40296',face:'plotboard'},1<<1],[{body:'sat:54755',face:'plotboard'},1<<1],[{body:'sat:54755',face:'nonsense'},1<<1],[{body:'sat:40296',face:'nonsense'},0]])
+      assert.equal((await settings(stored))[17],view,JSON.stringify(stored));
+    // The Sun and Moon beside the body: the settings' last byte.
+    for(const [also,bits] of [['sun',1],['moon',2],['sun,moon',3],['mars',0]])assert.deepEqual(Array.from(await settings({body:'sat:25544',also})).slice(27),[bits],also);
+    // A satellite added on the settings page: followed by its number, under
+    // the code its name gave it; one neither listed nor added is not.
+    const sats=JSON.stringify([{norad:33591,name:'NOAA 19',code:'NOA',period:101.9,ecc:0},{nonsense:true}]);
+    {const set=await settings({body:'sat:33591',sats});
+    assert.deepEqual([set[0],set[13]|set[14]<<8|set[15]<<16,set[17],String.fromCharCode(...set.slice(18,21))],[2,33591,1<<1,'NOA']);}
+    assert.equal((await settings({body:'sat:33591'}))[0],0);
+    // The page's answer: the satellites added are kept (each checked), with
+    // the elements the page fetched for them, which then serve for two
+    // hours without CelesTrak being asked.
+    const HIMAWARI=readFileSync('tests/fixtures/celestrak-name-himawari.txt','utf8').split(/\r?\n/).slice(30,33).map((l,i)=>i?l:l.trim()).join('\n')+'\n';
+    assert.match(HIMAWARI,/^HIMAWARI-8\n1 40267U /);
+    const p=run({timeZone:'UTC'},()=>{throw new Error('no request expected');});
+    p.listeners.webviewclosed({response:JSON.stringify({body:'sat:40267',face:'plotboard',also:['moon','mars'],sats:[{norad:40267,name:'HIMAWARI-8',code:'HIM',period:1436.2,ecc:0,still:true},{norad:25544,name:'x',period:93},{norad:'x'}],
+      tles:{40267:HIMAWARI,25544:HIMAWARI,99:'nonsense'}})});await p.quiet();
+    assert.deepEqual([p.stored.body,p.stored.face,p.stored.also,JSON.parse(p.stored.sats)],['sat:40267','plotboard','moon',[{norad:40267,name:'HIMAWARI-8',code:'HIM',period:1436.2,ecc:0,still:true}]]);
+    assert.deepEqual([JSON.parse(p.stored['tle-40267']).fetched,'tle-25544' in p.stored,'tle-99' in p.stored],[now,false,false]);
+    {const set=p.messages.find(m=>m.Settings).Settings;assert.deepEqual([set[13]|set[14]<<8|set[15]<<16,set[17],String.fromCharCode(...set.slice(18,21)),set[27]],[40267,3<<1,'HIM',2]);}
+    p.messages.length=0;p.listeners.appmessage({payload:{DataRequest:today,DataBody:40267}});await p.quiet();
+    // (Its day on the Plotboard: six-hour segments, from a day back.)
+    {const {SAT_SEGMENT_BYTES}=await import('../src/segments.js'),segs=p.messages.filter(m=>m.SatSegments).flatMap(m=>m.SatSegments),view=new DataView(Uint8Array.from(segs).buffer);
+    assert.ok(segs.length>=12*SAT_SEGMENT_BYTES);
+    assert.deepEqual([view.getInt32(0,true),view.getInt32(8,true)],[40267,21600]);
+    assert.ok(view.getInt32(4,true)<=now/1000-24*3600);}
+    assert.equal(p.requests.length,0);
+    // A slow satellite with no elements to be had: the watch is told so (GPS
+    // and QZSS alone have nominal orbits to fall back on).
+    {const q=run({timeZone:'UTC',body:'sat:37846'});q.listeners.appmessage({payload:{DataRequest:today,DataBody:37846}});await q.quiet();
+    assert.ok(q.messages.some(m=>m.Status==='NO ELEMENTS: NET'));assert.ok(!q.messages.some(m=>m.SatSegments));}
+    // CelesTrak's newest elements three weeks old: they are what there is,
+    // and are sent (the watch marks them EL OLD by their epoch).
+    {const old=readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').split('\n').slice(0,3).join('\n')+'\n',late=Date.parse('2026-10-20T12:00:00Z');
+    const q=run({timeZone:'UTC',body:'sat:25544'},()=>old,late);q.listeners.appmessage({payload:{DataRequest:Math.floor(late/86400000),DataBody:25544}});await q.quiet();
+    assert.ok(q.messages.some(m=>m.SatSegments));assert.ok(!q.messages.some(m=>m.Status));}
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

@@ -70,7 +70,7 @@ typedef struct Night {
 // Lettering and leaders go through one list of pixels, drawn one at a
 // time. The longest is a satellite's pass line: 24 characters of at most 24
 // pixels each.
-typedef struct {int16_t x,y;} Px;
+typedef EnrPx Px;
 #define SCRATCH 640
 // The minute renderer's working memory, taken for each drawing only: a
 // chart is built while none is drawn, and has it then. Two nights: the
@@ -526,12 +526,13 @@ static void draw_circle(Ctx *c){
 }
 
 // The body's own symbol on a knockout.
-static void draw_body(Ctx *c){
+// A body's symbol at a place: the chart's own body, or the Sun or Moon
+// marked beside it.
+static void draw_mark(Ctx *c,int body,int mx,int my){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
-  const int mx=js_round(m->mx),my=js_round(m->my);
   const uint8_t mk=s->zoned[ENR_MARK][zone_at(c,mx,my)];
   for(int dy=-7;dy<=7;dy++)for(int dx=-7;dx<=7;dx++)if(dx*dx+dy*dy<=6.6*6.6)clear(c,mx+dx,my+dy);
-  if(s->body==ENR_SUN&&s->hal){
+  if(body==ENR_SUN&&s->hal){
     // HAL 9000's eye: a chrome ring, the dark lens, the red eye and its
     // hot centre (GColor8: AAAAAA, 555555, AA0000, FF0000, FFAA00, FFFFAA).
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++){
@@ -539,17 +540,17 @@ static void draw_body(Ctx *c){
       const uint8_t col=d<=2?0xFE:d<=5?0xF8:d<=13?0xF0:d<=20?0xE0:d<=29?0xD5:d<=43?0xEA:0;
       if(col)plot(c,mx+dx,my+dy,col);
     }
-  }else if(s->body==ENR_SUN){
+  }else if(body==ENR_SUN){
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++){const int d=dx*dx+dy*dy;if(d<=5.2*5.2&&d>3.6*3.6)plot(c,mx+dx,my+dy,mk);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++)if(dx*dx+dy*dy<=1.5*1.5)plot(c,mx+dx,my+dy,mk);
-  }else if(s->body==ENR_MOON){
+  }else if(body==ENR_MOON){
     const enr_real r=5.2,f=m->moon_fraction;
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++){
       if(dx*dx+dy*dy>r*r)continue;
       const enr_real rest=r*r-dy*dy,edge=(enr_real)f_sqrt(rest>0?rest:0),side=m->waxing?dx:-dx;
       if(side>=(1-2*f)*edge||dx*dx+dy*dy>(r-1.2)*(r-1.2))plot(c,mx+dx,my+dy,mk);
     }
-  }else if(s->body==ENR_SATELLITE){
+  }else if(body==ENR_SATELLITE){
     for(int k=-1;k<=1;k++)for(int d=-1;d<=1;d++)plot(c,mx+d,my+k,mk);
     for(int side=-1;side<=1;side+=2){
       for(int k=2;k<=3;k++)plot(c,mx+side*k,my,mk);
@@ -560,11 +561,13 @@ static void draw_body(Ctx *c){
     for(int k=-2;k<=2;k++)for(int d=-1;d<=1;d++)plot(c,mx+d,my+k,mk);
   }
 }
+static void draw_body(Ctx *c){draw_mark(c,c->s->body,js_round(c->m->mx),js_round(c->m->my));}
 
 // Lettering in Departure Mono, and the chart's knockout under it.
+// (The lettering's glyphs, widths and pixels serve the builder too.)
 static const EnrGlyph *glyph(char ch){const int k=enr_font_index(ch);return k>=0&&ENR_FONT_GLYPHS?&ENR_FONT_GLYPHS[k]:0;}
-static int text_width(const char *text,int n){int w=0;for(int i=0;i<n;i++){const EnrGlyph *g=glyph(text[i]);if(g)w+=g->advance;}return w;}
-static int text_pixels(const char *text,int n,int x,int baseline,Px *out){
+int enr_text_width(const char *text,int n){int w=0;for(int i=0;i<n;i++){const EnrGlyph *g=glyph(text[i]);if(g)w+=g->advance;}return w;}
+int enr_text_pixels(const char *text,int n,int x,int baseline,Px *out){
   int count=0,cx=x;
   #define PUT(px) do{if(count<SCRATCH-128)out[count++]=(px);}while(0)
   for(int i=0;i<n;i++){
@@ -618,7 +621,7 @@ static void draw_flag(Ctx *c){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
   const int mx=js_round(m->mx),my=js_round(m->my);
   const enr_real nx=s->normal_x,ny=s->normal_y;
-  const int tw=text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
+  const int tw=enr_text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
   const enr_real room=s->forward>0?s->c1x-mx:mx-s->c1x;
   const int sx=js_round(mx+nx*20),top=js_round(my+ny*20)-(ny<=0?4:0)-(ny>0?fh-4:0);
   const int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
@@ -631,24 +634,26 @@ static void draw_flag(Ctx *c){
   letter(c,px,n,ENR_ROUTE,1);
   // The minutes in a colour that stands off the pennant's ink, not the
   // ground showing through.
-  Px *const digits=work->scratch_px+SCRATCH;const int k=text_pixels(m->minute,2,d>0?sx+4:sx-fw+2,top+10,digits);
+  Px *const digits=work->scratch_px+SCRATCH;const int k=enr_text_pixels(m->minute,2,d>0?sx+4:sx-fw+2,top+10,digits);
   for(int i=0;i<k;i++){const int x=digits[i].x,y=digits[i].y;plot(c,x,y,on_ink(s,s->zoned[ENR_ROUTE][zone_at(c,x,y)]));}
 }
 
 // The world band's tape: the route's ink filled along the baseline up to
 // the index, and the index itself, over the tape's graduations.
+static void draw_transfer(Ctx *c);
 static void draw_index(Ctx *c){
   const EnrScene *s=c->s;const int B=s->tape_baseline,ix=c->m->index;
   const uint8_t fill=s->zoned[ENR_ROUTE][0];
   for(int x=s->tape_x0;x<=s->tape_x1;x++)if((s->forward>0?x<=ix:x>=ix)&&(class_at(c,x,B+1)>>4)==L_PLAIN)plot(c,x,B+1,fill);
   for(int k=0;k<6;k++)for(int d=-k;d<=k;d++)plot(c,ix+d,B-7+k,s->space);
   for(int k=0;k<5;k++)for(int d=-k;d<=k;d++)plot(c,ix+d,B-6+k,s->space_ink);
+  draw_transfer(c);
 }
 // With the minute flag, the minutes stand over the index instead.
 static void draw_readout(Ctx *c){
-  const EnrScene *s=c->s;const int lw=text_width(c->m->minute,2),want=js_round(c->m->index-lw/(enr_real)2);
+  const EnrScene *s=c->s;const int lw=enr_text_width(c->m->minute,2),want=js_round(c->m->index-lw/(enr_real)2);
   const int lx=want>s->tape_hi?s->tape_hi:want,x=lx<s->tape_lo?s->tape_lo:lx;
-  const int n=text_pixels(c->m->minute,2,x,s->tape_baseline-10,scratch);
+  const int n=enr_text_pixels(c->m->minute,2,x,s->tape_baseline-10,scratch);
   for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,s->space_ink);
 }
 // Of what was drawn after the body, what the browser draws after the minute
@@ -672,8 +677,8 @@ static void draw_late(Ctx *c,const int *box,bool flag){
 static void draw_text(Ctx *c,const char *text,int max,int x,int right,int baseline){
   int len=0;while(len<max&&text[len])len++;
   if(!len)return;
-  if(right)x=right-text_width(text,len);
-  letter(c,scratch,text_pixels(text,len,x,baseline,scratch),ENR_INK,1);
+  if(right)x=right-enr_text_width(text,len);
+  letter(c,scratch,enr_text_pixels(text,len,x,baseline,scratch),ENR_INK,1);
 }
 // The day's time callout (renderEnroute's callout() with `aside`, in the
 // 'colon' figures): the hour in Jost, a colon and the minutes smaller on
@@ -791,6 +796,35 @@ static void set_time(Ctx *c,const Glyph *g,int n,int fx,int fy){
 // edges like any tape.
 static void sliding_figures(Ctx *c,int which);
 static int slide_offset(const EnrScene *s,const EnrMinute *m);
+// How the tape's minutes of this hour fall on the route, in a strip under
+// the panel: the route's own minutes ticked (a vernier), a stroke from each
+// five minutes leaning toward its place on the route (a comb), or chevrons
+// where the route squeezes the minutes (in) or stretches them (out). Under
+// the sliding tape each minute's mark stands PX from the last; under the
+// fixed ruler where its index stands that minute. (The strip is the band's:
+// drawn at its turned columns.)
+static void draw_transfer(Ctx *c){
+  const EnrScene *s=c->s;const int now=(int)(c->m-s->minutes),IX=W/2,PX=3;const uint8_t ink=s->space_ink;
+  if(!s->transfer)return;
+  const bool sliding=s->flags&ENR_SLIDING_TAPE;const int off=slide_offset(s,c->m),t0=TAPE_P+1;
+  #define RX(m) ((int)js_round(s->minutes[m].mx)-off)
+  #define AX(m) (sliding?IX+((m)-now)*PX:s->minutes[m].index)
+  for(int m=0;m<60;m++){
+    const int a=AX(m);int r=RX(m);
+    if(sliding){r=(r+W)%W;if(a<3||a>=W-3)continue;}
+    else if(r<0||r>=W)continue;
+    if(s->transfer==1){const int len=m%15==0?5:m%5==0?3:1;for(int d=0;d<len;d++)plot(c,r+off,t0+d,ink);}
+    else if(m%5)continue;
+    else if(s->transfer==2){int lean=(r-a)/6;lean=lean>4?4:lean<-4?-4:lean;for(int d=0;d<6;d++)plot(c,a+lean*d/5+off,t0+d,ink);}
+    else if(m>0&&m<59){
+      // (Against the tape's own two minutes, the route's: more or fewer.)
+      const int step=abs(RX(m+1)-RX(m-1)),tape=abs(AX(m+1)-AX(m-1)),in=step*10<tape*7,out=step*10>tape*14;
+      if((in||out)&&step<W/2)for(int j=0;j<3;j++){const int dx=in?(j==1?2:3):(j==1?3:2);plot(c,a-dx+off,t0+1+j,ink);plot(c,a+dx+off,t0+1+j,ink);}
+    }
+  }
+  #undef AX
+  #undef RX
+}
 static void draw_sliding_tape(Ctx *c){
   const EnrScene *s=c->s;const int B=TAPE_B,P=TAPE_P,IX=W/2,PX=3,now=(int)(c->m-s->minutes);const uint8_t fill=s->zoned[ENR_ROUTE][0],ink=s->space_ink;
   for(int y=0;y<P;y++)for(int x=0;x<W;x++)plot(c,x,y,s->space);
@@ -799,31 +833,10 @@ static void draw_sliding_tape(Ctx *c){
     const int x=IX+(m-now)*PX,mm=((m%60)+60)%60,len=mm==0?12:mm%15==0?6:mm%5==0?4:2;
     for(int d=1;d<=len;d++)plot(c,x,B+d,ink);
     if(mm==0)for(int d=1;d<=6;d++)plot(c,x,B-d,ink);
-    else if(mm%15==0){char label[2]={(char)('0'+mm/10),(char)('0'+mm%10)};const int lw=text_width(label,2),n=text_pixels(label,2,x-lw/2+1,B+17,scratch);for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,ink);}
+    else if(mm%15==0){char label[2]={(char)('0'+mm/10),(char)('0'+mm%10)};const int lw=enr_text_width(label,2),n=enr_text_pixels(label,2,x-lw/2+1,B+17,scratch);for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,ink);}
   }
   sliding_figures(c,0);
-  // How the tape's minutes of this hour fall on the route, in a strip under
-  // the panel: the route's own minutes ticked (a vernier), a stroke from
-  // each five minutes leaning toward its place on the route (a comb), or
-  // chevrons where the route squeezes the minutes (in) or stretches them
-  // (out). (The strip is the band's: drawn at its turned columns.)
-  if(s->transfer){
-    const int off=slide_offset(s,c->m),t0=P+1;
-    #define RX(m) (((int)js_round(s->minutes[m].mx)-off+W)%W)
-    for(int m=0;m<60;m++){
-      const int a=IX+(m-now)*PX,r=RX(m);
-      if(a<3||a>=W-3)continue;
-      if(s->transfer==1){const int len=m%15==0?5:m%5==0?3:1;for(int d=0;d<len;d++)plot(c,r+off,t0+d,ink);}
-      else if(m%5)continue;
-      else if(s->transfer==2){int lean=(r-a)/6;lean=lean>4?4:lean<-4?-4:lean;for(int d=0;d<6;d++)plot(c,a+lean*d/5+off,t0+d,ink);}
-      else if(m>0&&m<59){
-        // (A minute of the tape is PX pixels: of the route, more or fewer.)
-        const int step=abs(RX(m+1)-RX(m-1)),in=step*10<2*PX*7,out=step*10>2*PX*14;
-        if((in||out)&&step<W/2)for(int j=0;j<3;j++){const int dx=in?(j==1?2:3):(j==1?3:2);plot(c,a-dx+off,t0+1+j,ink);plot(c,a+dx+off,t0+1+j,ink);}
-      }
-    }
-    #undef RX
-  }
+  draw_transfer(c);
   for(int y=0;y<P-1;y++)plot(c,IX,y,fill);
   for(int kk=0;kk<6;kk++)for(int d=-kk;d<=kk;d++)plot(c,IX+d,B-7+kk,s->space);
   for(int kk=0;kk<5;kk++)for(int d=-kk;d<=kk;d++)plot(c,IX+d,B-6+kk,ink);
@@ -967,7 +980,7 @@ static int minute_boxes(Ctx *c,Box *out){
     Glyph g[8];int k,fx,fy,shown;if(callout_place(c,g,&k,&fx,&fy,&shown))out[n++]=glyph_bounds(s,g,k,fx,fy,-W,2*W);
   }else if(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_MINUTE_FLAG)){
     const int mx=js_round(m->mx),my=js_round(m->my);const enr_real nx=s->normal_x,ny=s->normal_y;
-    const int tw=text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
+    const int tw=enr_text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
     const enr_real room=s->forward>0?s->c1x-mx:mx-s->c1x;
     const int sx=js_round(mx+nx*20),top=js_round(my+ny*20)-(ny<=0?4:0)-(ny>0?fh-4:0);
     const int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
@@ -983,7 +996,7 @@ static int minute_boxes(Ctx *c,Box *out){
     // The panel's clock: events' names give way to it.
     out[n++]=(Box){4,2,W-8,TAPE_P-4};
   }else if(VIEW_IS_WORLD(s->view)&&(s->flags&ENR_MINUTE_FLAG)){
-    const int lw=text_width(m->minute,2),want=js_round(m->index-lw/(enr_real)2),lx=want>s->tape_hi?s->tape_hi:want;
+    const int lw=enr_text_width(m->minute,2),want=js_round(m->index-lw/(enr_real)2),lx=want>s->tape_hi?s->tape_hi:want;
     out[n++]=(Box){lx<s->tape_lo?s->tape_lo:lx,s->tape_baseline-18,lw,8};
   }
   return n;
@@ -1001,7 +1014,7 @@ static void draw_events(Ctx *c){
     if(!free)continue;
     boxes[nb++]=(Box){b[0],b[1],b[2],b[3]};
     int len=0;while(len<5&&s->events[k].name[len])len++;
-    letter(c,scratch,text_pixels(s->events[k].name,len,s->events[k].lx,s->events[k].y-7,scratch),ENR_INK,1);
+    letter(c,scratch,enr_text_pixels(s->events[k].name,len,s->events[k].lx,s->events[k].y-7,scratch),ENR_INK,1);
   }
 }
 
@@ -1009,7 +1022,7 @@ static void draw_events(Ctx *c){
 // its flag (or the tape's index and minutes), what was drawn over them, then
 // the margins' Zulu time, pass line and height. PART_ALL draws them all; a
 // single part is drawn alone, to measure where it goes.
-enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PARTS};
+enum {PART_ALL,PART_SUN,PART_MOON,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PARTS};
 // The sliding band: how far its columns are turned at a minute (the body's
 // column comes under the index, W/2), and the rows turned (the band and
 // the route, between the tape's panel and the bottom margin). What stands
@@ -1029,6 +1042,8 @@ static void slide_rows(uint8_t *frame,int stride,int off){
 static void draw_moving(Ctx *c,int part){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=VIEW_IS_WORLD(s->view),flag=(s->flags&ENR_MINUTE_FLAG)&&VIEW_IS_HOUR(s->view);
   if(part==PART_CIRCLE){draw_circle(c);return;}
+  // The Sun and Moon beside the body, under it.
+  for(int k=0;k<2;k++)if((!part||part==PART_SUN+k)&&m->also[k][0]<255)draw_mark(c,k,m->also[k][0],m->also[k][1]);
   if(!part||part==PART_BODY){
     // The body, then what lies over it; the flag, then what lies over that.
     Ctx box=*c;box.measure=true;
@@ -1174,8 +1189,10 @@ static __attribute__((noinline)) void moved(const EnrScene *scene,int from,int m
   // What moved: where it was and where it is, each part on its own. Home's
   // acquisition circle moves only when the satellite's height moves it.
   const bool circle=scene->minutes[from].circle!=scene->minutes[minute].circle;
-  for(int k=0;k<2;k++)for(int part=PART_BODY;part<PARTS;part++){
+  for(int k=0;k<2;k++)for(int part=PART_SUN;part<PARTS;part++){
     if(part==PART_CIRCLE&&!circle)continue;
+    // (The Sun and Moon beside the body move a pixel in some minutes.)
+    if(part<PART_BODY&&!memcmp(scene->minutes[from].also[part-PART_SUN],scene->minutes[minute].also[part-PART_SUN],2))continue;
     Ctx c={scene,&scene->minutes[k?minute:from],frame,row_stride,{0,0,0},0,true,{W,H,-1,-1},NULL};
     c.n=k?&work->night[0]:&work->night[1];draw_moving(&c,part);box_blocks(c.box,mask);
   }
@@ -1221,12 +1238,11 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]){
   out[0]=out[1]=out[2]=out[3]=0;
   Work w;memset(&w,0,sizeof w);Px px[SCRATCH+DIGITS];w.scratch_px=px;work=&w;
-  const int k=text_pixels(text,n,x,baseline,scratch);int x0=W,y0=H,x1=-1,y1=-1;
+  const int k=enr_text_pixels(text,n,x,baseline,scratch);int x0=W,y0=H,x1=-1,y1=-1;
   for(int i=0;i<k;i++){const Px p=scratch[i];x0=p.x<x0?p.x:x0;y0=p.y<y0?p.y:y0;x1=p.x>x1?p.x:x1;y1=p.y>y1?p.y:y1;}
   if(x1>=x0){out[0]=(int16_t)x0;out[1]=(int16_t)y0;out[2]=(int16_t)(x1-x0+1);out[3]=(int16_t)(y1-y0+1);}
   work=NULL;
 }
-int enr_text_width(const char *text,int n){return text_width(text,n);}
 int enr_class(const EnrScene *scene,int x,int y){
   if(x<0||y<0||x>=W||y>=H)return -1;
   return run_class(row_runs_of(scene,y),x);

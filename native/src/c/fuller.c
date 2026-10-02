@@ -113,6 +113,8 @@ void fuller_track_next(const FullerCam *cam,FullerCell *tile,const double d[3],d
   double w[3],p[2];fuller_forward(cam->g,tile->face,d,w);flat_point(w,tile->tri,p);fuller_to_screen(cam,p,x,y);
 }
 // rollCamera().
+// Two degrees, in the net's unit (a face's edge, 63.4 degrees).
+#define STILL 0.0315
 bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const double (*dirs)[3],int count,int i0,int i1,bool day,double span,double *xs,double *ys){
   memset(cam,0,sizeof *cam);cam->g=g;int cell_count=0;
   const double S3=g->S3;
@@ -133,7 +135,10 @@ bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const dou
   const double a[2]={xs[ia],ys[ia]},b[2]={xs[ib],ys[ib]};
   // (A route of no length, a body standing still, runs east.)
   const double l0=hypot2(b[0]-a[0],b[1]-a[1]),len=l0>0?l0:1;
-  cam->ux=l0>0?(b[0]-a[0])/len:1;cam->uy=(b[1]-a[1])/len;cam->scale=span/len;cam->mid[0]=(a[0]+b[0])/2;cam->mid[1]=(a[1]+b[1])/2;
+  cam->ux=l0>0?(b[0]-a[0])/len:1;cam->uy=(b[1]-a[1])/len;
+  // (A route that hardly moves, a satellite standing still, is not drawn
+  // larger than two degrees to the sheet: there is no map so near.)
+  cam->scale=span/(l0>STILL?l0:STILL);cam->mid[0]=(a[0]+b[0])/2;cam->mid[1]=(a[1]+b[1])/2;
   if(day){
     // Fit the whole day's arc, and centre it.
     double s0=INFINITY,s1=-INFINITY,t0=INFINITY,t1=-INFINITY;
@@ -141,7 +146,8 @@ bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const dou
       const double rs=xs[i]*cam->ux+ys[i]*cam->uy,rt=-xs[i]*cam->uy+ys[i]*cam->ux;
       s0=rs<s0?rs:s0;s1=rs>s1?rs:s1;t0=rt<t0?rt:t0;t1=rt>t1?rt:t1;
     }
-    const double fs=span/(s1-s0),dt=t1-t0,ft=110/(1e-9>dt?1e-9:dt);cam->scale=fs<ft?fs:ft;
+    // (Nor a day's shape larger than twelve degrees to the sheet.)
+    const double ds=s1-s0,dt=t1-t0,fs=span/(ds>6*STILL?ds:6*STILL),ft=110/(dt>4*STILL?dt:4*STILL);cam->scale=fs<ft?fs:ft;
     const double sc=(s0+s1)/2,tc=(t0+t1)/2;cam->mid[0]=sc*cam->ux-tc*cam->uy;cam->mid[1]=sc*cam->uy+tc*cam->ux;
   }
   // The floating net: two rings of faces round the route, nearest the

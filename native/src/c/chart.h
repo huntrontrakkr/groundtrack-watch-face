@@ -45,6 +45,7 @@ typedef struct {
   int figures;               // the figure set (FIGURE_SETS in src/plates.js: 0 Jost)
   bool zone_body;            // the margin's time in the nautical zone under the body, not Zulu
   int tape;                  // the world band's time scale: 0 fixed, 1 a sliding tape, 2 the world sliding too, 3 a clock
+  int also;                  // the Sun (1) and the Moon (2) marked beside the body
   int transfer;              // on the fixed tape, how its minutes fall on the route: 0 off, 1 vernier, 2 comb, 3 chevrons
   // Events, set on the route as compulsory reporting points: their times
   // (Unix seconds) and five-letter name codes.

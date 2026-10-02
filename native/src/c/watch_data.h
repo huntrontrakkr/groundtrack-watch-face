@@ -33,6 +33,8 @@ typedef struct {
   // The margins' corner: 0 the day of the year (Plotboard: the height), 1
   // the body's ground point, 2 the Moon's light.
   uint8_t corner;
+  // The Sun (1) and the Moon (2) marked beside the body.
+  uint8_t also;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);

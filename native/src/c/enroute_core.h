@@ -57,6 +57,10 @@ typedef struct {
   // 140W"), or for old elements "EL OLD" ("EL OLD 412 KM").
   char corner[14];
   uint8_t circle;
+  // The Sun and the Moon marked beside the body (each if asked for, and on
+  // the chart this minute): their pixels (bytes: the record stays its
+  // size), or x 255.
+  uint8_t also[2][2];
 } EnrMinute;
 
 // A point of the route, rounded to the pixel, with the step from the one
@@ -69,6 +73,10 @@ typedef struct {
   uint8_t flags;
 } EnrPoint;
 
+// A pixel of lettering; a text's width and its pixels (at most 512).
+typedef struct {int16_t x,y;} EnrPx;
+int enr_text_width(const char *text,int n);
+int enr_text_pixels(const char *text,int n,int x,int baseline,EnrPx *out);
 enum {ENR_VIEW_HOUR,ENR_VIEW_WORLD,ENR_VIEW_DAY};
 // A Fuller sheet (the scene's view byte has ENR_FULLER over the hour or the
 // day): its pixels are lit from its faces' pre-projected grids
@@ -237,7 +245,6 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
 void enr_status(const char *text);
 // Lettering's box, set at x on a baseline; its width.
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]);
-int enr_text_width(const char *text,int n);
 // A pixel's class (ground nibble, layer nibble; with the world sliding, the
 // band's own columns, before it is turned) and its night zone (0 day, 1
 // dusk, 2 night) at a minute, at the screen's pixel.
