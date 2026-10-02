@@ -1,4 +1,4 @@
-# Pebble app-store listing: Groundtrack (draft)
+# Pebble app-store listing: Groundtrack
 
 Name: **Groundtrack**  
 Type: **Watchface**  
@@ -7,7 +7,9 @@ Source and support: https://github.com/huntrontrakkr/groundtrack-watch-face
 
 ## Published listing
 
-None yet. Once the listing exists in the Pebble developer dashboard, its id goes in the repository variable `GROUNDTRACK_STORE_APP_ID` and the publishing sign-in in the secret `PEBBLE_FIREBASE_REFRESH_TOKEN`; releases then publish to it (see [RELEASING.md](RELEASING.md)). Until then a release is a GitHub release only.
+https://apps.repebble.com/4cb497d2805d4b0b87d70876 (listing id `4cb497d2805d4b0b87d70876`), made on 2 October 2026 with version 0.1.0 by `tools/release.py create`, under the developer account Segfaultgolf..
+
+Releases from the workflow publish to it once the repository variable `GROUNDTRACK_STORE_APP_ID` holds that id and the secret `PEBBLE_FIREBASE_REFRESH_TOKEN` the publishing sign-in (neither is set yet: until then a release is a GitHub release, and `GROUNDTRACK_STORE_APP_ID=4cb497d2805d4b0b87d70876 python tools/release.py publish` by hand, signed in with `pebble login`, publishes it). See [RELEASING.md](RELEASING.md).
 
 ## Description
 

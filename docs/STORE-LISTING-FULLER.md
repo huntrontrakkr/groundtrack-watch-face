@@ -1,4 +1,4 @@
-# Pebble app-store listing: Groundtrack Fuller (draft)
+# Pebble app-store listing: Groundtrack Fuller
 
 Name: **Groundtrack Fuller**  
 Type: **Watchface**  
@@ -7,7 +7,9 @@ Source and support: https://github.com/huntrontrakkr/groundtrack-watch-face
 
 ## Published listing
 
-None yet. Once the listing exists, its id goes in the repository variable `GROUNDTRACK_FULLER_STORE_APP_ID` (see [RELEASING.md](RELEASING.md)).
+https://apps.repebble.com/7e96e11b99aa4f6fb3ba3928 (listing id `7e96e11b99aa4f6fb3ba3928`), made on 2 October 2026 with version 0.1.0 by `tools/release.py create`, under the developer account Segfaultgolf..
+
+Releases from the workflow publish to it once the repository variable `GROUNDTRACK_FULLER_STORE_APP_ID` holds that id and the secret `PEBBLE_FIREBASE_REFRESH_TOKEN` the publishing sign-in (neither is set yet: until then a release is a GitHub release, and `GROUNDTRACK_FULLER_STORE_APP_ID=7e96e11b99aa4f6fb3ba3928 python tools/release.py publish` by hand, signed in with `pebble login`, publishes it). See [RELEASING.md](RELEASING.md).
 
 ## Description
 

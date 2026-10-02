@@ -17,7 +17,7 @@ The *Release watch app* workflow (`.github/workflows/release.yml`) runs the test
 
 ## The store listing
 
-There are no listings yet. A listing is public from the moment it exists. To publish to the Pebble store, signed in with `pebble login` as the account that will own them:
+Both faces are listed (Groundtrack `4cb497d2805d4b0b87d70876`, Groundtrack Fuller `7e96e11b99aa4f6fb3ba3928`; see the listings' pages), made as below on 2 October 2026 with version 0.1.0. A listing is public from the moment it exists. How a listing is made, signed in with `pebble login` as the account that will own it:
 
 1. `python tools/release.py package` (or put a release's downloads in `release-artifacts/`), then `python tools/release.py create` makes each face's listing from the verified package: the copy in [STORE-LISTING.md](STORE-LISTING.md) (Groundtrack) and [STORE-LISTING-FULLER.md](STORE-LISTING-FULLER.md), the release notes, and the gallery in `docs/screenshots/store/<face>/` (drawn by the watch's own code: `node tools/render-store.mjs`). It goes through the Pebble tool's own publishing code, as `pebble publish` does, and prints each listing's id. Run with the Pebble tool's Python (`~/.local/share/uv/tools/pebble-tool/bin/python`).
 2. Set the repository variables `GROUNDTRACK_STORE_APP_ID` and `GROUNDTRACK_FULLER_STORE_APP_ID` to the listings' ids (a face without one isn't published).
