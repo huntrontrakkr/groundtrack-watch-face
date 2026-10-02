@@ -29,7 +29,12 @@ const watches=new Set();
 test.afterEach(()=>{for(const w of watches)w.p.kill();watches.clear();});
 test.after(()=>rmSync(dir,{recursive:true,force:true}));
 // The fixture's element sets, as the phone keeps them once fetched.
-const TLES=Object.fromEntries(readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').trim().split('\n').reduce((sets,line,i)=>{if(i%3===0)sets.push([]);sets.at(-1).push(line);return sets;},[]).map(l=>[Number(l[1].slice(2,7)),l.join('\n')+'\n']));
+// (WATCH_TLE names another file of them, WATCH_NOW the time to start the
+// satellites' test at: `WATCH_TLE=/tmp/all.tle WATCH_NOW=2026-10-02T13:40:00Z`
+// runs every satellite on today's elements.)
+const TLE_FILE=process.env.WATCH_TLE||'tests/fixtures/celestrak-2026-09-29.tle';
+if(process.env.WATCH_TLE){const {registerElements}=await import('../src/satellites.js');const l=readFileSync(TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<l.length;i+=3)registerElements(l.slice(i,i+3).join('\n')+'\n','celestrak');}
+const TLES=Object.fromEntries(readFileSync(TLE_FILE,'utf8').trim().split('\n').reduce((sets,line,i)=>{if(i%3===0)sets.push([]);sets.at(-1).push(line);return sets;},[]).map(l=>[Number(l[1].slice(2,7)),l.join('\n')+'\n']));
 // The watch's heap: what its 128 KB leaves after the app (about 64.7 KB of
 // code and data on Groundtrack, 64.0 on Fuller) and the system's own share,
 // as the emulator reports it free when a build starts, with the lettering's
@@ -64,11 +69,12 @@ class Watch{
 // The phone: the bundle, its clock the watch's, its messages kept in order.
 function phone(face,stored){
   const listeners={},out=[];let pending=0;
-  const later=(f,ms)=>{pending++;setTimeout(()=>{pending--;f();},Math.min(ms,5));};
+  // (A wait of an hour or more, the calendar's next reading, never comes here.)
+  const later=(f,ms)=>{if(ms>=3600000)return 0;pending++;setTimeout(()=>{pending--;f();},Math.min(ms/1000,50));return 1;};
   // (CelesTrak is out of reach: the phone falls back on what it has kept.)
   function XMLHttpRequest(){this.open=()=>{};this.send=()=>later(()=>this.onerror&&this.onerror(),0);}
   const context=vm.createContext({console:{log:()=>{}},NOW:0,XMLHttpRequest,
-    setTimeout:later,
+    setTimeout:later,clearTimeout:()=>{},
     localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:(k,v)=>{stored[k]=v;},removeItem:k=>{delete stored[k];}},
     Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},sendAppMessage:(m,ok)=>{out.push(m);pending++;setTimeout(()=>{pending--;ok();},0);}}});
   vm.runInContext('Date.now=()=>NOW;',context);vm.runInContext(bundle(face),context);
@@ -96,7 +102,9 @@ async function answer(w,ph,rounds=4){
 function storage(c,t){
   const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',
     home:c.home?JSON.stringify({lat:c.home.lat,lon:c.home.lon}):JSON.stringify({none:true}),events:JSON.stringify((c.events||[]).map(([minutes,title])=>({epoch:t+minutes*60000,title,label:nameCode(title)})))};
-  for(const [norad,text] of Object.entries(TLES)){s['tle-'+norad]=JSON.stringify({text,fetched:t-3600e3,epoch:Date.parse('2026-09-29T18:00:00Z')});}
+  // (Events come from a calendar's link: read a moment ago, as the phone keeps it.)
+  if((c.events||[]).length){s.calendar='https://calendar.example/private/basic.ics';s['calendar-fetched']=String(t);}
+  for(const [norad,text] of Object.entries(TLES)){s['tle-'+norad]=JSON.stringify({text,fetched:t-3600e3,epoch:t-86400e3});}
   return s;
 }
 // A new watch at time t: the phone starts, the watch asks, the phone
@@ -171,6 +179,21 @@ test('a new watch, sent what it asks for, draws its hour as the core draws the p
     await w.cmd('focus');await same(face,c,w,label+' after a notification');
     // Closed, it holds only the lettering's glyphs.
     assert.equal(await w.close(),GLYPHS,`${label}: memory held at the close`);
+  }
+});
+
+test('every satellite draws on each face, each in every form its chart takes',{skip:!cc&&'no C compiler',timeout:900000},async()=>{
+  const t=Date.parse(process.env.WATCH_NOW||'2026-09-30T13:07:00Z'),{CATALOG,viewOf}=await import('../src/satellites.js');
+  for(const face of ['enroute','fuller'])for(const entry of CATALOG){
+    const body='sat:'+entry.norad,world=face==='enroute'&&viewOf(body)==='world';
+    const forms=world?[{tape:'fixed',readout:'flag'},{tape:'tape'},{tape:'slide'},{tape:'clock',readout:'callout'}]:viewOf(body)==='day'?[{span:'day'},{span:'hour',readout:'callout'}]:[{readout:'flag'},{readout:'callout'}];
+    for(const form of forms){
+      const c={body,zone:'America/New_York',home:NY,plate:'console',...form,t0:t},label=what(face,c,t);
+      const {w}=await fresh(face,c,t);
+      assert.equal(w.state.chart,true,`${label}: the screen holds ${JSON.stringify(w.state.note)}`);
+      await same(face,c,w,label);
+      await w.close();
+    }
   }
 });
 

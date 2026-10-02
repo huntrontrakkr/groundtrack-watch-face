@@ -23,14 +23,16 @@
 // hours each (as CelesTrak asks) and kept, under tle-<catalog number>.
 import {HOMES} from '../../src/home.js';
 import {PLATES,FIGURE_SETS} from '../../src/plates.js';
-import {registerElements,viewOf,FRESH,CATALOG,catalogEntry,bodyId} from '../../src/satellites.js';
+import {registerElements,viewOf,periodOf,CATALOG,catalogEntry,bodyId} from '../../src/satellites.js';
 import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
 import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
 import {localDay,localDate} from '../../src/chart-text.js';
 import {clockParts} from '../../src/render.js';
 import {registerNominal} from '../../src/nominal.js';
 import {uniqueCode} from '../../src/events.js';
+import {calendarEvents} from '../../src/ical.js';
 import CONFIG_PAGE from './config.html';
+import RULES_TEXT from 'groundtrack-rules-text';
 // The settings page's preview runs the watch's own core on this hour's
 // chart input (src/chart-input.js), as the watch would draw it, beside the
 // same frame as the watch's reflective screen shows its colours (Pebble's
@@ -209,7 +211,9 @@ function elements(body,done){
   function mine(e){if(e.norad!==Number(norad))throw new Error('elements for '+e.norad);return e;}
   function use(text,source){try{mine(registerElements(text,source));return true;}catch(error){console.log('Elements for '+norad+' refused: '+error.message);return false;}}
   function fallback(reason,why,answer){
-    if(kept&&kept.text&&Date.now()-kept.epoch<FRESH&&use(kept.text,'celestrak'))return answer(null,reason);
+    // (Kept elements still serve within their time: three days in a low
+    // orbit, a fortnight in a high one.)
+    if(kept&&kept.text&&Date.now()-kept.epoch<(viewOf(body)==='world'?3:14)*86400000&&use(kept.text,'celestrak'))return answer(null,reason);
     answer(viewOf(body)==='world'?'NO ELEMENTS: '+why:null,reason);
   }
   if(kept&&kept.text&&Date.now()-kept.fetched<ELEMENTS_AGE&&use(kept.text,'celestrak'))return done(null);
@@ -259,9 +263,10 @@ function status(text){
   enqueue({Status:text});
 }
 
-// Events, as the settings page gives them ({epoch, title}): the past day's
-// and after are kept, at most forty, each named with a five-letter code
-// unique on its local day (src/events.js), as the study names them.
+// Events ({epoch, title}), from the calendar whose link the settings hold
+// (none by default): the past day's and after are kept, at most forty, each
+// named with a five-letter code unique on its local day (src/events.js), as
+// the study names them.
 // (Only what saveEvents wrote: a time the calendar holds, a title, a label.)
 function storedEvents(){
   var v=[];try{v=JSON.parse(setting('events','[]'));}catch(error){}
@@ -283,7 +288,8 @@ function saveEvents(list){
 var eventsSent=null;
 function sendEvents(changed){
   var now=Date.now(),bytes=[];
-  storedEvents().filter(function(e){return e.epoch>now-7200000;}).slice(0,20).forEach(function(e){
+  // (No link, no events: none are kept from before there was one.)
+  (calendarLink()?storedEvents():[]).filter(function(e){return e.epoch>now-7200000;}).slice(0,20).forEach(function(e){
     var t=Math.floor(e.epoch/1000);bytes.push(t&255,(t>>8)&255,(t>>16)&255,(t>>>24)&255);
     for(var k=0;k<5;k++)bytes.push(k<e.label.length?e.label.charCodeAt(k):0);
   });
@@ -291,6 +297,47 @@ function sendEvents(changed){
   if(changed&&key===eventsSent)return;
   eventsSent=key;
   enqueue({Events:bytes.length?bytes:[0]});
+}
+
+// The calendar: its private iCalendar link, if the settings hold one (they
+// hold none unless one is put there, and then nothing is fetched). The
+// phone reads it on starting, on saving, and every three hours while it
+// runs; the events of the next eight days are kept and the watch's sent if
+// they have changed. The link and the calendar stay on the phone: only each
+// event's time and five-letter name go to the watch.
+var CALENDAR_EVERY=3*3600000,calendarTimer=null,calendarOut=false;
+function calendarLink(){
+  var link=String(setting('calendar','')).trim().replace(/^webcal:/i,'https:');
+  return /^https?:\/\/\S+$/i.test(link)?link:'';
+}
+function calendarStatus(text){try{localStorage.setItem('calendar-status',text);}catch(error){}console.log('Calendar: '+text);}
+function fetchCalendar(force){
+  var link=calendarLink();
+  if(calendarTimer){clearTimeout(calendarTimer);calendarTimer=null;}
+  if(!link||calendarOut)return;
+  var last=Number(localStorage.getItem('calendar-fetched'))||0,now=Date.now();
+  if(!force&&now-last<CALENDAR_EVERY){calendarTimer=setTimeout(function(){fetchCalendar(false);},CALENDAR_EVERY-(now-last)+1000);return;}
+  try{localStorage.setItem('calendar-fetched',String(now));}catch(error){}
+  calendarOut=true;
+  var settled=false,request=new XMLHttpRequest();
+  function done(problem,text){
+    if(settled)return;settled=true;calendarOut=false;
+    if(calendarLink()!==link)return;
+    if(problem)calendarStatus(problem);
+    else try{
+      var found=calendarEvents(text,{from:Date.now()-7200000,to:Date.now()+8*86400000,zone:zone(),limit:40});
+      saveEvents(found);calendarStatus(found.length+(found.length===1?' event':' events')+' in the next week');
+      sendEvents(true);
+    }catch(error){calendarStatus(error.message==='No calendar in the answer'?'The link gave no calendar':'The calendar could not be read');}
+    calendarTimer=setTimeout(function(){fetchCalendar(false);},CALENDAR_EVERY);
+  }
+  request.open('GET',link);
+  request.onload=function(){if(request.status===200)done(null,request.responseText);else done('The link answered '+request.status);};
+  request.onerror=function(){done('The link could not be reached');};
+  request.ontimeout=function(){done('The link did not answer');};
+  try{request.timeout=30000;}catch(error){}
+  setTimeout(function(){done('The link did not answer');},45000);
+  try{request.send();}catch(error){done('The link could not be reached');}
 }
 
 // The settings page, offline: a data URL holding the page and the settings.
@@ -311,15 +358,19 @@ function currentBody(){var b=setting('body',FIRST);return BODIES.indexOf(b)>=0?b
 // satellite's elements not yet fetched) has none.
 function previewInputs(){
   var now=Date.now(),timeZone=zone(),parts=clockParts(now,timeZone),start=Math.floor(now/60000)*60000-Number(parts.m)*60000;
-  var bodies=[currentBody()];['sun','moon'].forEach(function(b){if(bodies.indexOf(b)<0)bodies.push(b);});
+  // Every body the phone can draw now: the Sun and Moon, GPS and QZSS (on
+  // their nominal orbits if nothing better is kept), and each satellite
+  // whose elements it has kept. QZSS's hour has an input of its own.
   var texts={};
-  bodies.forEach(function(body){
+  BODIES.forEach(function(body){
     if(body.indexOf('sat:')===0){var kept=null;try{kept=JSON.parse(localStorage.getItem('tle-'+body.slice(4)));}catch(error){}if(kept&&kept.text)try{registerElements(kept.text,'celestrak');}catch(error){}}
-    try{
-      texts[body]=chartInput({body:body,start:start,plate:setting('plate','enroute'),readout:readout()==='off'?false:readout(),numerals:setting('numerals','even'),margin:setting('margin','utc'),
-        span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),figures:setting('figures','michroma'),corner:setting('corner','day'),
-        events:storedEvents(),clock24:setting('clock24','1')!=='0',zone:timeZone,home:home(timeZone),projection:FACE==='fuller'?'fuller':'chart'});
-    }catch(error){console.log('No preview for '+body+': '+error.message);}
+    (viewOf(body)==='day'?['day','hour']:[setting('span','day')]).forEach(function(span){
+      try{
+        texts[body+(viewOf(body)==='day'&&span==='hour'?'/hour':'')]=chartInput({body:body,start:start,plate:setting('plate','enroute'),readout:readout()==='off'?false:readout(),numerals:setting('numerals','even'),margin:setting('margin','utc'),
+          span:span,tape:setting('tape','fixed'),transfer:setting('transfer','off'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+          events:calendarLink()?storedEvents():[],clock24:setting('clock24','1')!=='0',zone:timeZone,home:home(timeZone),projection:FACE==='fuller'?'fuller':'chart'});
+      }catch(error){console.log('No preview for '+body+': '+error.message);}
+    });
   });
   return {assets:PAGE_ASSETS,sunlight:SUNLIGHT.colors,texts:texts,minute:Number(parts.m)};
 }
@@ -327,13 +378,18 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
-      margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},events:storedEvents(),
-      face:FACE,bodies:BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
+    var config={settings:{body:currentBody(),bodyEnroute:setting('bodyEnroute','sun'),bodyPlotboard:setting('bodyPlotboard','sat:25544'),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+      margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
+      // (The calendar's events as last read, and how that went.)
+      events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
+      // (Each body with its chart and the minutes it takes a lap: the page
+      // says by them which face it is on, and why not the other.)
+      face:FACE,bodies:[['sun','Sun','Its ground point, where it stands overhead','hour',periodOf('sun')],['moon','Moon','In its calculated phase','hour',periodOf('moon')]].concat(
+        BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note,viewOf(b),c.period];})),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),figureSets:FIGURE_SETS,preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
     // (Both in one pass: an event's title may spell either mark.)
-    var page=CONFIG_PAGE.replace(/__CONFIG__|__PREVIEW__/g,function(mark){return JSON.stringify(mark==='__CONFIG__'?config:previewInputs()).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');});
+    var page=CONFIG_PAGE.replace(/__CONFIG__|__PREVIEW__|__RULES__/g,function(mark){return mark==='__RULES__'?RULES_TEXT:JSON.stringify(mark==='__CONFIG__'?config:previewInputs()).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');});
     Pebble.openURL('data:text/html;charset=utf-8,'+encodeURIComponent(page));
   }
   setTimeout(function(){open(null);},5000);
@@ -345,6 +401,9 @@ Pebble.addEventListener('webviewclosed',function(e){
   try{chosen=JSON.parse(e.response.charAt(0)==='{'?e.response:decodeURIComponent(e.response));}catch(error){console.log('Unreadable settings');return;}
   if(!chosen||typeof chosen!=='object')return;
   if(BODIES.indexOf(chosen.body)>=0)localStorage.setItem('body',chosen.body);
+  // (Each of Groundtrack's two faces keeps the body it last showed.)
+  if(BODIES.indexOf(chosen.bodyEnroute)>=0)localStorage.setItem('bodyEnroute',chosen.bodyEnroute);
+  if(BODIES.indexOf(chosen.bodyPlotboard)>=0)localStorage.setItem('bodyPlotboard',chosen.bodyPlotboard);
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
   if(READOUTS.indexOf(chosen.readout)>=0)localStorage.setItem('readout',chosen.readout);
   if(NUMERALS.indexOf(chosen.numerals)>=0)localStorage.setItem('numerals',chosen.numerals);
@@ -356,15 +415,20 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(TRANSFERS.indexOf(chosen.transfer)>=0)localStorage.setItem('transfer',chosen.transfer);
   if(chosen.clock24==='1'||chosen.clock24==='0')localStorage.setItem('clock24',chosen.clock24);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
-  if(Array.isArray(chosen.events))saveEvents(chosen.events);
+  // The calendar's link: a new one is read at once; none, and its events go.
+  var linkBefore=calendarLink();
+  if(typeof chosen.calendar==='string')localStorage.setItem('calendar',chosen.calendar.trim().slice(0,2000));
+  var linkChanged=calendarLink()!==linkBefore;
+  if(linkChanged){localStorage.setItem('events','[]');try{localStorage.removeItem('calendar-status');localStorage.removeItem('calendar-fetched');}catch(error){}}
   // The watch draws again in the new settings, with home's rise and set
   // for the new home.
   owed=false;owedTries=0;
   sendSettings();sendRiseSets();sendEvents();
+  fetchCalendar(linkChanged);
 });
 
 // On launch, the settings: the watch asks for anything else it lacks.
-Pebble.addEventListener('ready',function(){owed=false;owedTries=0;sendSettings();sendEvents();});
+Pebble.addEventListener('ready',function(){owed=false;owedTries=0;sendSettings();sendEvents();fetchCalendar(false);});
 Pebble.addEventListener('appmessage',function(e){
   // Segments from a UTC day (days since 1970; -1: none are missing), and
   // home's rise and set or a satellite's own data; and with them what the

@@ -7,25 +7,45 @@ import {twoline2satrec,propagate,gstime,eciToGeodetic} from 'satellite.js';
 import {direction,RAD} from './geometry.js';
 
 export const FRESH=3*24*3600000;
+// How long an element set serves from its epoch: three days in a low orbit,
+// where drag soon tells; a fortnight in a high one (GPS, QZSS: under three
+// revolutions a day), whose newest sets at CelesTrak are often two days old;
+// a nominal orbit (no satellite's measured one) at any time.
+export const freshFor=e=>e.source==='nominal'?Infinity:e.satrec&&e.satrec.no*1440/(2*Math.PI)<3?14*24*3600000:FRESH;
 // Worth following, and different from each other. Ids are NORAD catalog
-// numbers.
+// numbers; period: minutes a lap, which decides the chart (chartFor).
 export const CATALOG=[
-  {norad:25544,code:'ISS',name:'International Space Station',symbol:'station',note:'Crewed since 2000. 51.6° orbit, about 92 minutes a lap.'},
-  {norad:48274,code:'CSS',name:'Tiangong',symbol:'station',note:'China’s space station. 41.5° orbit, about 92 minutes.'},
-  {norad:20580,code:'HST',name:'Hubble Space Telescope',symbol:'satellite',note:'Launched 1990. 28.5° orbit, about 95 minutes.'},
-  {norad:49260,code:'LS9',name:'Landsat 9',symbol:'satellite',note:'Sun-synchronous: crosses the equator southbound near 10:00 local time on every pass.'},
-  {norad:43013,code:'N20',name:'NOAA-20',symbol:'satellite',note:'Polar weather satellite in the “afternoon” orbit, crossing near 13:30 local time.'},
+  {norad:25544,code:'ISS',period:92.9,name:'International Space Station',symbol:'station',note:'Crewed since 2000. 51.6° orbit, about 92 minutes a lap.'},
+  {norad:48274,code:'CSS',period:92.2,name:'Tiangong',symbol:'station',note:'China’s space station. 41.5° orbit, about 92 minutes.'},
+  {norad:20580,code:'HST',period:94.9,name:'Hubble Space Telescope',symbol:'satellite',note:'Launched 1990. 28.5° orbit, about 95 minutes.'},
+  {norad:49260,code:'LS9',period:98.9,name:'Landsat 9',symbol:'satellite',note:'Sun-synchronous: crosses the equator southbound near 10:00 local time on every pass.'},
+  {norad:43013,code:'N20',period:101.4,name:'NOAA-20',symbol:'satellite',note:'Polar weather satellite in the “afternoon” orbit, crossing near 13:30 local time.'},
   // Slow orbits: the ground moves under them little faster than under the
   // Sun, so they get the chart instead of the world band.
-  {norad:36585,code:'GPS',name:'GPS BIIF-1 (PRN 25)',symbol:'satellite',view:'hour',note:'Navigation satellite in a 12-hour orbit at 20,200 km, tilted 55°: it crosses the ground at about the Sun’s pace but swings far north and south.'},
-  {norad:42738,code:'QZS',name:'QZS-2 (Michibiki)',symbol:'satellite',view:'day',note:'Japan’s quasi-zenith navigation satellite: a tilted, slightly oval 24-hour orbit that traces a figure-8 over Japan and Australia once a day.'}
+  {norad:36585,code:'GPS',period:717.9,name:'GPS BIIF-1 (PRN 25)',symbol:'satellite',note:'Navigation satellite in a 12-hour orbit at 20,200 km, tilted 55°: it crosses the ground at about the Sun’s pace but swings far north and south.'},
+  {norad:42738,code:'QZS',period:1436.1,name:'QZS-2 (Michibiki)',symbol:'satellite',note:'Japan’s quasi-zenith navigation satellite: a tilted, slightly oval 24-hour orbit that traces a figure-8 over Japan and Australia once a day.'}
 ];
 export const bodyId=norad=>`sat:${norad}`;
 export const catalogEntry=body=>CATALOG.find(c=>bodyId(c.norad)===body);
+// How an orbit is charted, by the minutes it takes a lap:
+//   'world'  under 225 minutes (the low orbits, SGP4's own "near Earth"): in
+//            an hour it crosses most of the world, more than a zoomed chart
+//            can hold, so it gets the world band (the Plotboard);
+//   'day'    within an hour and a half of a sidereal day: it stays over one
+//            part of the world and takes the day to draw its shape there;
+//   'hour'   the rest (GPS's twelve hours): the ground moves under it at
+//            about the Sun's pace, and its hour fits the zoomed chart.
+// Any satellite's elements give its period, so one chosen from elsewhere
+// than this catalog is charted by the same rule.
+export const chartFor=period=>period<225?'world':Math.abs(period-1436)<90?'day':'hour';
+// The minutes a body takes a lap: a satellite's from its elements if they
+// are loaded, else the catalog's; the Sun and Moon come round in about a day.
+export const periodOf=body=>body==='sun'?1440:body==='moon'?1490:registry.get(body)?2*Math.PI/registry.get(body).satrec.no:catalogEntry(body)?.period??95;
 // How a body is charted: 'hour' on the zoomed chart (the Sun, the Moon and
-// slow orbits), 'day' as the whole local day on one chart (orbits that take
-// a day to draw their shape), or 'world' on the world band (fast orbits).
-export const viewOf=body=>body==='sun'||body==='moon'?'hour':catalogEntry(body)?.view||'world';
+// slow orbits), 'day' as the whole local day on one chart, or 'world' on the
+// world band (fast orbits). (By the catalog's period, so a body's chart does
+// not turn on whether its elements have arrived.)
+export const viewOf=body=>body==='sun'||body==='moon'?'hour':chartFor(catalogEntry(body)?.period??95);
 
 // TLE line checksum: digits count their value, minus signs count one.
 export const checksum=line=>[...line.slice(0,68)].reduce((s,c)=>s+(c==='-'?1:/\d/.test(c)?Number(c):0),0)%10;
@@ -49,7 +69,7 @@ export function registerElements(text,source){
 export const elementsFor=body=>registry.get(body);
 export function satellitePosition(body,epoch){
   const e=registry.get(body);if(!e)throw new RangeError(`No elements loaded for ${body}`);
-  if(Math.abs(epoch-e.epoch)>FRESH)throw new RangeError(`Elements for ${e.catalog?.code||body} are more than three days from this time`);
+  if(Math.abs(epoch-e.epoch)>freshFor(e))throw new RangeError(`Elements for ${e.catalog?.code||body} are too far from this time`);
   return propagatePosition(body,epoch);
 }
 // SGP4 at a time, without the freshness check (for fitting segments, whose

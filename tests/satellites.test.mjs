@@ -32,7 +32,7 @@ test('live elements propagate near their epoch and are refused when stale',()=>{
     assert.ok(Math.abs(p.lat-q.lat)<0.05&&Math.abs(((p.lon-q.lon+540)%360)-180)<0.1&&Math.abs(p.altitude-q.altitude)<0.5,new Date(t).toISOString());
     assert.equal(p.dir.length,3);
   }
-  assert.throws(()=>position(bodyId(20580),NOW+FRESH+3600000),/three days/);
+  assert.throws(()=>position(bodyId(20580),NOW+FRESH+3600000),/too far from this time/);
   assert.throws(()=>position(bodyId(43013),NOW),/No elements/);
 });
 
@@ -46,4 +46,17 @@ test('a live satellite gets the world band, its symbol, track and element note',
   }
   assert.equal(chartCamera(bodyId(25544),civilHour(NOW,'UTC')).world,true);
   assert.equal(W*H,45600);
+});
+
+test('an orbit\'s period decides its chart, the catalog\'s periods being the live ones',async()=>{
+  const {chartFor,periodOf,viewOf,CATALOG,bodyId,registerElements}=await import('../src/satellites.js');
+  const {readFileSync}=await import('node:fs');
+  assert.deepEqual([90,224,226,718,1300,1436,1500,1600].map(chartFor),['world','world','hour','hour','hour','day','day','hour']);
+  assert.deepEqual(CATALOG.map(c=>viewOf(bodyId(c.norad))),['world','world','world','world','world','hour','day']);
+  // CelesTrak's elements of 29 September 2026 give the periods the catalog states, to a minute.
+  const lines=readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').trim().split('\n');
+  for(let i=0;i+2<lines.length;i+=3){const e=registerElements(lines.slice(i,i+3).join('\n')+'\n','fixture'),body=bodyId(e.norad),c=CATALOG.find(x=>x.norad===e.norad);
+    assert.ok(Math.abs(periodOf(body)-c.period)<1,`${c.code}: ${periodOf(body)} minutes a lap, the catalog says ${c.period}`);
+    assert.equal(chartFor(periodOf(body)),viewOf(body));}
+  assert.equal(viewOf('sun'),'hour');assert.equal(viewOf('sat:99999'),'world');
 });

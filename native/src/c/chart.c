@@ -1543,7 +1543,7 @@ static bool finish_draw(ChartBuild *b){
   }else{release(b->plane.band[PLANE_BANDS-1]);b->plane.band[PLANE_BANDS-1]=NULL;}
   }
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
-  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|(in->readout==1?16:0)|(in->readout==2?32:0)|(world&&(in->tape==1||in->tape==2)?64:0)|(world&&in->tape==2?128:0));
+  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|((in->readout==1||(world&&in->readout==2))?16:0)|(in->readout==2&&!world?32:0)|(world&&(in->tape==1||in->tape==2)?64:0)|(world&&in->tape==2?128:0));
   out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;out->clock=world&&in->tape==3;
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
@@ -1638,7 +1638,10 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     memset(e->corner,0,sizeof e->corner);e->circle=255;e->index=0;
     // The margins' corner: old elements noted, else the chosen text.
     {const SatSegment *ss=in->body>=2&&src->satellite?src->satellite(src->satellite_context,t):NULL;
-    const bool old=ss&&t-(int64_t)ss->epoch>2*86400;char *p=e->corner;
+    // (Old: a low orbit's elements after two days; a high one's, GPS's or
+    // QZSS's, whose segments span six hours, hold for a fortnight, and
+    // CelesTrak's newest are often two days old.)
+    const bool old=ss&&t-(int64_t)ss->epoch>(ss->span>3600?14:2)*86400;char *p=e->corner;
     // (On the world band led by the satellite's code, but for old elements.)
     if(world&&!old){for(const char *k=in->code[0]?in->code:"SAT";*k;k++)*p++=*k;*p++=' ';}
     if(old){memcpy(p,"EL OLD",6);p+=6;if(world&&altitude<9999.5){*p++=' ';p=put_int(p,(int)js_round(altitude),1);memcpy(p," KM",3);}}

@@ -10,6 +10,8 @@ import {join} from 'node:path';
 import vm from 'node:vm';
 import {HOMES} from '../src/home.js';
 
+// (The phone's waits pass a thousand times as fast, in their order; one of
+// an hour or more, the calendar's next reading, never comes.)
 // A phone side with a stand-in watch: take(message) decides whether the
 // watch takes each message. Returns the phone's listeners and every message
 // it tried to send, and waits for it to fall quiet.
@@ -17,7 +19,7 @@ function phone(bundle,now,stored,take=()=>true){
   const listeners={},messages=[],logs=[];let pending=0;
   const context=vm.createContext({
     console:{log:m=>logs.push(m)},
-    setTimeout:(f,ms)=>{pending++;setTimeout(()=>{pending--;f();},Math.min(ms,5));},
+    setTimeout:(f,ms)=>{if(ms>=3600000)return 0;pending++;setTimeout(()=>{pending--;f();},Math.min(ms/1000,50));return 1;},clearTimeout:()=>{},
     localStorage:{getItem:k=>k in stored?stored[k]:null},
     Pebble:{
       addEventListener:(name,f)=>{listeners[name]=f;},
@@ -67,7 +69,7 @@ test('the phone fetches live elements, keeps them two hours, falls back to the n
       const requests=[],listeners={},messages=[],logs=[];let pending=0;
       class XMLHttpRequest{open(method,url){this.url=url;}send(){requests.push(this.url);pending++;setTimeout(()=>{pending--;const a=answer(this.url);if(a){this.status=a.status;this.responseText=a.text;this.onload();}else this.onerror();},1);}}
       const context=vm.createContext({console:{log:m=>logs.push(m)},XMLHttpRequest,
-        setTimeout:(f,ms)=>{pending++;setTimeout(()=>{pending--;f();},Math.min(ms,5));},
+        setTimeout:(f,ms)=>{if(ms>=3600000)return 0;pending++;setTimeout(()=>{pending--;f();},Math.min(ms/1000,50));return 1;},clearTimeout:()=>{},
         localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:(k,v)=>{stored[k]=String(v);},removeItem:k=>{delete stored[k];}},
         Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},sendAppMessage:(m,ok)=>{messages.push(m);pending++;setTimeout(()=>{pending--;ok();},0);}}});
       vm.runInContext(`Date.now=()=>${now};`,context);vm.runInContext(bundle,context);
@@ -145,7 +147,10 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     assert.equal(JSON.stringify([set[2],set[3],set[17]>>1,set[21],set[22]]),JSON.stringify([2,0,0,3,1]));
     // Events: the next twenty from two hours ago, each its time and name.
     const events=JSON.stringify([{epoch:now-3*3600000,title:'Old',label:'OLDDD'},{epoch:now+3600000,title:'Run',label:'RUNNN'},{epoch:now+5*86400000,title:'Far',label:'FARRR'}]);
-    const pe=phone(bundle,now,{body:'sun',timeZone:zone,events});pe.listeners.ready({});await pe.quiet();
+    // (They are a calendar's, read a moment ago: without its link there are none.)
+    const pe=phone(bundle,now,{body:'sun',timeZone:zone,events,calendar:'https://calendar.example/private/basic.ics','calendar-fetched':String(now)});pe.listeners.ready({});await pe.quiet();
+    {const none=phone(bundle,now,{body:'sun',timeZone:zone,events});none.listeners.ready({});await none.quiet();
+    assert.equal(JSON.stringify(none.messages.find(m=>m.Events).Events),'[0]','events were sent with no calendar linked');}
     const ebytes=pe.messages.find(m=>m.Events).Events,et=(now+3600000)/1000,ft=(now+5*86400000)/1000;
     assert.equal(JSON.stringify(ebytes),JSON.stringify([et&255,(et>>8)&255,(et>>16)&255,(et>>>24)&255,...'RUNNN',ft&255,(ft>>8)&255,(ft>>16)&255,(ft>>>24)&255,...'FARRR'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
     // Asked for data, the phone sends the events only if they have moved on
@@ -225,10 +230,11 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
       Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{opened=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
     vm.runInContext(`Date.now=()=>${now};`,context);vm.runInContext(bundle,context);
     listeners.showConfiguration({});for(let i=0;i<300&&!opened;i++)await new Promise(r=>setTimeout(r,20));
-    const config=JSON.parse(/var config=(\{.*?\}),s=config/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
+    const config=JSON.parse(/var config=(\{.*?\}),form=document/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
     assert.equal(config.face,'enroute');
-    // An event's title may spell the page's own marks, or close its script.
-    let marked=null;const stored={events:JSON.stringify([{epoch:now+3600000,title:'__PREVIEW__ __CONFIG__ </script>\u2028',label:'PREVW'}])};
+    // An event's title (a calendar's, so anyone's) may spell the page's own
+    // marks, or close its script.
+    let marked=null;const stored={calendar:'https://calendar.example/private/basic.ics','calendar-fetched':String(now),events:JSON.stringify([{epoch:now+3600000,title:'__PREVIEW__ __CONFIG__ </script>\u2028',label:'PREVW'}])};
     const c2=vm.createContext({console:{log:()=>{}},setTimeout,navigator:{},localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:()=>{}},
       Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{marked=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
     vm.runInContext(`Date.now=()=>${now};`,c2);vm.runInContext(bundle,c2);
@@ -236,8 +242,67 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
     const html=decodeURIComponent(marked.slice('data:text/html;charset=utf-8,'.length)),script=/<script>([\s\S]*?)<\/script>/.exec(html)[1];
     assert.ok(!script.includes('var PV=__PREVIEW__')&&!script.includes('config=__CONFIG__'),'both marks are filled');
     assert.doesNotThrow(()=>new vm.Script(script),'the page\'s script parses');
-    assert.equal(JSON.parse(/var config=(\{.*?\}),s=config/s.exec(html)[1]).events[0].title,'__PREVIEW__ __CONFIG__ </script>\u2028');
-    assert.deepEqual(config.bodies.map(b=>b[0]).sort(),['sat:20580','sat:25544','sat:36585','sat:42738','sat:43013','sat:48274','sat:49260']);
+    assert.equal(JSON.parse(/var config=(\{.*?\}),form=document/s.exec(html)[1]).events[0].title,'__PREVIEW__ __CONFIG__ </script>\u2028');
+    // (Each with the chart its body has: the settings page's rules go by it.)
+    assert.deepEqual(config.bodies.map(b=>b[0]).sort(),['moon','sat:20580','sat:25544','sat:36585','sat:42738','sat:43013','sat:48274','sat:49260','sun']);
+    assert.deepEqual(Object.fromEntries(config.bodies.map(b=>[b[0],b[3]])),{sun:'hour',moon:'hour','sat:25544':'world','sat:48274':'world','sat:20580':'world','sat:49260':'world','sat:43013':'world','sat:36585':'hour','sat:42738':'day'});
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('a calendar\'s link: read on starting and saving, its week\'s events kept and sent; none without one',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'groundtrack-pkjs-'));
+  try{
+    const bundle=bundled(dir),now=Date.parse('2026-10-05T12:00:00Z');
+    const ICS=['BEGIN:VCALENDAR','BEGIN:VEVENT','UID:1','DTSTART:20261005T133000Z','SUMMARY:Launch','END:VEVENT',
+      'BEGIN:VEVENT','UID:2','DTSTART;TZID=America/New_York:20260302T091500','RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR','SUMMARY:Standup','END:VEVENT',
+      'BEGIN:VEVENT','UID:3','DTSTART;VALUE=DATE:20261006','SUMMARY:Holiday','END:VEVENT','END:VCALENDAR'].join('\r\n');
+    const run=(stored,answer)=>{
+      const requests=[],listeners={},messages=[];let pending=0;
+      class XMLHttpRequest{open(method,url){this.url=url;}send(){requests.push(this.url);pending++;setTimeout(()=>{pending--;const a=answer(this.url);if(a){this.status=a.status;this.responseText=a.text;this.onload();}else this.onerror();},1);}}
+      const context=vm.createContext({console:{log:()=>{}},XMLHttpRequest,clearTimeout:()=>{},
+        setTimeout:(f,ms)=>{if(ms>=3600000)return 0;pending++;setTimeout(()=>{pending--;f();},Math.min(ms/1000,50));return 1;},
+        localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:(k,v)=>{stored[k]=String(v);},removeItem:k=>{delete stored[k];}},
+        Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},sendAppMessage:(m,ok)=>{messages.push(m);pending++;setTimeout(()=>{pending--;ok();},0);}}});
+      vm.runInContext(`Date.now=()=>${now};`,context);vm.runInContext(bundle,context);
+      const quiet=async()=>{for(let idle=0;idle<3;){await new Promise(r=>setTimeout(r,20));idle=pending?0:idle+1;}};
+      return {requests,listeners,messages,quiet};
+    };
+    const names=m=>{const b=m.Events,out=[];for(let k=0;k+9<=b.length;k+=9)out.push(String.fromCharCode(...b.slice(k+4,k+9)));return out;};
+    // No link (as the settings start): nothing is fetched, no events go.
+    const stored={timeZone:'UTC'};
+    let p=run(stored,()=>{throw new Error('no request expected');});p.listeners.ready({});await p.quiet();
+    assert.equal(p.requests.length,0);
+    assert.equal(JSON.stringify(p.messages.filter(m=>m.Events).map(m=>m.Events)),'[[0]]');
+    // A link saved (webcal: is https:): read at once; the week's timed
+    // events, the weekday standup's five among them, are kept with their
+    // five-letter names and the next twenty sent; the all-day one is not.
+    p=run(stored,url=>({status:200,text:ICS}));
+    p.listeners.webviewclosed({response:JSON.stringify({calendar:'webcal://calendar.example/private/basic.ics'})});await p.quiet();
+    assert.deepEqual(p.requests,['https://calendar.example/private/basic.ics']);
+    const kept=JSON.parse(stored.events);
+    assert.deepEqual(kept.map(e=>`${new Date(e.epoch).toISOString().slice(5,16)} ${e.title} ${e.label}`),
+      ['10-05T13:15 Standup STAND','10-05T13:30 Launch LANCH','10-06T13:15 Standup STAND','10-07T13:15 Standup STAND','10-08T13:15 Standup STAND','10-09T13:15 Standup STAND','10-12T13:15 Standup STAND']);
+    assert.equal(stored['calendar-status'],'7 events in the next week');
+    assert.deepEqual(names(p.messages.filter(m=>m.Events).pop()),['STAND','LANCH','STAND','STAND','STAND','STAND','STAND']);
+    // Started again within three hours: not fetched again, the kept events sent.
+    p=run(stored,()=>{throw new Error('no request expected');});p.listeners.ready({});await p.quiet();
+    assert.equal(p.requests.length,0);
+    assert.equal(names(p.messages.find(m=>m.Events)).length,7);
+    // Three hours on, the link out of reach: the events stay, the page is told.
+    stored['calendar-fetched']=String(now-4*3600000);
+    p=run(stored,()=>null);p.listeners.ready({});await p.quiet();
+    assert.equal(p.requests.length,1);
+    assert.equal(stored['calendar-status'],'The link could not be reached');
+    assert.equal(JSON.parse(stored.events).length,7);
+    // An answer that is no calendar (a sign-in page, say).
+    stored['calendar-fetched']=String(now-4*3600000);
+    p=run(stored,()=>({status:200,text:'<html>Sign in</html>'}));p.listeners.ready({});await p.quiet();
+    assert.equal(stored['calendar-status'],'The link gave no calendar');
+    // The link taken away: its events go, from the phone and the watch.
+    p=run(stored,()=>{throw new Error('no request expected');});
+    p.listeners.webviewclosed({response:JSON.stringify({calendar:''})});await p.quiet();
+    assert.equal(stored.events,'[]');assert.equal(stored['calendar-status'],undefined);
+    assert.equal(JSON.stringify(p.messages.filter(m=>m.Events).pop().Events),'[0]');
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -259,8 +324,8 @@ test('Groundtrack Fuller\'s phone side: every body, each satellite\'s hour a Ful
       Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{opened=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
     vm.runInContext(`Date.now=()=>${now};`,context);vm.runInContext(bundle,context);
     listeners.showConfiguration({});for(let i=0;i<300&&!opened;i++)await new Promise(r=>setTimeout(r,20));
-    const config=JSON.parse(/var config=(\{.*?\}),s=config/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
+    const config=JSON.parse(/var config=(\{.*?\}),form=document/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
     assert.equal(config.face,'fuller');
-    assert.deepEqual(config.bodies.map(b=>b[0]),['sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585','sat:42738']);
+    assert.deepEqual(config.bodies.map(b=>b[0]),['sun','moon','sat:25544','sat:48274','sat:20580','sat:49260','sat:43013','sat:36585','sat:42738']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

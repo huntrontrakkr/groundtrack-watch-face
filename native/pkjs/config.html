@@ -42,12 +42,43 @@
   .preview figure{margin:0;text-align:center;flex:0 1 200px}
   .preview canvas{width:100%;max-width:200px;aspect-ratio:200/228;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
   .preview figcaption{font-size:12px;opacity:.7;margin-top:4px}
+  details.card{margin:12px 0;border:1px solid var(--line);border-radius:10px;background:var(--paper);overflow:hidden}
+  details.card>summary{display:flex;align-items:baseline;gap:10px;min-height:52px;padding:14px;cursor:pointer;list-style:none}
+  details.card>summary::-webkit-details-marker{display:none}
+  details.card>summary::after{content:'+';margin-left:auto;font:600 18px/1 ui-monospace,Menlo,monospace;color:var(--route)}
+  details.card[open]>summary::after{content:'−'}
+  details.card[open]>summary{border-bottom:1px solid #dfe6ee}
+  summary .title{font:600 12px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--route);flex:none}
+  summary .now{font-size:14px;opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:6px 14px}
+  .tiles label.row{border:1px solid var(--line);border-radius:8px;min-height:44px;padding:6px 10px;gap:8px}
+  .tiles label.row:first-of-type{border-top:1px solid var(--line)}
+  .tiles .note{display:none}
+  .tiles .name{font-size:15px}
+  .picked-note{margin:2px 14px 6px;font-size:13px;opacity:.7;min-height:1.3em}
+  .group{padding:2px 0 6px}
+  .group+.group{border-top:1px solid #dfe6ee}
+  .group>h3{margin:10px 14px 2px;font:600 13px/1.2 -apple-system,system-ui,Roboto,sans-serif;opacity:.8}
+  .group>p.note{margin:0 14px 4px}
+  [hidden]{display:none!important}
+  .field{display:block;padding:6px 14px}
+  .field input{width:100%;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px -apple-system,system-ui,Roboto,sans-serif;color:var(--ink)}
+  #others>summary{padding:12px 14px;font-size:14px;opacity:.8;cursor:pointer}
+  #unsuited{list-style:none;margin:0;padding:0 14px 6px}
+  #unsuited li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid #edf1f5;font-size:13px;opacity:.75}
+  #unsuited strong{font-size:14px;font-weight:500}
+  #unsuited span{flex:none}
+  #places{list-style:none;margin:0;padding:0 14px}
+  #places li button{display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
+  #places small{display:block;opacity:.7}
+  #place-now{margin:4px 14px;font-weight:600}
+  #chart-kind{margin:8px 14px 0;font-weight:600}
 </style>
 </head>
 <body>
 <header>
-  <h1 id="title">Groundtrack Enroute</h1>
-  <p>The watch draws each hour's chart from its own map, with the Sun, Moon and satellites the phone sends ahead. Saving draws this hour again.</p>
+  <h1 id="title">Groundtrack</h1>
+  <p>A setting is shown only where it changes the face. The preview is the watch's own drawing.</p>
 </header>
 <div class="preview" aria-label="A preview of the face in these settings">
   <figure><canvas id="preview" width="200" height="228"></canvas><figcaption>The watch, this minute</figcaption></figure>
@@ -55,152 +86,274 @@
 </div>
 <p id="preview-note" class="note" style="text-align:center"></p>
 <form id="form">
-  <fieldset><legend>Track</legend>
-    <label class="row enroute"><input type="radio" name="body" value="sun"><span class="name">Sun<span class="note">Its ground point, where it stands overhead</span></span></label>
-    <label class="row enroute"><input type="radio" name="body" value="moon"><span class="name">Moon<span class="note">In its calculated phase</span></span></label>
-    <div id="satellites"></div>
-  </fieldset>
-  <fieldset><legend>Plate</legend><div id="plates"></div></fieldset>
-  <fieldset><legend>Figures</legend><div id="figure-sets"></div></fieldset>
-  <fieldset><legend>Clock</legend>
-    <label class="row"><input type="checkbox" name="clock24"><span class="name">24-hour figures</span></label>
-  </fieldset>
-  <fieldset><legend>Minute readout</legend>
-    <label class="row"><input type="radio" name="readout" value="off"><span class="name">Off<span class="note">The body on the graduated route is the index</span></span></label>
-    <label class="row"><input type="radio" name="readout" value="flag"><span class="name">Minute flag<span class="note">A pennant on a staff from the body, with the minutes</span></span></label>
-    <label class="row enroute"><input type="radio" name="readout" value="callout"><span class="name">Time callout<span class="note">The time in full, hung from a leader</span></span></label>
-  </fieldset>
-  <fieldset><legend>Time figures</legend>
-    <p class="note">The time callout's, and the world band's clock's</p>
-    <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Four figures, minutes outlined</span></label>
-    <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Minutes in route ink</span></label>
-    <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Minutes in Departure Mono</span></label>
-    <label class="row"><input type="radio" name="numerals" value="plain"><span class="name">Smaller minutes, no colon</span></label>
-    <label class="row"><input type="radio" name="numerals" value="colon"><span class="name">Smaller minutes with colon</span></label>
-  </fieldset>
-  <fieldset><legend>Corner</legend>
-    <label class="row"><input type="radio" name="corner" value="day"><span class="name">Day of the year<span class="note">DAY 270; on the world band the satellite's height, ISS 411 KM</span></span></label>
-    <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
-    <label class="row"><input type="radio" name="corner" value="light"><span class="name">The Moon's light<span class="note">On the Moon's charts: 87% WAX; the day of the year otherwise</span></span></label>
-    <p class="note">The corner also tells you when the phone is out of reach (NO LINK), the battery is low (BAT 18) or a satellite's elements are over two days old (EL OLD).</p>
-  </fieldset>
-  <fieldset><legend>Margin time</legend>
-    <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)</span></label>
-    <label class="row"><input type="radio" name="margin" value="body"><span class="name">Nautical zone under the body<span class="note">Its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
-  </fieldset>
-  <fieldset class="plotboard"><legend>Time scale</legend>
-    <p class="note">For the fast satellites' world band</p>
-    <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Fixed<span class="note">For the world band: a ruler with a moving pointer</span></span></label>
-    <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
-    <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Tape + world<span class="note">The map scrolls too, the satellite always under the index; the watch draws the whole chart each minute, which costs battery</span></span></label>
-    <label class="row"><input type="radio" name="tape" value="clock"><span class="name">Clock<span class="note">The time instead of the tape, in the callout's figures</span></span></label>
-  </fieldset>
-  <fieldset class="plotboard"><legend>Tape to route</legend>
-    <label class="row"><input type="radio" name="transfer" value="off"><span class="name">None</span></label>
-    <label class="row"><input type="radio" name="transfer" value="vernier"><span class="name">Vernier<span class="note">The route's own minutes ticked under the tape's: bunched where the orbit squeezes them, spread where it stretches them</span></span></label>
-    <label class="row"><input type="radio" name="transfer" value="comb"><span class="name">Comb<span class="note">A stroke under every five minutes, leaning toward where that minute falls on the route</span></span></label>
-    <label class="row"><input type="radio" name="transfer" value="chevrons"><span class="name">Chevrons<span class="note">Pointing in where the route squeezes the minutes, out where it stretches them</span></span></label>
-    <p class="note" style="margin:0">With the fixed time scale only.</p>
-  </fieldset>
-  <fieldset class="enroute"><legend>QZSS chart</legend>
-    <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">Its figure-8, the day's hours along it</span></span></label>
-    <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">On the hour chart, zoomed far in over Japan or Australia</span></span></label>
-  </fieldset>
-  <fieldset><legend>Events</legend>
-    <ul id="events"></ul>
-    <div class="coords">
-      <label>Date<input name="date" type="date"></label>
-      <label>Time<input name="time" type="time"></label>
-      <label style="grid-column:1/3">Title<input name="title" maxlength="40" placeholder="Dinner"></label>
-      <button type="button" id="add">Add to the route</button>
-      <p class="note" id="event-note" style="grid-column:1/3;margin:0">Set on the route at their minute as reporting points, named with five letters from the title. Kept on the phone and the watch.</p>
+  <details class="card" id="sec-face" open><summary><span class="title">Face</span><span class="now" id="now-face"></span></summary>
+    <p class="note field">Groundtrack is two faces. Each follows the bodies it suits and has settings of its own.</p>
+    <label class="row"><input type="radio" name="face" value="enroute"><span class="name">Enroute<span class="note">The hour as a chart: the route across a zoomed map, from this hour's compass rose to the next. For the Sun, the Moon and the slow, high satellites.</span></span></label>
+    <label class="row"><input type="radio" name="face" value="plotboard"><span class="name">Plotboard<span class="note">Mission control's wall: the orbit across a band of the whole world, the hour in a panel above. For the fast, low satellites.</span></span></label>
+  </details>
+  <details class="card" id="sec-follow" open><summary><span class="title">Follow</span><span class="now" id="now-follow"></span></summary>
+    <div class="group" id="bodies"></div>
+    <details class="group" id="others"><summary id="others-title"></summary><p class="note field" id="others-why"></p><ul id="unsuited"></ul></details>
+  </details>
+  <details class="card" id="sec-chart" open><summary><span class="title" id="chart-title">Chart</span><span class="now" id="now-chart"></span></summary>
+    <p class="note field" id="chart-note"></p>
+    <div class="group" id="span-group"><h3>QZSS's chart</h3>
+      <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">Its figure-8, the day's hours along it</span></span></label>
+      <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">Zoomed far in over Japan or Australia</span></span></label>
     </div>
-  </fieldset>
-  <fieldset><legend>Home station</legend>
-    <label class="row"><input type="radio" name="home" value="preset"><span class="name">For the time zone<span class="note" id="preset-note"></span></span></label>
+    <div class="group" id="tape-group"><h3>The panel above the world</h3>
+      <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Ruler<span class="note">The hour as a fixed ruler, a pointer moving along it</span></span></label>
+      <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Sliding tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
+      <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Sliding tape and world<span class="note">The map scrolls too, the satellite always under the pointer. Drawn whole each minute, which costs battery</span></span></label>
+      <label class="row"><input type="radio" name="tape" value="clock"><span class="name">Clock<span class="note">The time in large figures instead of a scale</span></span></label>
+    </div>
+    <div class="group" id="readout-group"><h3 id="readout-title">The minute, marked on the route</h3>
+      <label class="row"><input type="radio" name="readout" value="off"><span class="name">Unmarked<span class="note">The body on the graduated route is the index</span></span></label>
+      <label class="row"><input type="radio" name="readout" value="flag"><span class="name">A flag<span class="note">A pennant on a staff from the body, with the minutes</span></span></label>
+      <label class="row"><input type="radio" name="readout" value="callout"><span class="name">The time in full<span class="note">Hung from a leader beside the body</span></span></label>
+    </div>
+    <p class="note field" id="readout-fixed"></p>
+    <div class="group" id="transfer-group"><h3>The ruler's minutes, brought down to the route</h3>
+      <label class="row"><input type="radio" name="transfer" value="off"><span class="name">None</span></label>
+      <label class="row"><input type="radio" name="transfer" value="vernier"><span class="name">Vernier<span class="note">The route's own minutes ticked under the ruler's</span></span></label>
+      <label class="row"><input type="radio" name="transfer" value="comb"><span class="name">Comb<span class="note">A stroke every five minutes, leaning toward where that minute falls on the route</span></span></label>
+      <label class="row"><input type="radio" name="transfer" value="chevrons"><span class="name">Chevrons<span class="note">Pointing in where the route squeezes the minutes, out where it stretches them</span></span></label>
+    </div>
+    <div class="group" id="numerals-group"><h3 id="numerals-title">The time's figures</h3>
+      <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Four figures, minutes outlined</span></label>
+      <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Minutes in the route's ink</span></label>
+      <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Minutes in the chart's lettering</span></label>
+      <label class="row"><input type="radio" name="numerals" value="plain"><span class="name">Smaller minutes</span></label>
+      <label class="row"><input type="radio" name="numerals" value="colon"><span class="name">Smaller minutes, with a colon</span></label>
+    </div>
+  </details>
+  <details class="card" id="sec-time"><summary><span class="title">Time</span><span class="now" id="now-time"></span></summary>
+    <div class="group">
+      <label class="row"><input type="checkbox" name="clock24"><span class="name">24-hour clock<span class="note">The hour figures and the time read 13 to 23, not 1 to 11. Zulu time and home's rise, set and passes are always 24-hour, as on a chart</span></span></label>
+    </div>
+    <div class="group"><h3>The time in the bottom margin</h3>
+      <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)</span></label>
+      <label class="row"><input type="radio" name="margin" value="body"><span class="name">The nautical zone under the body<span class="note">With its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
+    </div>
+  </details>
+  <details class="card" id="sec-look"><summary><span class="title">Look</span><span class="now" id="now-look"></span></summary>
+    <div class="group"><h3>Plate</h3><div id="plates" class="tiles"></div><p class="picked-note" id="plate-note"></p></div>
+    <div class="group"><h3>Hour figures</h3><div id="figure-sets" class="tiles"></div><p class="picked-note" id="figures-note"></p></div>
+    <div class="group"><h3>The bottom right corner</h3>
+      <label class="row"><input type="radio" name="corner" value="day"><span class="name" id="corner-day">Day of the year<span class="note">DAY 270</span></span></label>
+      <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
+      <label class="row" id="corner-light"><input type="radio" name="corner" value="light"><span class="name">The Moon's light<span class="note">87% WAX</span></span></label>
+      <p class="note field">The corner also says when the phone is out of reach (NO LINK), the battery is low (BAT 18) or a satellite's orbit data is old (EL OLD).</p>
+    </div>
+  </details>
+  <details class="card" id="sec-home"><summary><span class="title">Home</span><span class="now" id="now-home"></span></summary>
+    <p class="note field">Home is marked on the chart, with its sunrise and sunset, moonrise and moonset, or the satellite's next pass.</p>
     <label class="row"><input type="radio" name="home" value="custom"><span class="name">A place of my own</span></label>
-    <div class="coords" id="coords" hidden>
-      <label>Latitude<input name="lat" inputmode="decimal" placeholder="40.71"></label>
-      <label>Longitude<input name="lon" inputmode="decimal" placeholder="-74.01"></label>
-      <button type="button" id="locate">Use this phone's location</button>
-      <p id="status">Rounded to 0.01°, about a kilometre, and kept on the phone.</p>
+    <div id="place" hidden>
+      <p id="place-now"></p>
+      <label class="field">Search for a town or city<input id="search" type="search" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Norfolk, Virginia"></label>
+      <ul id="places"></ul>
+      <p class="note field" id="search-note">The search goes to Open-Meteo's place names service.</p>
+      <div class="coords">
+        <button type="button" id="locate">Use this phone's location</button>
+        <label>Latitude<input name="lat" inputmode="decimal" placeholder="40.71"></label>
+        <label>Longitude<input name="lon" inputmode="decimal" placeholder="-74.01"></label>
+        <p id="status">Kept to 0.01°, about a kilometre, on the phone and the watch.</p>
+      </div>
     </div>
+    <label class="row" id="preset-row"><input type="radio" name="home" value="preset"><span class="name">The time zone's city<span class="note" id="preset-note"></span></span></label>
     <label class="row"><input type="radio" name="home" value="none"><span class="name">None</span></label>
-  </fieldset>
+  </details>
+  <details class="card" id="sec-events"><summary><span class="title">Calendar</span><span class="now" id="now-events"></span></summary>
+    <p class="note field">Off unless you give it a calendar. With one, each event of the coming week stands on the route at its minute as a reporting point, named with five letters from its title.</p>
+    <label class="field">Your calendar's private iCal link<input name="calendar" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://…/basic.ics"></label>
+    <p class="note field">Google Calendar: Settings, your calendar, “Secret address in iCal format”. iCloud: share the calendar as a public calendar and copy its link. Outlook: Settings, Shared calendars, Publish, the ICS link.</p>
+    <p class="note field">A watch face cannot read the phone's calendar itself, so the phone fetches this link every three hours while the face is running. The link stays on this phone; only each event's time and five-letter name go to the watch. All-day events are left out.</p>
+    <p class="note field" id="calendar-status"></p>
+    <ul id="events"></ul>
+  </details>
 </form>
 <div class="actions"><button type="button" id="cancel">Cancel</button><button type="button" id="save">Save</button></div>
 <script>
 (function(){
-  // Filled in by the phone app: {settings, bodies:[[key,name,note]] (the
-  // satellites), plates:[[key,name,note]], figureSets:[[key,name,note]], preset, position: the phone's fix
-  // {lat, lon} or null}
-  var config=__CONFIG__,s=config.settings,form=document.getElementById('form');
-  // Each face shows what it draws: Groundtrack the hour chart, the whole
-  // day and the fast satellites' world band; Fuller rolling Fuller sheets of
-  // the hour and the day (no world band, so none of its options).
-  var fuller=config.face==='fuller';
+  // Filled in by the phone app: {face ('enroute': Groundtrack, its two
+  // faces; 'fuller'), settings, bodies: [[key, name, note, view, period]]
+  // (the Sun, the Moon and the satellites; view: the body's chart, 'hour',
+  // 'day' or 'world'; period: the minutes it takes a lap), plates and
+  // figureSets: [[key, name, note]], events (the calendar's, as last read)
+  // and calendarStatus, preset (the zone's city) and position (the phone's
+  // fix {lat, lon} or null)}.
+  var config=__CONFIG__,form=document.getElementById('form'),fuller=config.face==='fuller';
+  // Which settings a chart takes, and which face a body is on:
+  // src/settings-rules.js, as the phone and the tests have it.
+  var RULES=(function(){__RULES__
+    return {settingsFor:settingsFor,faceOf:faceOf,unsuited:unsuited,UNSUITED:UNSUITED};})();
   document.getElementById('title').textContent=fuller?'Groundtrack Fuller':'Groundtrack';
-  if(fuller)[].forEach.call(document.querySelectorAll('.plotboard'),function(e){e.remove();});
-  function rows(list,name,into){
-    list.forEach(function(p){
-      var row=document.createElement('label');row.className='row';
-      row.innerHTML='<input type="radio" name="'+name+'"><span class="name"></span>';
-      row.firstChild.value=p[0];
-      row.lastChild.textContent=p[1];
-      var note=document.createElement('span');note.className='note';note.textContent=p[2];row.lastChild.appendChild(note);
-      into.appendChild(row);
-    });
+  // The settings as they stand on this page. A setting the chart in view
+  // does not take keeps its value, for the charts that do; each of
+  // Groundtrack's two faces keeps the body it last followed.
+  var s={},views={},periods={};
+  ['body','plate','figures','readout','numerals','corner','margin','span','tape','transfer'].forEach(function(k){s[k]=config.settings[k];});
+  s.clock24=config.settings.clock24!=='0';
+  config.bodies.forEach(function(b){views[b[0]]=b[3];periods[b[0]]=b[4];});
+  function on(face,body){return body in views&&RULES.faceOf(views[body])===face;}
+  s.face=fuller?'fuller':RULES.faceOf(views[s.body]);
+  s.bodyOf={enroute:on('enroute',config.settings.bodyEnroute)?config.settings.bodyEnroute:'sun',plotboard:on('plotboard',config.settings.bodyPlotboard)?config.settings.bodyPlotboard:'sat:25544'};
+  if(!fuller)s.bodyOf[s.face]=s.body;
+  var KINDS={hour:['Hour chart','The route across the map for this hour, from the compass rose to the next hour\'s point.'],
+    day:['Whole-day chart','The whole day\'s route on one chart, the time beside the body.'],
+    world:['World band','The orbit across a band of the whole world, with the tracking stations; the hour in a panel above.']};
+  if(fuller){KINDS.hour=['Hour sheet','The hour\'s route on a Fuller map unrolled along it.'];KINDS.day=['Whole-day sheet','The day\'s route on a Fuller map unrolled along it, the time beside the body.'];}
+  var FACES={enroute:'Enroute',plotboard:'Plotboard',fuller:'Sheet'};
+  if(fuller)document.getElementById('sec-face').remove();
+  function named(list,key){for(var i=0;i<list.length;i++)if(list[i][0]===key)return list[i];return ['','',''];}
+  function short(note){return String(note).split(/[.:] |, /)[0].replace(/\.$/,'')+'.';}
+  function row(name,value,title,note){
+    var label=document.createElement('label');label.className='row';
+    label.innerHTML='<input type="radio" name="'+name+'"><span class="name"></span>';
+    label.firstChild.value=value;label.lastChild.textContent=title;
+    var extra=document.createElement('span');extra.className='note';extra.textContent=note;label.lastChild.appendChild(extra);
+    return label;
   }
-  rows(config.bodies||[],'body',document.getElementById('satellites'));
-  rows(config.plates,'plate',document.getElementById('plates'));
-  rows(config.figureSets||[],'figures',document.getElementById('figure-sets'));
-  // (A face may show only some of the options.)
-  function pick(name,value){var inputs=form.elements[name];if(!inputs)return;for(var i=0;i<inputs.length;i++)inputs[i].checked=inputs[i].value===value;}
-  function picked(name){var inputs=form.elements[name];if(!inputs)return null;for(var i=0;i<inputs.length;i++)if(inputs[i].checked)return inputs[i].value;return null;}
-  pick('body',s.body);pick('plate',s.plate);pick('readout',s.readout);pick('numerals',s.numerals);pick('figures',s.figures);pick('corner',s.corner);pick('margin',s.margin);pick('span',s.span);pick('tape',s.tape);pick('transfer',s.transfer);
-  form.elements.clock24.checked=s.clock24!=='0';
-  document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+s.timeZone+')':'None for '+s.timeZone;
-  var home=null;try{home=s.home?JSON.parse(s.home):null;}catch(e){}
-  if(home&&home.none)pick('home','none');
-  else if(home){pick('home','custom');form.elements.lat.value=home.lat;form.elements.lon.value=home.lon;}
-  else pick('home','preset');
-  function coords(){document.getElementById('coords').hidden=picked('home')!=='custom';}
-  form.addEventListener('change',coords);coords();
+  config.plates.forEach(function(p){document.getElementById('plates').appendChild(row('plate',p[0],p[1],p[2]));});
+  (config.figureSets||[]).forEach(function(f){document.getElementById('figure-sets').appendChild(row('figures',f[0],f[1],f[2]));});
+  // The bodies the face in view follows, and under them the ones it does
+  // not, each with why (and where it is).
+  function bodies(){
+    var list=document.getElementById('bodies'),rest=document.getElementById('unsuited');list.textContent='';rest.textContent='';
+    config.bodies.forEach(function(b){
+      var why=fuller?'':RULES.unsuited(s.face,b[3],b[4]);
+      if(!why){list.appendChild(row('body',b[0],b[1],(fuller?KINDS[RULES.settingsFor('fuller',b[0],b[3],{span:'day'}).chart][0]+'. ':'')+short(b[2])));return;}
+      var li=document.createElement('li'),name=document.createElement('strong'),text=document.createElement('span');
+      name.textContent=b[1].split(' · ').pop();text.textContent=why;li.appendChild(name);li.appendChild(text);rest.appendChild(li);
+    });
+    document.getElementById('others').hidden=!rest.childNodes.length;
+    document.getElementById('others-title').textContent='Not on '+(s.face==='enroute'?'Enroute':'the Plotboard')+' ('+rest.childNodes.length+')';
+    document.getElementById('others-why').textContent=RULES.UNSUITED[s.face]||'';
+  }
+  function radios(name){var e=form.elements[name];return e?(e.length===undefined?[e]:[].slice.call(e)):[];}
+  function picked(name){var r=radios(name);for(var i=0;i<r.length;i++)if(r[i].checked)return r[i].value;return null;}
+  // A group shows `value` chosen, and only the rows in `offered` (all, if not given).
+  function show(name,value,offered){
+    radios(name).forEach(function(r){r.checked=r.value===value;r.parentNode.hidden=!!offered&&offered.indexOf(r.value)<0;});
+  }
+  function hide(id,hidden){document.getElementById(id).hidden=hidden;}
+  function label(name){var c=form.querySelector('input[name='+name+']:checked');return c?c.parentNode.querySelector('.name').firstChild.nodeValue.trim():'';}
+  function rules(){return RULES.settingsFor(config.face,s.body,views[s.body],{span:s.span,readout:s.readout,tape:s.tape});}
+  var drawnFace=null;
+  function render(){
+    if(drawnFace!==s.face){bodies();drawnFace=s.face;}
+    var r=rules(),kind=KINDS[r.chart],world=r.chart==='world';
+    if(!fuller){show('face',s.face);document.getElementById('now-face').textContent=FACES[s.face];}
+    show('body',s.body);show('plate',s.plate);show('figures',s.figures);show('margin',s.margin);
+    document.getElementById('chart-title').textContent=FACES[s.face];
+    document.getElementById('chart-note').textContent=kind[0]+'. '+kind[1];
+    hide('span-group',!r.span);show('span',s.span);
+    hide('tape-group',!r.tape);show('tape',s.tape);
+    hide('transfer-group',!r.transfer);show('transfer',s.transfer);
+    form.elements.clock24.checked=s.clock24;
+    hide('readout-group',!r.readout.length);show('readout',r.readoutShown,r.readout);
+    document.getElementById('readout-title').textContent=world?'The minute, marked on the orbit':'The minute, marked on the route';
+    var fixed=document.getElementById('readout-fixed');
+    fixed.hidden=!!r.readout.length;
+    fixed.textContent=r.chart==='day'?'The whole-day chart always carries the time in full beside the body.':'The panel carries the time. (Under the ruler the minute can also be marked with a flag.)';
+    hide('numerals-group',!r.numerals);show('numerals',s.numerals);
+    document.getElementById('numerals-title').textContent=world?'The clock\'s figures':'The time\'s figures';
+    show('corner',s.corner==='light'&&!r.light?'day':s.corner,r.light?null:['day','point']);
+    document.getElementById('corner-day').firstChild.nodeValue=world?'The satellite\'s height':'Day of the year';
+    document.getElementById('corner-day').lastChild.textContent=world?'ISS 411 KM':'DAY 270';
+    // Each section's settings in a line, read with the section closed.
+    document.getElementById('plate-note').textContent=named(config.plates,s.plate)[2];
+    document.getElementById('figures-note').textContent=named(config.figureSets||[],s.figures)[2];
+    document.getElementById('now-follow').textContent=named(config.bodies,s.body)[1].split(' · ')[0];
+    document.getElementById('now-chart').textContent=[r.span?label('span'):null,r.tape?label('tape'):null,r.readout.length?label('readout'):null].filter(Boolean).join(' · ')||kind[0];
+    document.getElementById('now-time').textContent=(s.clock24?'24-hour':'12-hour')+' · '+(s.margin==='body'?'Zone time':'Zulu');
+    document.getElementById('now-look').textContent=named(config.plates,s.plate)[1]+' · '+named(config.figureSets||[],s.figures)[1];
+  }
+  form.addEventListener('change',function(e){
+    var t=e.target;
+    if(t.name==='clock24')s.clock24=t.checked;
+    else if(t.name==='face'){s.face=t.value;s.body=s.bodyOf[s.face];}
+    else if(t.name==='body'){s.body=t.value;if(!fuller)s.bodyOf[s.face]=s.body;}
+    else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;
+    render();
+  });
+  // ---- Home: a place of one's own (searched for, the phone's own, or its
+  // coordinates), the time zone's city, or none.
+  var home=null;try{home=config.settings.home?JSON.parse(config.settings.home):null;}catch(e){}
+  var placeName=home&&typeof home.name==='string'?home.name:'';
+  document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+config.settings.timeZone+')':'';
+  hide('preset-row',!config.preset);
+  if(home&&home.none)show('home','none');
+  else if(home||!config.preset){show('home','custom');if(home){form.elements.lat.value=home.lat;form.elements.lon.value=home.lon;}}
+  else show('home','preset');
   var status=document.getElementById('status');
+  function place(){
+    document.getElementById('place').hidden=picked('home')!=='custom';
+    var lat=form.elements.lat.value,lon=form.elements.lon.value;
+    document.getElementById('place-now').textContent=lat&&lon?(placeName?placeName+' · ':'')+lat+', '+lon:'No place yet: search, use the phone\'s location, or enter coordinates.';
+    var mode=picked('home');
+    document.getElementById('now-home').textContent=mode==='none'?'None':mode==='preset'?config.preset:lat&&lon?(placeName||lat+', '+lon):'Not set';
+  }
+  function setPlace(lat,lon,name){form.elements.lat.value=(+lat).toFixed(2);form.elements.lon.value=(+lon).toFixed(2);placeName=name||'';place();}
+  form.addEventListener('change',place);
+  ['lat','lon'].forEach(function(k){form.elements[k].addEventListener('input',function(){placeName='';place();});});
+  place();
   document.getElementById('locate').addEventListener('click',function(){
     // The phone's own fix, when it had one as the page opened.
-    if(config.position){
-      form.elements.lat.value=config.position.lat.toFixed(2);form.elements.lon.value=config.position.lon.toFixed(2);
-      status.textContent='Found, rounded to 0.01°.';return;
-    }
+    if(config.position){setPlace(config.position.lat,config.position.lon,'');status.textContent='Found, kept to 0.01°.';return;}
     if(!navigator.geolocation){status.textContent='This phone offers no location here.';return;}
     status.textContent='Finding this phone…';
-    navigator.geolocation.getCurrentPosition(function(p){
-      form.elements.lat.value=p.coords.latitude.toFixed(2);form.elements.lon.value=p.coords.longitude.toFixed(2);
-      status.textContent='Found, rounded to 0.01°.';
-    },function(e){status.textContent='No location: '+(e&&e.message||'refused');},{timeout:15000,maximumAge:3600000});
+    navigator.geolocation.getCurrentPosition(function(p){setPlace(p.coords.latitude,p.coords.longitude,'');status.textContent='Found, kept to 0.01°.';},
+      function(e){status.textContent='No location: '+(e&&e.message||'refused');},{timeout:15000,maximumAge:3600000});
   });
-  // Events: {epoch, title}, the phone names them (five-letter codes).
-  var events=(config.events||[]).slice(),list=document.getElementById('events');
-  function two(n){return (n<10?'0':'')+n;}
-  function showEvents(){
-    list.textContent='';events.sort(function(a,b){return a.epoch-b.epoch;});
-    events.forEach(function(e,i){
-      var li=document.createElement('li'),text=document.createElement('span'),d=new Date(e.epoch),remove=document.createElement('button');
-      text.textContent=d.toDateString().slice(0,10)+' '+two(d.getHours())+':'+two(d.getMinutes())+' '+e.title+' ';
-      if(e.label){var code=document.createElement('code');code.textContent=e.label;text.appendChild(code);}
-      remove.type='button';remove.textContent='Remove';remove.addEventListener('click',function(){events.splice(i,1);showEvents();});
-      li.appendChild(text);li.appendChild(remove);list.appendChild(li);
+  // The search (Open-Meteo's geocoding, as Dymaxion's): a moment after the
+  // typing stops, the latest answer only.
+  var search=document.getElementById('search'),places=document.getElementById('places'),searchNote=document.getElementById('search-note'),timer=null,asked=0;
+  function found(list,message){
+    places.textContent='';
+    list.forEach(function(p){
+      var li=document.createElement('li'),b=document.createElement('button'),where=document.createElement('small');
+      b.type='button';b.textContent=p.name;where.textContent=[p.admin1,p.country].filter(function(v){return typeof v==='string'&&v&&v!==p.name;}).join(', ');b.appendChild(where);
+      b.addEventListener('click',function(){setPlace(p.latitude,p.longitude,p.name);search.value='';found([],p.name+' chosen.');});
+      li.appendChild(b);places.appendChild(li);
     });
+    searchNote.textContent=message;
   }
-  showEvents();
-  (function(){var d=new Date();form.elements.date.value=d.getFullYear()+'-'+two(d.getMonth()+1)+'-'+two(d.getDate());})();
-  document.getElementById('add').addEventListener('click',function(){
-    var date=form.elements.date.value,time=form.elements.time.value,title=form.elements.title.value.trim();
-    var t=new Date(date+'T'+time).getTime();
-    if(!date||!time||!title||!isFinite(t)){document.getElementById('event-note').textContent='An event needs a date, a time and a title.';return;}
-    events.push({epoch:t,title:title.slice(0,40)});form.elements.title.value='';showEvents();
+  search.addEventListener('input',function(){
+    clearTimeout(timer);var q=search.value.trim(),mine=++asked;
+    if(q.length<3){found([],'Three letters or more to search.');return;}
+    searchNote.textContent='Searching…';
+    timer=setTimeout(function(){
+      var stop=typeof AbortController==='function'?new AbortController():null,late=setTimeout(function(){if(stop)stop.abort();},8000);
+      if(!window.fetch){found([],'The search is not available here. The phone\'s location and coordinates still work.');return;}
+      fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q.slice(0,100))+'&count=8&language=en&format=json',stop?{signal:stop.signal}:{})
+        .then(function(r){if(!r.ok)throw new Error('search');return r.json();})
+        .then(function(data){
+          if(mine!==asked)return;
+          var list=(data&&Array.isArray(data.results)?data.results:[]).filter(function(p){return p&&typeof p.name==='string'&&isFinite(p.latitude)&&Math.abs(p.latitude)<=90&&isFinite(p.longitude)&&Math.abs(p.longitude)<=180;}).slice(0,8);
+          found(list,list.length?'Choose the one you mean.':'Nothing found. Try a nearby town, or add the country.');
+        })
+        .catch(function(){if(mine===asked)found([],'The search is out of reach. The phone\'s location and coordinates still work.');})
+        .then(function(){clearTimeout(late);});
+    },350);
   });
+  // ---- The calendar: its link, how the last reading went, and the events
+  // it gave (the phone names them with five-letter codes).
+  form.elements.calendar.value=config.settings.calendar||'';
+  function two(n){return (n<10?'0':'')+n;}
+  function calendar(){
+    var link=form.elements.calendar.value.trim(),same=link===(config.settings.calendar||''),list=document.getElementById('events');
+    list.textContent='';
+    (same?config.events||[]:[]).forEach(function(e){
+      var li=document.createElement('li'),text=document.createElement('span'),d=new Date(e.epoch),code=document.createElement('code');
+      text.textContent=d.toDateString().slice(0,10)+' '+two(d.getHours())+':'+two(d.getMinutes())+' '+e.title+' ';
+      code.textContent=e.label;text.appendChild(code);li.appendChild(text);list.appendChild(li);
+    });
+    document.getElementById('calendar-status').textContent=!link?'':same?(config.calendarStatus?'Last read: '+config.calendarStatus+'.':'Not read yet.'):'Read once you save.';
+    document.getElementById('now-events').textContent=link?(same&&config.events&&config.events.length?config.events.length+(config.events.length===1?' event':' events'):'On'):'Off';
+  }
+  form.elements.calendar.addEventListener('input',calendar);calendar();
   function close(result){location.href='pebblejs://close#'+encodeURIComponent(result);}
   // ---- The preview: the watch's own core (compiled to WebAssembly) builds
   // and draws this hour, this minute, in the settings as they are on this
@@ -224,25 +377,27 @@
       });
     });
   }
-  // The hour's chart input with this page's settings in it.
+  // The hour's chart input with this page's settings in it (as the phone
+  // will send them: a setting the chart does not take is the watch's to
+  // ignore).
   function inputFor(text){
-    var lines=text.split('\n'),readout=picked('readout')||'off';
+    var lines=text.split('\n');
     function set(key,value){if(value==null||value<0)return;for(var i=0;i<lines.length;i++)if(lines[i].split(' ')[0]===key){lines[i]=key+' '+value;return;}lines.push(key+' '+value);}
-    set('plate',config.plates.map(function(p){return p[0];}).indexOf(picked('plate')));
-    set('flag',readout==='flag'?1:0);set('readout',readout==='flag'?1:readout==='callout'?2:0);
-    set('numerals',NUMERALS.indexOf(picked('numerals')));set('zonebody',picked('margin')==='body'?1:0);
-    if(form.elements.tape)set('tape',TAPES.indexOf(picked('tape')));
-    if(form.elements.transfer)set('transfer',TRANSFERS.indexOf(picked('transfer')));
-    set('figures',(config.figureSets||[]).map(function(f){return f[0];}).indexOf(picked('figures')));
-    set('corner',CORNERS.indexOf(picked('corner')));set('clock24',form.elements.clock24.checked?1:0);
+    set('plate',config.plates.map(function(p){return p[0];}).indexOf(s.plate));
+    set('flag',s.readout==='flag'?1:0);set('readout',s.readout==='flag'?1:s.readout==='callout'?2:0);
+    set('numerals',NUMERALS.indexOf(s.numerals));set('zonebody',s.margin==='body'?1:0);
+    set('tape',TAPES.indexOf(s.tape));set('transfer',TRANSFERS.indexOf(s.transfer));
+    set('figures',(config.figureSets||[]).map(function(f){return f[0];}).indexOf(s.figures));
+    set('corner',CORNERS.indexOf(s.corner));set('clock24',s.clock24?1:0);
+    if(picked('home')==='none')set('home',0);
     return lines.join('\n');
   }
   function paint(){
     if(!core)return;
-    var body=picked('body'),text=PV.texts[body],shown=body;
-    if(!text){shown=Object.keys(PV.texts)[0];text=PV.texts[shown];}
+    // (QZSS's hour has its own input.)
+    var text=PV.texts[s.body+(rules().span&&s.span==='hour'?'/hour':'')]||PV.texts[s.body];
     var box=document.querySelector('.preview');
-    if(!text){box.style.display='none';note('No preview yet: the phone has not fetched this satellite\'s orbit. It will after saving.');return;}
+    if(!text){box.style.display='none';note('No preview of this satellite yet: the phone has not fetched its orbit. It will once you save.');return;}
     box.style.display='';
     var bytes=new TextEncoder().encode(inputFor(text)),at=core.core_alloc(bytes.length);
     new Uint8Array(core.memory.buffer,at,bytes.length).set(bytes);
@@ -261,9 +416,9 @@
       }
       ctx.putImageData(img,0,0);
     });
-    var names={sun:'the Sun',moon:'the Moon'};
-    note(shown===body?'':'The phone has no data yet for this body: '+(names[shown]||'its satellite')+' is shown.');
+    note('');
   }
+  render();
   // (Whatever stops the preview, a throw included, stops only the preview:
   // Save and Cancel below are still wired.)
   new Promise(function(done){done(boot());}).then(paint).catch(function(error){document.querySelector('.preview').style.display='none';console.log(error&&error.message);});
@@ -276,10 +431,12 @@
       // (A decimal comma, as many keypads give, is a decimal point.)
       var lat=parseFloat(form.elements.lat.value.replace(',','.')),lon=parseFloat(form.elements.lon.value.replace(',','.'));
       if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
-      homeValue=JSON.stringify({lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
+      homeValue=JSON.stringify(placeName?{lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100,name:placeName.slice(0,60)}:{lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
     }
-    close(JSON.stringify({body:picked('body'),plate:picked('plate'),readout:picked('readout'),numerals:picked('numerals'),figures:picked('figures'),corner:picked('corner'),margin:picked('margin'),span:picked('span'),tape:picked('tape'),transfer:picked('transfer'),
-      clock24:form.elements.clock24.checked?'1':'0',home:homeValue,events:events.map(function(e){return {epoch:e.epoch,title:e.title};})}));
+    var link=form.elements.calendar.value.trim();
+    if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
+    close(JSON.stringify({body:s.body,bodyEnroute:s.bodyOf.enroute,bodyPlotboard:s.bodyOf.plotboard,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+      clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();
 </script>

@@ -13,7 +13,7 @@
 // i32 day (days since 1970-01-01), then per series its coefficients as f32,
 // in SERIES order.
 import {Body,GeoVector,RotateVector,Rotation_EQJ_EQD,EquatorFromVector,SiderealTime,Illumination,MoonPhase} from 'astronomy-engine';
-import {elementsFor,propagatePosition,FRESH} from './satellites.js';
+import {elementsFor,propagatePosition,freshFor} from './satellites.js';
 
 export const DAY=86400000;
 export const SERIES=[['sunLat',10],['sunLon',10],['moonLat',10],['moonLon',10],['moonFraction',8],['moonPhase',8],['sunDistance',4],['moonDistance',8]];
@@ -125,10 +125,10 @@ export function satelliteSegmentFor(body,t){
   return seg;
 }
 // A satellite's position at t (milliseconds, whole seconds as the watch
-// asks), refused more than three days from its elements' epoch, as SGP4's.
+// asks), refused too far from its elements' epoch (satellites.js freshFor).
 export function satelliteSegmentPosition(body,t){
   const e=elementsFor(body);if(!e)throw new RangeError(`No elements loaded for ${body}`);
-  if(Math.abs(t-e.epoch)>FRESH)throw new RangeError(`Elements for ${e.catalog?.code||body} are more than three days from this time`);
+  if(Math.abs(t-e.epoch)>freshFor(e))throw new RangeError(`Elements for ${e.catalog?.code||body} are too far from this time`);
   const seg=satelliteSegmentFor(body,t),u=(Math.floor(t/1000)-seg.start)/(seg.span/2)-1;
   return {lat:chebyshev(seg.lat,u),lon:wrap(chebyshev(seg.lon,u)),altitude:chebyshev(seg.altitude,u)};
 }

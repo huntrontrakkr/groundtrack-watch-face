@@ -2,7 +2,7 @@ import {PLATES,FIGURE_SETS,W,H} from './plates.js';
 import {loadCore,CoreRenderer} from './core.js';
 import {MINUTE} from './ephemeris.js';
 import {clockParts} from './render.js';
-import {CATALOG,registerElements,elementsFor,bodyId,catalogEntry,FRESH,viewOf} from './satellites.js';
+import {CATALOG,registerElements,elementsFor,bodyId,catalogEntry,freshFor,viewOf} from './satellites.js';
 import {HOMES} from './home.js';
 import {STUDY_ORBITS,registerNominal} from './nominal.js';
 import {localDay} from './chart-text.js';
@@ -107,7 +107,7 @@ async function track(norad){
   const c=CATALOG.find(x=>x.norad===norad);$('sat-status').textContent=`Requesting ${c.name} elements…`;
   try{
     const {text,from}=await elementsText(norad),e=registerElements(text,from),now=Math.floor(Date.now()/MINUTE)*MINUTE;
-    if(Math.abs(now-e.epoch)>FRESH)throw new Error('the newest elements are more than three days old');
+    if(Math.abs(now-e.epoch)>freshFor(e))throw new Error('the newest elements are too old');
     state.body=bodyId(norad);state.epoch=now;studyEpoch=now;render();
     $('sat-status').textContent=`${c.name}: elements from ${from}, epoch ${new Date(e.epoch).toISOString().slice(0,16).replace('T',' ')} UTC. Frozen at this minute; choose Now to catch up.`;
   }catch(error){$('sat-status').textContent=`Could not track ${c.name}: ${error.message}. The 2019 ISS archive remains available offline.`;}
