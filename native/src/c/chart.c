@@ -653,7 +653,7 @@ static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char
 // bearings worked out as they are drawn.
 #define TAKEN (FACE_CHART?64:32)
 #define BEARINGS (FACE_CHART?72:1)
-typedef struct {Px scratch[SCRATCH];Box taken[TAKEN];Px home_code[64];double sb[BEARINGS],cb[BEARINGS];} Draw;
+typedef struct {Px scratch[SCRATCH];Box taken[TAKEN];Px home_code[64];double sb[BEARINGS],cb[BEARINGS];uint8_t ring[2*120];} Draw;
 // The drawing's lists: the track on the screen, the pixel lists and
 // placements, and room for the hour figures' digits, only those drawn
 // (FIGURE_ROOM, chart_data.h).
@@ -767,6 +767,11 @@ static void grid_cell(const int32_t *q,int64_t qx,int64_t qy,GridCell *c){grid_c
 // ---------------------------------------------------------------- the hour
 // A build in progress: the track and camera, then the ground a slice of
 // rows at a time, then the drawing and the scene.
+// What the drawing notes for the scene, kept past its lists, in the build
+// itself (the stack is small): the lettering the callout's leader breaks
+// for, home's mark, the stations shown and the events.
+typedef struct {int16_t x,y,lx,box[4];uint8_t clear;char name[5];} EventNote;
+typedef struct {Box avoid[24];uint16_t marks[128];int16_t shown[32][2];uint8_t shown_table[32];EventNote events[16];} Notes;
 struct ChartBuild {
   ChartInput in;ChartSources src;
   TrackPoint *track;int count,h0,h1,t0,step;Cam cam;Plate plate;
@@ -774,7 +779,7 @@ struct ChartBuild {
   FigureGlyph glyphs[50];    // the figure set's table
   // The drawing's lists, and the scene's runs as they are made: a piece a
   // band of the plane, and their row offsets.
-  uint8_t *lists;
+  uint8_t *lists;Notes notes;
   char source[24];           // the band's source line, lettered by the renderer when the world slides
   // Then the scene, its minutes made a few at a time, with home's circle's
   // bearings.
@@ -868,7 +873,8 @@ static bool fuller_begin(ChartBuild *b){
   // drawing finds it.
   b->fg=alloc(sizeof(FullerConst));b->fc=alloc(sizeof(FullerCam));
   double (*dirs)[3]=alloc(sizeof(double)*3*count);FullerCell *cells=alloc(FULLER_SCRATCH);double *xs=alloc(sizeof(double)*2*count),*ys=xs?xs+count:NULL;
-  bool rolled=b->fg&&b->fc&&dirs&&cells&&xs&&src->grids&&fuller_const_read(src->grids,src->grid_source,b->fg);
+  bool rolled=b->fg&&b->fc&&dirs&&cells&&xs&&src->grids&&fuller_const_read(src->grids,src->grid_source,b->fg,(uint8_t *)cells);
+  _Static_assert(FULLER_SCRATCH>=FULLER_HEADER,"the roll's scratch holds the grids' header");
   for(int i=0;rolled&&i<count;i++){double lat,lon;if(!body_position(src,in->body,from+(int64_t)i*step,&lat,&lon))rolled=false;else fuller_direction(lat,lon,dirs[i]);}
   rolled=rolled&&fuller_roll(b->fc,cells,b->fg,(const double (*)[3])dirs,count,i0,i1,day,day?192:180,xs,ys);
   // Which network stations hear the satellite this hour: some point of the
@@ -1070,11 +1076,11 @@ static bool fuller_tile_rows(ChartBuild *b,int to){
 }
 // A shaded plate's dither over rugged ground makes short runs, to half as
 // much again as any other plate's ground takes and more than the watch has
-// room for: past the arena and three chunks (one on a Fuller sheet, whose
-// build holds more besides), or out of memory for them, the ground is begun
-// again with the light's step half as long again, up to four times, and
-// then left flat.
-#define SHADE_RUNS(b) ((b)->sink.cap+(FACE_ROLL&&(!FACE_CHART||(b)->fc)?1:3)*RUN_CHUNK)
+// room for: past the arena and three chunks (four on a Fuller sheet, none
+// on a zoomed one, whose build holds more besides), or out of memory for
+// them, the ground is begun again with the light's step half as long
+// again, up to four times, and then left flat.
+#define SHADE_RUNS(b) ((b)->sink.cap+(FACE_ROLL&&(!FACE_CHART||(b)->fc)?((b)->fine?0:4):3)*RUN_CHUNK)
 #define SHADE_AGAIN 5
 static void ground_again(ChartBuild *b){
   for(RunChunk *c=b->sink.head;c;){RunChunk *next=c->next;b->src.release(c);c=next;}
@@ -1132,6 +1138,7 @@ static bool finish_draw(ChartBuild *b){
   // bands go where there is room.)
   const size_t track_bytes=(sizeof(TrackPoint)*(size_t)count+7)&~(size_t)7,ARENA=track_bytes+sizeof(Draw)+FIGURE_ROOM;
   if(!(b->lists=alloc(ARENA)))FAIL;
+  Notes *const notes=&b->notes;
   for(int k=0;k<PLANE_BANDS;k++){if(!(b->plane.band[k]=alloc(BAND_BYTES)))FAIL;memset(b->plane.band[k],0,BAND_BYTES);}
   const Plane *const classes=&b->plane;
   // The track again, on the screen.
@@ -1155,7 +1162,7 @@ static bool finish_draw(ChartBuild *b){
   uint8_t *const room=(uint8_t *)(draw+1);const size_t room_size=ARENA-(size_t)(room-b->lists);
   scratch=draw->scratch;
   Canvas cv={classes,true,0,world&&in->tape==2,&b->sink,0};
-  uint8_t ring[2*120];
+  uint8_t *const ring=draw->ring;
 
   // Graticule: crosses every 5 degrees (30 on the world band), ticks every
   // degree (10) along the edges of the map.
@@ -1197,10 +1204,10 @@ static bool finish_draw(ChartBuild *b){
   // acquisition circle on the world band is the minute's.)
   Box *const taken=draw->taken;int taken_n=0;
   // The lettering the day's callout breaks its leader for.
-  Box avoid[24];int avoid_n=0;
+  Box *const avoid=notes->avoid;int avoid_n=0;
   #define AVOID(b) do{if(avoid_n<24)avoid[avoid_n++]=(b);}while(0)
   if(!world){taken[taken_n++]=(Box){0,H-16,W,16};if(in->home)taken[taken_n++]=(Box){0,0,W,14};}
-  bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};uint16_t marks[128];int mark_n=0;Px *const home_code=draw->home_code;int home_code_n=0;
+  bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};uint16_t *const marks=notes->marks;int mark_n=0;Px *const home_code=draw->home_code;int home_code_n=0;
   if(in->home){
     double qx,qy;project(&cam,in->home_lat,in->home_lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
@@ -1213,7 +1220,7 @@ static bool finish_draw(ChartBuild *b){
   // The tracking stations, circled, with their codes; on the world band
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
-  int16_t shown[32][2];uint8_t shown_table[32];int nshown=0;
+  int16_t (*const shown)[2]=notes->shown;uint8_t *const shown_table=notes->shown_table;int nshown=0;
   const bool ringed=world||(rolled&&cam.wide);
   if(ringed&&FACE_CHART)bearings(5,draw->sb,draw->cb);
   for(unsigned s=0;s<(day?0:TABLE_STATIONS);s++){
@@ -1408,7 +1415,7 @@ static bool finish_draw(ChartBuild *b){
   // at the event's minute, its name over it (the minute's: see
   // enroute_core.c), clear of the lettering, the network and the figures.
   static const char *const FIX[7]={"....#....","...###...","...###...","..#####..","..#####..",".#######.","#########"};
-  int nevents=0;struct {int16_t x,y,lx,box[4];uint8_t clear;char name[5];} events[16];
+  int nevents=0;EventNote *const events=notes->events;
   for(int e=0;e<in->event_count&&e<16;e++){
     const int64_t t=in->events[e].t-in->start;int i=1;
     while(i<count&&!(T_OF(b,i-1)<=t&&T_OF(b,i)>=t))i++;

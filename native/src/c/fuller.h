@@ -15,7 +15,8 @@ typedef struct {
   uint8_t F[20][3],NB[20][3];
 } FullerConst;
 #define FULLER_HEADER (8+5*8+20*9*8+120)
-bool fuller_const_read(MapReadFn read,void *source,FullerConst *g);
+// (scratch: FULLER_HEADER bytes, the header as read; the stack is small.)
+bool fuller_const_read(MapReadFn read,void *source,FullerConst *g,uint8_t *scratch);
 
 // A lattice cell of the plane: a face printed on a triangle, and its key
 // (its centre, to the millionth).

@@ -164,10 +164,21 @@ void chart_needs(time_t now,const WatchSettings *s,ChartNeeds *n){
 
 static Days *s_days;
 void local_chart_done(void){free(s_days);s_days=NULL;}
+// The chart's input is put together on the heap, with the events as kept
+// (the stack is small), and let go once the build has taken its copy.
+typedef struct {ChartInput in;uint8_t events[252];} Assembly;
+static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as);
 ChartBuild *local_chart(time_t now,const WatchSettings *s){
   if(s->body>BODY_SATELLITE)return NULL;
+  Assembly *as=malloc(sizeof(Assembly));if(!as)return NULL;
+  ChartBuild *build=assemble(now,s,as);
+  free(as);
+  return build;
+}
+static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
+  #define in (as->in)
   const struct tm *lt=localtime(&now);
-  ChartInput in;memset(&in,0,sizeof in);
+  memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
   in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
   in.local_hour=lt->tm_hour;
@@ -190,7 +201,7 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
     for(int k=0;k<27;k++){const time_t t=(time_t)(in.day_start+k*3600);in.day_hours[k]=(uint8_t)localtime(&t)->tm_hour;}
   }
   // The events on the chart's track.
-  {uint8_t e[252];const int n=persist_read_data(EVENTS_KEY,e,sizeof e);
+  {uint8_t *const e=as->events;const int n=persist_read_data(EVENTS_KEY,e,sizeof as->events);
   const int64_t from=in.view==VIEW_DAY?in.day_start:in.start-2400,to=in.view==VIEW_DAY?in.day_end:in.start+6000;
   for(int k=0;k+9<=n&&in.event_count<16;k+=9){
     const int64_t t=le32(e+k);if(t<from||t>to)continue;
@@ -227,4 +238,5 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   ChartBuild *build=chart_begin(&in,&src);
   if(!build){APP_LOG(APP_LOG_LEVEL_ERROR,"No chart started (%u bytes free)",(unsigned)heap_bytes_free());local_chart_done();}
   return build;
+  #undef in
 }

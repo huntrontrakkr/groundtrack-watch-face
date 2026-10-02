@@ -62,7 +62,9 @@ test('every hour builds within the watch\'s memory',{skip:!cc&&'no C compiler'},
     const out=JSON.parse(r.stdout.toString());
     // The build's memory at its peak, counted as the watch's heap would
     // (with this machine's larger pointers): the watch has about 67 KB.
-    assert.ok(out.peak<=56000,`${label(h)}: the build peaks at ${out.peak} bytes`);
+    // (Both faces' code together, which holds a little more than either
+    // app: the apps' own builds are held to the watch's heap below.)
+    assert.ok(out.peak<=58000,`${label(h)}: the build peaks at ${out.peak} bytes`);
   }
 });
 

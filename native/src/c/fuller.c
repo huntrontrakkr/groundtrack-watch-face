@@ -20,8 +20,7 @@ static double dot3(const double *a,const double *b){return a[0]*b[0]+a[1]*b[1]+a
 static double hypot2(double x,double y){return f_sqrt(x*x+y*y);}
 
 static double le64(const uint8_t *p){uint64_t v=0;for(int k=7;k>=0;k--)v=v<<8|p[k];double d;memcpy(&d,&v,8);return d;}
-bool fuller_const_read(MapReadFn read,void *source,FullerConst *g){
-  uint8_t h[FULLER_HEADER];
+bool fuller_const_read(MapReadFn read,void *source,FullerConst *g,uint8_t *h){
   if(read(source,0,h,FULLER_HEADER)!=FULLER_HEADER||memcmp(h,"GTF1",4))return false;
   const uint8_t *p=h+8;
   g->S3=le64(p);g->Z=le64(p+8);g->EL=le64(p+16);g->DVE=le64(p+24);g->RAW_EDGE=le64(p+32);p+=40;
