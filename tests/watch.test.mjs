@@ -217,7 +217,7 @@ test('a phone with nothing to give is asked less and less, and its word stands',
     // (The phone has tried CelesTrak a moment ago, each time it is asked.)
     if(w.requests.length){asked+=w.requests.length;stored['tle-tried-25544']=String(w.state.t*1000);const before=ph.out.length;await answer(w,ph,1);sent+=before;}
     await w.cmd('run 60');
-    if(m>2)assert.equal(w.state.note,'NO ELEMENTS',`at minute ${m}`);
+    if(m>2)assert.match(w.state.note,/^NO ELEMENTS: /,`at minute ${m}`);
   }
   assert.ok(asked>=4&&asked<=12,`asked ${asked} times in two hours`);
   // The Sun's and Moon's days were sent once, not with every request.

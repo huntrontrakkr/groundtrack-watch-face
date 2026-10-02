@@ -132,6 +132,8 @@ function sendSettings(){enqueue({Settings:watchSettings()});}
 var SAT_DAYS=3;
 function sendSatellite(norad){
   var body='sat:'+norad;
+  // (Asked again while its elements are being fetched: that answer serves.)
+  if(fetching[norad])return;
   elements(body,function(problem,reason){
     if(problem){console.log('No elements for '+body+': '+(reason||problem));status(problem);return;}
     // From an hour ago, or for the whole-day chart from a day ago (its day
@@ -189,8 +191,16 @@ function sendRiseSets(){
 // A satellite's elements: kept ones if younger than two hours, otherwise
 // fetched from CelesTrak, otherwise kept ones still within three days of
 // their epoch. GPS and QZSS fall back to their nominal orbits, as the study
-// does; other satellites have none, and the watch is told so.
-var ELEMENTS_AGE=2*3600000;
+// does; other satellites have none, and the watch is told so, with why:
+// NET (CelesTrak out of reach), TIME (no answer in twenty seconds), HTTP and
+// the status it answered with, DATA (an answer that is no element set) or
+// WAIT (a failure a moment ago: not asked again yet).
+// One request at a time for a satellite: the watch asks twice as it starts,
+// and the second asking waits for the first's answer.
+// After a failure the next request waits: a minute if CelesTrak was out of
+// reach (the phone may only have been starting), fifteen if it answered
+// badly; and the phone tries again itself when the wait is over.
+var ELEMENTS_AGE=2*3600000,fetching={},RETRY_NET=60000,RETRY_BAD=15*60000;
 function elements(body,done){
   if(body.indexOf('sat:')!==0)return done(null);
   var norad=body.slice(4),key='tle-'+norad,kept=null;
@@ -198,27 +208,48 @@ function elements(body,done){
   // (Elements for another object are not this one's.)
   function mine(e){if(e.norad!==Number(norad))throw new Error('elements for '+e.norad);return e;}
   function use(text,source){try{mine(registerElements(text,source));return true;}catch(error){console.log('Elements for '+norad+' refused: '+error.message);return false;}}
-  function fallback(reason){
-    if(kept&&Date.now()-kept.epoch<FRESH&&use(kept.text,'celestrak'))return done(null);
-    done(viewOf(body)==='world'?'NO ELEMENTS':null,reason);
+  function fallback(reason,why,answer){
+    if(kept&&kept.text&&Date.now()-kept.epoch<FRESH&&use(kept.text,'celestrak'))return answer(null,reason);
+    answer(viewOf(body)==='world'?'NO ELEMENTS: '+why:null,reason);
   }
-  if(kept&&Date.now()-kept.fetched<ELEMENTS_AGE&&use(kept.text,'celestrak'))return done(null);
-  // After a failed request, wait a while before the next.
-  var tried=Number(localStorage.getItem('tle-tried-'+norad))||0;
-  if(Date.now()-tried<15*60000)return fallback('Tried CelesTrak '+Math.round((Date.now()-tried)/60000)+' min ago');
-  try{localStorage.setItem('tle-tried-'+norad,String(Date.now()));}catch(error){}
+  if(kept&&kept.text&&Date.now()-kept.fetched<ELEMENTS_AGE&&use(kept.text,'celestrak'))return done(null);
+  if(fetching[norad]){fetching[norad].push(done);return;}
+  var tried=Number(localStorage.getItem('tle-tried-'+norad))||0,wait=Number(localStorage.getItem('tle-wait-'+norad))||RETRY_BAD;
+  if(Date.now()-tried<wait)return fallback('Tried CelesTrak '+Math.round((Date.now()-tried)/1000)+' s ago','WAIT',done);
+  var waiting=fetching[norad]=[done],settled=false;
+  function finish(problem,reason){
+    if(settled)return;settled=true;delete fetching[norad];
+    waiting.forEach(function(w){w(problem,reason);});
+  }
+  function failed(reason,why,retry){
+    if(settled)return;
+    // (Out of reach again within the hour: twice the wait, to fifteen minutes.)
+    if(retry<RETRY_BAD&&Date.now()-tried<3600000)retry=Math.min(RETRY_BAD,Math.max(retry,2*(Number(localStorage.getItem('tle-wait-'+norad))||0)));
+    try{localStorage.setItem('tle-tried-'+norad,String(Date.now()));localStorage.setItem('tle-wait-'+norad,String(retry));}catch(error){}
+    // Again when the wait is over, if this satellite is still the one shown:
+    // quietly, the watch sent its orbit only once CelesTrak has given it.
+    setTimeout(function(){
+      if(currentBody()===body)elements(body,function(problem,stale){if(!problem&&!stale)sendSatellite(norad);});
+    },retry+1000);
+    fallback(reason,why,finish);
+  }
   var request=new XMLHttpRequest();
   request.open('GET',setting('elementsUrl','https://celestrak.org/NORAD/elements/gp.php')+'?CATNR='+norad+'&FORMAT=TLE');
   request.onload=function(){
-    if(request.status!==200)return fallback('CelesTrak answered '+request.status);
+    if(request.status!==200)return failed('CelesTrak answered '+request.status,'HTTP '+request.status,RETRY_BAD);
     var text=request.responseText;
-    try{var e=mine(registerElements(text,'celestrak'));}catch(error){return fallback(error.message);}
-    try{localStorage.setItem(key,JSON.stringify({text:text,fetched:Date.now(),epoch:e.epoch}));localStorage.removeItem('tle-tried-'+norad);}catch(error){}
+    try{var e=mine(registerElements(text,'celestrak'));}catch(error){return failed(error.message,'DATA',RETRY_BAD);}
+    try{localStorage.setItem(key,JSON.stringify({text:text,fetched:Date.now(),epoch:e.epoch}));}catch(error){}
+    try{localStorage.removeItem('tle-tried-'+norad);localStorage.removeItem('tle-wait-'+norad);}catch(error){}
     console.log('Elements for '+norad+' from CelesTrak, epoch '+new Date(e.epoch).toISOString());
-    done(null);
+    finish(null);
   };
-  request.onerror=function(){fallback('CelesTrak unreachable');};
-  request.send();
+  request.onerror=function(){failed('CelesTrak unreachable','NET',RETRY_NET);};
+  request.ontimeout=function(){failed('CelesTrak did not answer','TIME',RETRY_NET);};
+  try{request.timeout=20000;}catch(error){}
+  // (And should neither handler be called: the same, a little later.)
+  setTimeout(function(){failed('CelesTrak did not answer','TIME',RETRY_NET);},30000);
+  try{request.send();}catch(error){failed('The request could not be sent: '+error.message,'NET',RETRY_NET);}
 }
 
 // When the phone can't give a satellite's orbit, the watch says why instead

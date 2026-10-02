@@ -87,7 +87,7 @@ test('the phone fetches live elements, keeps them two hours, falls back to the n
     p=run(stored,()=>({status:200,text:GPS_LIVE}));await ask(p,36585);
     assert.equal(p.requests.length,0,'a failed request was repeated within fifteen minutes');
     // Online: CelesTrak's elements, kept for two hours.
-    delete stored['tle-tried-36585'];
+    delete stored['tle-tried-36585'];delete stored['tle-wait-36585'];
     p=run(stored,()=>({status:200,text:GPS_LIVE}));segs=await ask(p,36585);
     assert.deepEqual(p.requests,['https://celestrak.org/NORAD/elements/gp.php?CATNR=36585&FORMAT=TLE']);
     const {registerElements}=await import('../src/satellites.js');registerElements(GPS_LIVE,'celestrak');
@@ -102,7 +102,28 @@ test('the phone fetches live elements, keeps them two hours, falls back to the n
     assert.ok(Math.min(...starts)<=now/1000-26*3600+21600,'no segment from a day back');
     // A fast satellite with no elements at all: the watch is told.
     p=run({body:'sat:25544',timeZone:zone},()=>null);await ask(p,25544);
-    assert.ok(p.messages.some(m=>m.Status==='NO ELEMENTS'));
+    assert.ok(p.messages.some(m=>m.Status==='NO ELEMENTS: NET'));
+    // The watch asks twice as it starts, the second time while the first
+    // request is still out: one request, no word of failure, the orbit once.
+    const ISS=readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').split('\n').slice(0,3).join('\n')+'\n';
+    p=run({body:'sat:25544',timeZone:zone},()=>({status:200,text:ISS}));
+    p.listeners.appmessage({payload:{DataRequest:today,DataBody:25544}});p.listeners.appmessage({payload:{DataRequest:-1,DataBody:25544}});await p.quiet();
+    assert.equal(p.requests.length,1);
+    assert.ok(!p.messages.some(m=>m.Status),'a failure was reported while the request was out');
+    assert.equal(p.messages.filter(m=>m.SatSegments).flatMap(m=>m.SatSegments).length%SAT_SEGMENT_BYTES,0);
+    assert.equal(p.messages.filter(m=>m.SatSegments).length,7,'the orbit was sent more than once');
+    // CelesTrak answering badly: the watch is told how, and once it answers
+    // well again (the phone asks by itself when the wait is over) the orbit
+    // follows unasked.
+    let good=false;const flaky={body:'sat:25544',timeZone:zone};
+    p=run(flaky,()=>good?({status:200,text:ISS}):({status:503,text:''}));
+    p.listeners.appmessage({payload:{DataRequest:-1,DataBody:25544}});await p.quiet();
+    assert.ok(p.messages.some(m=>m.Status==='NO ELEMENTS: HTTP 503'));
+    assert.ok(!p.messages.some(m=>m.SatSegments));
+    good=true;delete flaky['tle-tried-25544'];
+    p=run(flaky,()=>({status:200,text:'not an element set'}));
+    p.listeners.appmessage({payload:{DataRequest:-1,DataBody:25544}});await p.quiet();
+    assert.ok(p.messages.some(m=>m.Status==='NO ELEMENTS: DATA'));
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -139,7 +160,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
       const b=phone(bundle,now,{timeZone:zone,...stored});b.listeners.ready({});await b.quiet();
       b.listeners.appmessage({payload:{DataRequest:Math.floor(now/86400000),...(stored.body?{DataBody:Number(stored.body.slice(4))}:{})}});await b.quiet();
       assert.ok(b.messages.find(m=>m.Settings),JSON.stringify(stored));
-      if(stored.body==='sat:43013'){assert.ok(!b.messages.some(m=>m.SatSegments));assert.equal(b.messages.find(m=>m.Status)?.Status,'NO ELEMENTS');}
+      if(stored.body==='sat:43013'){assert.ok(!b.messages.some(m=>m.SatSegments));assert.equal(b.messages.find(m=>m.Status)?.Status,'NO ELEMENTS: WAIT');}
       if(stored.home)assert.equal(b.messages.find(m=>m.Settings).Settings[5]|b.messages.find(m=>m.Settings).Settings[6]<<8,4071,'home falls back to the zone\'s');
     }
     for(const response of ['null','7','"x"','[]','%7B'])pe.listeners.webviewclosed({response});
