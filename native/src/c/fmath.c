@@ -219,3 +219,5 @@ double f_ceil(double x){
   const double t=(double)(int64_t)x;
   return t<x?t+1:t;
 }
+
+double f_mod(double x,double y){return x-y*f_floor(x/y);}

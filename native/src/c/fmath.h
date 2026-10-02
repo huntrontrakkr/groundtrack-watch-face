@@ -16,6 +16,9 @@ double f_sqrt(double x);
 // a fraction of the library's size.
 double f_floor(double x);
 double f_ceil(double x);
+// x modulo y, from 0 up to y (the watch's own: f_fmod's exact remainder is
+// five hundred bytes the app has other uses for).
+double f_mod(double x,double y);
 double f_fmod(double x,double y);
 // Arcsine, arccosine and arctangents, to the same bits as src/fmath.js.
 double f_asin(double x);

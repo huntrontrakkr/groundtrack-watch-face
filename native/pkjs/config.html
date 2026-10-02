@@ -105,6 +105,7 @@
       <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Ruler<span class="note">The hour as a fixed ruler, a pointer moving along it</span></span></label>
       <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Sliding tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
       <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Sliding tape and world<span class="note">The map scrolls too, the satellite always under the pointer. Drawn whole each minute, which costs battery</span></span></label>
+      <label class="row"><input type="radio" name="tape" value="route"><span class="name">The route's ruler<span class="note">A ruler as long as the hour's run across the world: each minute's mark stands over that minute's place on the orbit, the pointer over the satellite</span></span></label>
       <label class="row"><input type="radio" name="tape" value="clock"><span class="name">Clock<span class="note">The time in large figures instead of a scale</span></span></label>
     </div>
     <div class="group" id="readout-group"><h3 id="readout-title">The minute, marked on the route</h3>
@@ -113,9 +114,9 @@
       <label class="row"><input type="radio" name="readout" value="callout"><span class="name">The time in full<span class="note">Hung from a leader beside the body</span></span></label>
     </div>
     <p class="note field" id="readout-fixed"></p>
-    <div class="group" id="transfer-group"><h3>The ruler's minutes, brought down to the route</h3>
+    <div class="group" id="transfer-group"><h3>The scale's minutes, brought down to the route</h3>
       <label class="row"><input type="radio" name="transfer" value="off"><span class="name">None</span></label>
-      <label class="row"><input type="radio" name="transfer" value="vernier"><span class="name">Vernier<span class="note">The route's own minutes ticked under the ruler's</span></span></label>
+      <label class="row"><input type="radio" name="transfer" value="vernier"><span class="name">Vernier<span class="note">The route's own minutes ticked under the scale's</span></span></label>
       <label class="row"><input type="radio" name="transfer" value="comb"><span class="name">Comb<span class="note">A stroke every five minutes, leaning toward where that minute falls on the route</span></span></label>
       <label class="row"><input type="radio" name="transfer" value="chevrons"><span class="name">Chevrons<span class="note">Pointing in where the route squeezes the minutes, out where it stretches them</span></span></label>
     </div>
@@ -256,7 +257,7 @@
     document.getElementById('readout-title').textContent=world?'The minute, marked on the orbit':'The minute, marked on the route';
     var fixed=document.getElementById('readout-fixed');
     fixed.hidden=!!r.readout.length;
-    fixed.textContent=r.chart==='day'?'The whole-day chart always carries the time in full beside the body.':'The panel carries the time. (Under the ruler the minute can also be marked with a flag.)';
+    fixed.textContent=r.chart==='day'?'The whole-day chart always carries the time in full beside the body.':'The panel carries the time. (Under a ruler the minute can also be marked with a flag.)';
     hide('numerals-group',!r.numerals);show('numerals',s.numerals);
     document.getElementById('numerals-title').textContent=world?'The clock\'s figures':'The time\'s figures';
     show('corner',s.corner==='light'&&!r.light?'day':s.corner,r.light?null:['day','point']);
@@ -361,7 +362,7 @@
   // frame as the watch's reflective screen shows its colours (Pebble's
   // Sunlight mapping). Bodies the phone had no data for are not previewed.
   var PV=__PREVIEW__,W=200,H=228,core=null,framePtr=0;
-  var NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock'],TRANSFERS=['off','vernier','comb','chevrons'],CORNERS=['day','point','light'];
+  var NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock','route'],TRANSFERS=['off','vernier','comb','chevrons'],CORNERS=['day','point','light'];
   function note(text){document.getElementById('preview-note').textContent=text||'';}
   function bytesOf(b64){var bin=atob(b64),out=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
   function boot(){

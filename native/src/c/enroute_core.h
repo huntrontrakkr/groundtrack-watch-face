@@ -121,6 +121,10 @@ typedef struct {
   // The world band's panel a clock, not a tape: the time in the callout's
   // figures (numerals, hour_text), centred.
   bool clock;
+  // Under a sliding tape, how its minutes fall on the route (as under the
+  // fixed ruler, where the builder draws it): 0 nothing, 1 a vernier, 2 a
+  // comb, 3 chevrons.
+  uint8_t transfer;
   int8_t forward;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;

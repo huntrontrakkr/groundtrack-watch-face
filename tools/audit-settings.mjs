@@ -12,7 +12,7 @@ import {registerNominal} from '../src/nominal.js';
 import {nameCode} from '../src/events.js';
 
 export const SETTINGS={plate:Object.keys(PLATES),figures:FIGURE_SETS.map(f=>f[0]),clock24:[true,false],readout:['off','flag','callout'],numerals:['even','accent','mono','plain','colon'],
-  corner:['day','point','light'],margin:['utc','body'],tape:['fixed','tape','slide','clock'],transfer:['off','vernier','comb','chevrons'],span:['day','hour'],home:['set','none'],events:['none','one']};
+  corner:['day','point','light'],margin:['utc','body'],tape:['fixed','tape','slide','clock','route'],transfer:['off','vernier','comb','chevrons'],span:['day','hour'],home:['set','none'],events:['none','one']};
 export const BODIES=['sun','moon',...CATALOG.map(c=>bodyId(c.norad))];
 // tle: element sets (three lines each) to draw the satellites from; epoch: the minute drawn.
 export async function audit({faces=['enroute','fuller'],bodies=BODIES,tle,epoch,zone='Europe/Berlin',home={code:'HOM',name:'Home',lat:52.52,lon:13.4}}){

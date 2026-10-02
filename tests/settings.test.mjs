@@ -22,7 +22,7 @@ test('every setting offered changes the face, and none that changes it is withhe
       const expected=
         key==='readout'?Math.max(1,rules.readout.length):
         key==='numerals'?(rules.numerals?'some':1):
-        key==='tape'?(rules.tape?4:1):
+        key==='tape'?(rules.tape?5:1):
         key==='transfer'?(rules.transfer?'some':1):
         key==='span'?(rules.span?2:1):
         key==='corner'?(rules.light?3:2):

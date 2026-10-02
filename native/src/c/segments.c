@@ -34,7 +34,7 @@ double seg_value(const Segment *seg,int series,int64_t seconds){
   const double u=(double)(seconds-(int64_t)seg->day*86400)/43200-1;
   return chebyshev(seg->c+at,COUNT[series],u);
 }
-double seg_wrap(double lon){return f_fmod(lon+540,360)-180;}
+double seg_wrap(double lon){return f_mod(lon+540,360)-180;}
 void seg_position(const Segment *seg,bool moon,int64_t seconds,double *lat,double *lon){
   *lat=seg_value(seg,moon?SEG_MOON_LAT:SEG_SUN_LAT,seconds);
   *lon=seg_wrap(seg_value(seg,moon?SEG_MOON_LON:SEG_SUN_LON,seconds));
@@ -42,7 +42,7 @@ void seg_position(const Segment *seg,bool moon,int64_t seconds,double *lat,doubl
 void seg_moon_light(const Segment *seg,int64_t seconds,double *fraction,bool *waxing){
   *fraction=seg_value(seg,SEG_MOON_FRACTION,seconds);
   const double phase=seg_value(seg,SEG_MOON_PHASE,seconds);
-  *waxing=f_fmod(f_fmod(phase,360)+360,360)<180;
+  *waxing=f_mod(phase,360)<180;
 }
 
 bool sat_segment_decode(const uint8_t *b,SatSegment *seg){

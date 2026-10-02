@@ -116,7 +116,7 @@ try{
       rest:['plate','figures','margin','corner'].every(n=>group(n).length>1)&&seen(document.querySelector('input[name=clock24]'))};
   });
   const KIND={hour:'Hour chart',day:'Whole-day chart',world:'World band'};
-  for(const body of ['sun','moon','sat:36585','sat:42738','sat:25544','sat:43013'])for(const readout of ['off','flag','callout'])for(const tape of viewOf(body)==='world'?['fixed','tape','slide','clock']:['fixed'])for(const span of viewOf(body)==='day'?['day','hour']:['day']){
+  for(const body of ['sun','moon','sat:36585','sat:42738','sat:25544','sat:43013'])for(const readout of ['off','flag','callout'])for(const tape of viewOf(body)==='world'?['fixed','tape','slide','clock','route']:['fixed'])for(const span of viewOf(body)==='day'?['day','hour']:['day']){
     await page.check(`input[name=face][value=${faceOf(viewOf(body))}]`);
     await page.check(`input[name=body][value="${body}"]`);
     // (Set where the control shows; a hidden one keeps what it had.)

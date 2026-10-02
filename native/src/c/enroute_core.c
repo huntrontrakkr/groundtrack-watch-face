@@ -790,6 +790,7 @@ static void set_time(Ctx *c,const Glyph *g,int n,int fx,int fy){
 // hour's pinned at the left until the next pushes it off), cut off at the
 // edges like any tape.
 static void sliding_figures(Ctx *c,int which);
+static int slide_offset(const EnrScene *s,const EnrMinute *m);
 static void draw_sliding_tape(Ctx *c){
   const EnrScene *s=c->s;const int B=TAPE_B,P=TAPE_P,IX=W/2,PX=3,now=(int)(c->m-s->minutes);const uint8_t fill=s->zoned[ENR_ROUTE][0],ink=s->space_ink;
   for(int y=0;y<P;y++)for(int x=0;x<W;x++)plot(c,x,y,s->space);
@@ -801,6 +802,28 @@ static void draw_sliding_tape(Ctx *c){
     else if(mm%15==0){char label[2]={(char)('0'+mm/10),(char)('0'+mm%10)};const int lw=text_width(label,2),n=text_pixels(label,2,x-lw/2+1,B+17,scratch);for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,ink);}
   }
   sliding_figures(c,0);
+  // How the tape's minutes of this hour fall on the route, in a strip under
+  // the panel: the route's own minutes ticked (a vernier), a stroke from
+  // each five minutes leaning toward its place on the route (a comb), or
+  // chevrons where the route squeezes the minutes (in) or stretches them
+  // (out). (The strip is the band's: drawn at its turned columns.)
+  if(s->transfer){
+    const int off=slide_offset(s,c->m),t0=P+1;
+    #define RX(m) (((int)js_round(s->minutes[m].mx)-off+W)%W)
+    for(int m=0;m<60;m++){
+      const int a=IX+(m-now)*PX,r=RX(m);
+      if(a<3||a>=W-3)continue;
+      if(s->transfer==1){const int len=m%15==0?5:m%5==0?3:1;for(int d=0;d<len;d++)plot(c,r+off,t0+d,ink);}
+      else if(m%5)continue;
+      else if(s->transfer==2){int lean=(r-a)/6;lean=lean>4?4:lean<-4?-4:lean;for(int d=0;d<6;d++)plot(c,a+lean*d/5+off,t0+d,ink);}
+      else if(m>0&&m<59){
+        // (A minute of the tape is PX pixels: of the route, more or fewer.)
+        const int step=abs(RX(m+1)-RX(m-1)),in=step*10<2*PX*7,out=step*10>2*PX*14;
+        if((in||out)&&step<W/2)for(int j=0;j<3;j++){const int dx=in?(j==1?2:3):(j==1?3:2);plot(c,a-dx+off,t0+1+j,ink);plot(c,a+dx+off,t0+1+j,ink);}
+      }
+    }
+    #undef RX
+  }
   for(int y=0;y<P-1;y++)plot(c,IX,y,fill);
   for(int kk=0;kk<6;kk++)for(int d=-kk;d<=kk;d++)plot(c,IX+d,B-7+kk,s->space);
   for(int kk=0;kk<5;kk++)for(int d=-kk;d<=kk;d++)plot(c,IX+d,B-6+kk,ink);

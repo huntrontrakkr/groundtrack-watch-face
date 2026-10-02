@@ -24,7 +24,7 @@ enum {M_SEA,M_LAND,M_COAST,M_WAVE};
 // JavaScript's Math.round: the nearest integer, halves up.
 static double js_round(double v){const double r=f_floor(v);return v-r>=0.5?r+1:r;}
 // geometry.js wrap(): longitude into -180..180.
-static double wrap(double lon){return f_fmod(f_fmod(lon+180,360)+360,360)-180;}
+static double wrap(double lon){return f_mod(lon+180,360)-180;}
 
 // Where the last build failed (a line of this file), for the log.
 static int s_failure_line;
@@ -1198,11 +1198,11 @@ static bool finish_draw(ChartBuild *b){
     for(int d=-2;d<=2;d++){plot(&cv,x+d,y,L_GRID);plot(&cv,x,y+d,L_GRID);}
   }
   for(double lon=f_ceil(g0lon/minor)*minor;lon<=g1lon;lon+=minor){
-    const double x=js_round(sx(cam,lon));const int len=f_fmod(lon,step)==0?4:2;
+    const double x=js_round(sx(cam,lon));const int len=f_mod(lon,step)==0?4:2;
     for(int d=0;d<len;d++){plot(&cv,x,top+d,L_GRID);plot(&cv,x,bottom-d,L_GRID);}
   }
   for(double lat=f_ceil(g0lat/minor)*minor;lat<=g1lat;lat+=minor){
-    const double y=js_round(sy(cam,lat));const int len=f_fmod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
+    const double y=js_round(sy(cam,lat));const int len=f_mod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
     for(int d=0;d<len;d++){plot(&cv,d,y,L_GRID);plot(&cv,W-1-d,y,L_GRID);}
   }}
 
@@ -1333,7 +1333,7 @@ static bool finish_draw(ChartBuild *b){
     // band; the time is the minute's.
     cv.panel=TAPE_PANEL;for(int y=0;y<TAPE_PANEL;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
     for(int x=0;x<W;x++)plot(&cv,x,TAPE_PANEL-1,L_SPACE_INK);
-  }else if(world&&in->tape){
+  }else if(world&&in->tape&&in->tape!=4){
     // A sliding tape moves each minute, all of it the minute's.
     cv.panel=TAPE_PANEL;for(int y=0;y<TAPE_PANEL;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
   }else if(world){
@@ -1341,15 +1341,30 @@ static bool finish_draw(ChartBuild *b){
     // instrument tape: minute graduations, tall hour marks under the
     // figures, this hour solid and the next outlined. Its index is the
     // minute's.
-    const int B=TAPE_BASELINE,P=TAPE_PANEL,X0=TAPE_X0,X1=TAPE_X1;
+    // (The route's ruler, tape 4, is scaled to the route: each minute's mark
+    // stands over that minute's place on it, the ruler as long as the hour's
+    // run across the band, its index over the satellite.)
+    const int B=TAPE_BASELINE,P=TAPE_PANEL,X0=TAPE_X0,X1=TAPE_X1;const bool routed=in->tape==4;
+    #define AT(m) (forward?X0+(double)(X1-X0)*(m)/60:X1-(double)(X1-X0)*(m)/60)
+    // The route's point at minute m of the hour (every minute is one of
+    // its points, the step dividing a minute), and whether it is on the band.
+    #define AT_ROUTE(m) (((T_OF(b,h0)+(m)*60-b->t0)%b->step==0&&(T_OF(b,h0)+(m)*60-b->t0)/b->step<count)?(T_OF(b,h0)+(m)*60-b->t0)/b->step:-1)
+    #define ON(m) (AT_ROUTE(m)>=0)
+    #define RX(m) (track[AT_ROUTE(m)].a)
+    #define ON_BAND(m) (ON(m)&&RX(m)>=0&&RX(m)<W)
     cv.panel=P;for(int y=0;y<P;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
     for(int x=0;x<W;x++)plot(&cv,x,P-1,L_SPACE_INK);
-    for(int x=X0;x<=X1;x++)plot(&cv,x,B,L_SPACE_INK);
+    for(int x=routed?0:X0;x<=(routed?W-1:X1);x++)plot(&cv,x,B,L_SPACE_INK);
+    double labelled=-100;
     for(int m=0;m<=60;m++){
-      const double x=js_round(forward?X0+(double)(X1-X0)*m/60:X1-(double)(X1-X0)*m/60);const int len=m%60==0?12:m%15==0?6:m%5==0?4:2;
+      if(routed&&!ON_BAND(m))continue;
+      const double x=js_round(routed?RX(m):AT(m));const int len=m%60==0?12:m%15==0?6:m%5==0?4:2;
       for(int d=1;d<=len;d++)plot(&cv,x,B+d,L_SPACE_INK);
       if(m%60==0)for(int d=1;d<=6;d++)plot(&cv,x,B-d,L_SPACE_INK);
-      if(m%15==0&&m%60){
+      // (Where the route runs north and south its ruler's marks crowd: a
+      // label that would stand on the last one is left out.)
+      if(m%15==0&&m%60&&!(routed&&fabs(x-labelled)<15)){
+        labelled=x;
         char label[4];label[0]=(char)('0'+m/10);label[1]=(char)('0'+m%10);label[2]=0;
         const int lw=text_width(label),n=text_pixels(label,(int)x-(int)f_floor(lw/2.0)+1,B+17,scratch);
         for(int i=0;i<n;i++)plot(&cv,scratch[i].x,scratch[i].y,L_SPACE_INK);
@@ -1364,14 +1379,7 @@ static bool finish_draw(ChartBuild *b){
     // tape (renderEnroute()'s transfer): the route's own minutes ticked, a
     // stroke from each five minutes leaning toward its place on the route,
     // or chevrons where the route squeezes (in) or stretches (out).
-    if(FACE_WORLD&&in->transfer){
-      #define AT(m) (forward?X0+(double)(X1-X0)*(m)/60:X1-(double)(X1-X0)*(m)/60)
-      // The route's point at minute m of the hour (every minute is one of
-      // its points, the step dividing a minute), and whether it is on the band.
-      #define AT_ROUTE(m) (((T_OF(b,h0)+(m)*60-b->t0)%b->step==0&&(T_OF(b,h0)+(m)*60-b->t0)/b->step<count)?(T_OF(b,h0)+(m)*60-b->t0)/b->step:-1)
-      #define ON(m) (AT_ROUTE(m)>=0)
-      #define RX(m) (track[AT_ROUTE(m)].a)
-      #define ON_BAND(m) (ON(m)&&RX(m)>=0&&RX(m)<W)
+    if(FACE_WORLD&&in->transfer&&!routed){
       const int t0=P+1;
       if(in->transfer==1){
         for(int m=0;m<=60;m++)if(ON_BAND(m)){const int len=m%15==0?5:m%5==0?3:1;for(int d=0;d<len;d++)plot(&cv,RX(m),t0+d,L_SPACE_INK);}
@@ -1544,7 +1552,7 @@ static bool finish_draw(ChartBuild *b){
   }
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|((in->readout==1||(world&&in->readout==2))?16:0)|(in->readout==2&&!world?32:0)|(world&&(in->tape==1||in->tape==2)?64:0)|(world&&in->tape==2?128:0));
-  out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;out->clock=world&&in->tape==3;
+  out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;out->clock=world&&in->tape==3;out->transfer=(uint8_t)in->transfer;
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
@@ -1569,7 +1577,8 @@ static bool finish_draw(ChartBuild *b){
   }
   out->c1x=(enr_real)c1x_;out->normal_x=cam->slow?(enr_real)cam->nx:0;out->normal_y=cam->slow?(enr_real)cam->ny:-1;
   out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;out->top_x=top_x;out->top_baseline=top_baseline;out->height_right=height_right;out->height_baseline=height_baseline;
-  if(world&&!in->tape){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
+  // (The route's ruler has no run of its own to fill behind the index: x0 past x1.)
+  if(world&&(!in->tape||in->tape==4)){out->tape_x0=in->tape?1:TAPE_X0;out->tape_x1=in->tape?0:TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
   out->numerals=(uint8_t)in->numerals;
   memcpy(out->source,b->source,sizeof out->source);
@@ -1578,7 +1587,7 @@ static bool finish_draw(ChartBuild *b){
     // The clock's hour, as the callout's, and its figures.
     if(in->numerals==ENR_EVEN&&in->clock24&&!hour[1]){out->hour_text[0]='0';out->hour_text[1]=hour[0];}else memcpy(out->hour_text,hour,strlen(hour));
     if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
-  }else if(world&&in->tape){
+  }else if(world&&in->tape&&in->tape!=4){
     memcpy(out->tape_hour,hour,strlen(hour));memcpy(out->tape_next,next,strlen(next));
     if(!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
   }
@@ -1626,7 +1635,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     // degrees wide, lettered A-M east, N-Y west).
     int zh=0;char zl='Z';
     if(in->zone_body){
-      const double v=js_round((f_fmod(lon+540,360)-180)/15);zh=v>12?12:v<-12?-12:(int)v;
+      const double v=js_round(wrap(lon)/15);zh=v>12?12:v<-12?-12:(int)v;
       if(zh>0)zl="ABCDEFGHIKLM"[zh-1];else if(zh<0)zl="NOPQRSTUVWXY"[-zh-1];
     }
     const int64_t day=r64(r64(t+zh*3600,86400)+86400,86400);const int hh=(int)day/3600,mm=(int)day%3600/60;
@@ -1665,6 +1674,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     }
     if(world){
       if(!in->tape)e->index=(int16_t)js_round(forward?TAPE_X0+(double)(TAPE_X1-TAPE_X0)*m/60:TAPE_X1-(double)(TAPE_X1-TAPE_X0)*m/60);
+      else if(in->tape==4)e->index=(int16_t)((((int)js_round(e->mx))%W+W)%W);
       if(in->home){
         const int n=circle_pixels(cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring);int k=0;
         for(;k<out->circle_count;k++)if(out->circle_n[k]==n&&!memcmp(out->circle_px[k],ring,2*n))break;

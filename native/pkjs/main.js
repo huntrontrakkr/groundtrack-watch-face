@@ -107,7 +107,7 @@ var FIGURES=FIGURE_SETS.map(function(f){return f[0];});
 // The margins' corner: the day of the year (the world band: the height), the
 // body's ground point, the Moon's light.
 var CORNERS=['day','point','light'];
-var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock'],TRANSFERS=['off','vernier','comb','chevrons'];
+var VIEWS=['hour','world','day'],READOUTS=['off','flag','callout'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock','route'],TRANSFERS=['off','vernier','comb','chevrons'];
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
 // On Groundtrack Fuller every satellite's chart is a rolling Fuller sheet of
 // its hour (QZSS's of its day, unless its hour is chosen).

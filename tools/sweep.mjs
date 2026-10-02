@@ -49,7 +49,7 @@ function randomCase(){
   const events=[];
   if(chance(.4))for(let n=Math.floor(rand()*20);n>0;n--)events.push({epoch:t+Math.floor(rand()*150-45)*60e3,label:nameCode(pick(TITLES))});
   return {body,start:t,plate:pick(Object.keys(PLATES)),zone,home,projection:fuller?'fuller':'chart',readout:pick(['flag','callout',false]),numerals:pick(['colon','plain','even','mono','accent']),margin:pick(['utc','body']),
-    span:pick(['day','hour']),tape:pick(['fixed','tape','slide','clock']),transfer:pick(['off','vernier','comb','chevrons']),figures:pick(FIGURE_SETS)[0],corner:pick(['day','point','light']),clock24:chance(.5),events};
+    span:pick(['day','hour']),tape:pick(['fixed','tape','slide','clock','route']),transfer:pick(['off','vernier','comb','chevrons']),figures:pick(FIGURE_SETS)[0],corner:pick(['day','point','light']),clock24:chance(.5),events};
 }
 
 const face=c=>c.projection==='fuller'?'fuller':'enroute';

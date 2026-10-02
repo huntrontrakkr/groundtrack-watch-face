@@ -16,22 +16,23 @@ export function chartOf(face,body,view,span){
 // What the chart's settings are, given the others:
 //   readout   the minute readouts offered (none on a day chart, whose time
 //             callout is always drawn; on the world band the flag alone, and
-//             only under the fixed ruler: its panel carries the time, and a
-//             callout chosen there is the flag)
+//             only under a ruler, fixed or the route's: its panel carries
+//             the time, and a callout chosen there is the flag)
 //   numerals  whether the time figures' style shows (a callout, or the world
 //             band's clock)
-//   tape      the world band's time scale; transfer: its ruler's minutes
-//             brought down to the route
+//   tape      the world band's panel; transfer: its scale's minutes brought
+//             down to the route (under the fixed ruler and the sliding
+//             tapes: the route's own ruler needs none, the clock has no scale)
 //   span      QZSS's choice of the day or the hour
 //   light     the Moon's light in the corner (the Moon's charts only)
 export function settingsFor(face,body,view,{span='day',readout='flag',tape='fixed'}={}){
   const chart=chartOf(face,body,view,span),world=chart==='world';
   const shown=world&&readout==='callout'?'flag':readout;
   return {chart,
-    readout:chart==='day'||(world&&tape!=='fixed')?[]:world?['off','flag']:['off','flag','callout'],
+    readout:chart==='day'||(world&&tape!=='fixed'&&tape!=='route')?[]:world?['off','flag']:['off','flag','callout'],
     readoutShown:shown,
     numerals:chart==='day'||(chart==='hour'&&readout==='callout')||(world&&tape==='clock'),
-    tape:world,transfer:world&&tape==='fixed',
+    tape:world,transfer:world&&tape!=='clock'&&tape!=='route',
     span:view==='day',light:body==='moon'};
 }
 
