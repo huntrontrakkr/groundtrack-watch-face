@@ -9,6 +9,7 @@
 #include <pebble.h>
 #include "enroute_core.h"
 #include "departure_font.h"
+#include "fmath.h"
 #include "watch_data.h"
 #include "chart.h"
 
@@ -79,7 +80,12 @@ static bool sat_missing(time_t now){
 }
 static void need_data(time_t now){
   if(now<s_data_ok_until)return;
-  const int32_t today=(int32_t)(now/86400),missing=segments_missing(today,SEGMENT_DAYS);
+  // From the first day this hour's chart reaches back to: its lead-in (40
+  // minutes before the hour) or the local day's start is yesterday's for a
+  // while after midnight UTC, and a new watch has nothing of yesterday.
+  int64_t first=now-now%3600-2400;
+  if(s_settings.body==BODY_SATELLITE?s_settings.view==VIEW_DAY:FACE_ROLL){int64_t a,b;local_day(now,&a,&b);if(a<first)first=a;}
+  const int32_t today=(int32_t)(now/86400),from=(int32_t)q64(first,86400)<today?today-1:today,missing=segments_missing(from,SEGMENT_DAYS+today-from);
   const struct tm *lt=localtime(&now);
   if(missing>=0)request_data(now,missing);
   else if(s_settings.body!=BODY_SATELLITE&&s_settings.home&&!rise_set_known(civil_date(lt->tm_year+1900,lt->tm_mon+1,lt->tm_mday)))request_data(now,today);
