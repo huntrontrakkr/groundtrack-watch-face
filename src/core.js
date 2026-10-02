@@ -72,7 +72,7 @@ export class Core{
     const track=[];for(let k=0;k<count;k++){const p=tp+k*L.point_size;track.push({x:d.getInt16(p,true),y:d.getInt16(p+2,true),flags:d.getUint8(p+4),seconds:t0+k*step});}
     const stations=[];for(let k=0;k<u8(L.station_count);k++)stations.push({x:i16(L.stations+4*k),y:i16(L.stations+4*k+2),code:network.stations[u8(L.station_table+k)].code});
     const events=[];for(let k=0;k<u8(L.event_count);k++){const e=s+L.events+k*L.event_size;events.push({x:d.getInt16(e,true),y:d.getInt16(e+2,true),lx:d.getInt16(e+4,true),box:{x:d.getInt16(e+6,true),y:d.getInt16(e+8,true),w:d.getInt16(e+10,true),h:d.getInt16(e+12,true)},clear:!!d.getUint8(e+14),label:this.string(e+15,5)});}
-    const minutes=[];for(let m=0;m<60;m++){const b=s+L.minutes+m*L.minute_size;minutes.push({x:real(b,L.m_mx),y:real(b,L.m_my),zulu:this.string(b+L.m_zulu,5),minute:this.string(b+L.m_minute,2),top:this.string(b+L.m_top,24),index:d.getInt16(b+L.m_index,true),corner:this.string(b+L.m_corner,14)});}
+    const minutes=[];for(let m=0;m<60;m++){const b=d.getUint32(s+L.minutes,true)+m*L.minute_size;minutes.push({x:real(b,L.m_mx),y:real(b,L.m_my),zulu:this.string(b+L.m_zulu,5),minute:this.string(b+L.m_minute,2),top:this.string(b+L.m_top,24),index:d.getInt16(b+L.m_index,true),corner:this.string(b+L.m_corner,14)});}
     const hx=i16(L.home_x),fp=i32(L.fuller);
     const tiles=fp?Array.from({length:d.getUint8(fp+L.f_tile_count)},(_,k)=>({face:d.getUint8(fp+L.f_tile_face+k)})):[];
     return {flags:u8(L.flags),body:u8(L.body),view:u8(L.view),forward:i8(L.forward),hourStart:i32(L.hour_start),heavy:!!u8(L.heavy),fuller:i32(L.fuller)!==0,

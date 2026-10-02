@@ -28,3 +28,5 @@ native-fuller/build/
 native-fuller/.lock-waf*
 native-fuller/src/pkjs/index.js
 public/core.wasm
+native/host/san-*
+native/host/watch_sim-*

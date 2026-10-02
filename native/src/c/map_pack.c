@@ -94,11 +94,14 @@ bool map_tile_row(const MapPack *p,int m,int tx,int ty,MapTileStream *s,uint8_t 
     const int lc=(left>>4)|(UP(cx)>>4)<<1|(UP(cx-1)>>4)<<2|(UP(cx+1)>>4)<<3;
     const uint32_t f=p->land_freq[lc];uint32_t slot=x&(TOTAL-1);
     const int l=slot<TOTAL-f?0:1;const uint32_t start=l?TOTAL-f:0,freq=l?f:TOTAL-f;
-    x=freq*(x>>SCALE_BITS)+slot-start;while(x<RANS_L)x=(x<<8)|next_byte(p,s);
+    x=freq*(x>>SCALE_BITS)+slot-start;
+    // (A state of nothing, from a failed read, would never fill.)
+    if(!x)return false;
+    while(x<RANS_L)x=(x<<8)|next_byte(p,s);
     const int c=(l*L+(left&15))*L+(UP(cx)&15);
     const uint16_t *cum=p->cum[c];if(!cum)return false;
     slot=x&(TOTAL-1);int sym=0;while(cum[sym+1]<=slot)sym++;
-    x=(uint32_t)(cum[sym+1]-cum[sym])*(x>>SCALE_BITS)+slot-cum[sym];while(x<RANS_L)x=(x<<8)|next_byte(p,s);
+    x=(uint32_t)(cum[sym+1]-cum[sym])*(x>>SCALE_BITS)+slot-cum[sym];if(!x)return false;while(x<RANS_L)x=(x<<8)|next_byte(p,s);
     out[cx]=(uint8_t)(l<<4|sym);
   }
   #undef UP

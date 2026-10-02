@@ -264,14 +264,17 @@
     var names={sun:'the Sun',moon:'the Moon'};
     note(shown===body?'':'The phone has no data yet for this body: '+(names[shown]||'its satellite')+' is shown.');
   }
-  boot().then(paint,function(error){document.querySelector('.preview').style.display='none';console.log(error.message);});
+  // (Whatever stops the preview, a throw included, stops only the preview:
+  // Save and Cancel below are still wired.)
+  new Promise(function(done){done(boot());}).then(paint).catch(function(error){document.querySelector('.preview').style.display='none';console.log(error&&error.message);});
   form.addEventListener('change',paint);
   document.getElementById('cancel').addEventListener('click',function(){close('CANCELLED');});
   document.getElementById('save').addEventListener('click',function(){
     var mode=picked('home'),homeValue='';
     if(mode==='none')homeValue=JSON.stringify({none:true});
     if(mode==='custom'){
-      var lat=parseFloat(form.elements.lat.value),lon=parseFloat(form.elements.lon.value);
+      // (A decimal comma, as many keypads give, is a decimal point.)
+      var lat=parseFloat(form.elements.lat.value.replace(',','.')),lon=parseFloat(form.elements.lon.value.replace(',','.'));
       if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
       homeValue=JSON.stringify({lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
     }

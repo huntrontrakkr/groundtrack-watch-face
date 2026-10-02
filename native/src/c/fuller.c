@@ -132,8 +132,9 @@ bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const dou
   const int path_n=cell_count;
   const int ia=day?0:i0,ib=day?count-1:i1;
   const double a[2]={xs[ia],ys[ia]},b[2]={xs[ib],ys[ib]};
-  const double len=hypot2(b[0]-a[0],b[1]-a[1]);
-  cam->ux=(b[0]-a[0])/len;cam->uy=(b[1]-a[1])/len;cam->scale=span/len;cam->mid[0]=(a[0]+b[0])/2;cam->mid[1]=(a[1]+b[1])/2;
+  // (A route of no length, a body standing still, runs east.)
+  const double l0=hypot2(b[0]-a[0],b[1]-a[1]),len=l0>0?l0:1;
+  cam->ux=l0>0?(b[0]-a[0])/len:1;cam->uy=(b[1]-a[1])/len;cam->scale=span/len;cam->mid[0]=(a[0]+b[0])/2;cam->mid[1]=(a[1]+b[1])/2;
   if(day){
     // Fit the whole day's arc, and centre it.
     double s0=INFINITY,s1=-INFINITY,t0=INFINITY,t1=-INFINITY;

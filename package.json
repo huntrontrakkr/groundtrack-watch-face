@@ -18,7 +18,8 @@
     "build:native": "node tools/build-pkjs.mjs && cd native && pebble clean && pebble build && cd .. && node tools/build-pkjs.mjs --face fuller && cd native-fuller && pebble clean && pebble build",
     "check:emulator": "node tools/emulator-check.mjs",
     "release:prepare": "node tools/prepare-release.mjs",
-    "build:core": "tools/build-core.sh"
+    "build:core": "tools/build-core.sh",
+    "sweep": "node tools/sweep.mjs"
   },
   "dependencies": {
     "astronomy-engine": "2.1.19",

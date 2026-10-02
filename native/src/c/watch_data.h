@@ -60,6 +60,14 @@ void local_day(time_t t,int64_t *start,int64_t *end);
 // The local calendar date as days since 1970-01-01.
 int32_t civil_date(int year,int month,int day);
 
+// What the chart of the local hour holding `now` reads: the hour's start,
+// the whole day's bounds (0 unless it is the day's chart), the UTC days of
+// Sun and Moon segments (first to last) and, for a satellite, the seconds
+// its segments must cover (first to last). The build and the watch's asking
+// for data both go by it.
+typedef struct {int64_t start,day_start,day_end,sat0,sat1;int32_t day0,day1;uint8_t view;} ChartNeeds;
+void chart_needs(time_t now,const WatchSettings *s,ChartNeeds *n);
+
 // Starts building the local hour holding `now` for the Sun or Moon (see
 // chart.h: step it, then finish it). NULL without the segments or memory.
 struct ChartBuild *local_chart(time_t now,const WatchSettings *s);

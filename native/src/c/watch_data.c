@@ -146,6 +146,22 @@ static size_t resource_read(void *source,uint32_t at,uint8_t *out,size_t n){
   return resource_load_byte_range(h,at,out,n);
 }
 
+void chart_needs(time_t now,const WatchSettings *s,ChartNeeds *n){
+  const struct tm *lt=localtime(&now);
+  const bool sat=s->body==BODY_SATELLITE;
+  // On Groundtrack Fuller every chart is a rolling Fuller sheet, of the day
+  // for the Sun and Moon.
+  n->view=(uint8_t)(sat?s->view:FACE_ROLL?VIEW_DAY:0);
+  n->start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);n->day_start=n->day_end=0;
+  const bool day=n->view==VIEW_DAY;
+  if(day)local_day(now,&n->day_start,&n->day_end);
+  const int64_t from=day&&n->day_start<n->start-2400?n->day_start:n->start-2400,to=day&&n->day_end>n->start+6000?n->day_end:n->start+6000;
+  n->day0=(int32_t)q64(from,86400);n->day1=(int32_t)q64(to,86400);
+  // A satellite's track: the day, or the hour and its lead either side.
+  const int lead=FACE_ROLL?600:n->view?1200:2400;
+  n->sat0=day?n->day_start:n->start-lead;n->sat1=day?(n->day_end>n->start+3600?n->day_end:n->start+3600):n->start+3600+lead;
+}
+
 static Days *s_days;
 void local_chart_done(void){free(s_days);s_days=NULL;}
 ChartBuild *local_chart(time_t now,const WatchSettings *s){
@@ -153,12 +169,13 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   const struct tm *lt=localtime(&now);
   ChartInput in;memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  // On Groundtrack Fuller every chart is a rolling Fuller sheet, of the day
-  // for the Sun and Moon.
-  in.body=sat&&s->station?3:s->body;in.view=sat?s->view:FACE_ROLL?VIEW_DAY:0;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
-  in.start=(int64_t)now-(lt->tm_min*60+lt->tm_sec);in.local_hour=lt->tm_hour;
+  in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
+  in.local_hour=lt->tm_hour;
   in.weekday=lt->tm_wday;in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
+  // (After the last of this localtime: finding the day asks for others.)
+  ChartNeeds needs;chart_needs(now,s,&needs);
+  in.start=needs.start;in.view=needs.view;in.day_start=needs.day_start;in.day_end=needs.day_end;
   if(s->home&&s->body!=BODY_SATELLITE){
     uint8_t r[RISE_SET_BYTES];const int32_t date=civil_date(in.year,in.month,in.day);
     if(persist_read_data(RISE_SET_KEY+ring(date),r,sizeof r)==(int)sizeof r&&le32(r)==date)rise_text(r,s->body==BODY_MOON,in.rise_left,in.rise_right);
@@ -170,7 +187,6 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
   #define days (*d_)
   days.n=days.nsat=0;days.pass_len[0]=days.pass_len[1]=0;
   if(in.view==VIEW_DAY){
-    local_day(now,&in.day_start,&in.day_end);
     for(int k=0;k<27;k++){const time_t t=(time_t)(in.day_start+k*3600);in.day_hours[k]=(uint8_t)localtime(&t)->tm_hour;}
   }
   // The events on the chart's track.
@@ -180,14 +196,11 @@ ChartBuild *local_chart(time_t now,const WatchSettings *s){
     const int64_t t=le32(e+k);if(t<from||t>to)continue;
     in.events[in.event_count].t=t;memcpy(in.events[in.event_count].name,e+k+4,5);in.events[in.event_count].name[5]=0;in.event_count++;
   }}
-  const int64_t from=in.view==VIEW_DAY&&in.day_start<in.start-2400?in.day_start:in.start-2400,to=in.view==VIEW_DAY&&in.day_end>in.start+6000?in.day_end:in.start+6000;
-  for(int64_t d=q64(from,86400);d<=q64(to,86400)&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
+  for(int32_t d=needs.day0;d<=needs.day1&&days.n<3;d++)if(segment_load((int32_t)d,&days.seg[days.n]))days.n++;else {local_chart_done();return NULL;}
   if(sat){
     // A satellite: its segments over the track, and home's passes for the
     // hour.
-    const int lead=FACE_ROLL?600:in.view?1200:2400;
-    const int64_t t0=in.view==VIEW_DAY?in.day_start:in.start-lead,t1=in.view==VIEW_DAY?(in.day_end>in.start+3600?in.day_end:in.start+3600):in.start+3600+lead;
-    for(int64_t t=t0;t<=t1&&days.nsat<6;){
+    for(int64_t t=needs.sat0;t<=needs.sat1&&days.nsat<6;){
       if(!sat_segment_load(s->norad,t,&days.sat[days.nsat])){local_chart_done();return NULL;}
       t=days.sat[days.nsat].start+(int64_t)days.sat[days.nsat].span;days.nsat++;
     }

@@ -89,6 +89,7 @@ typedef struct AppTimer AppTimer;
 typedef void (*AppTimerCallback)(void *data);
 AppTimer *app_timer_register(uint32_t timeout_ms,AppTimerCallback callback,void *callback_data);
 bool app_timer_reschedule(AppTimer *timer_handle,uint32_t new_timeout_ms);
+void app_timer_cancel(AppTimer *timer_handle);
 struct tm *localtime(const time_t *timep);
 typedef void *ResHandle;
 #define GColorClear ((GColor8){.argb=0x00})

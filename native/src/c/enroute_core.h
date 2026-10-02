@@ -14,10 +14,11 @@
 
 #define ENR_W 200
 #define ENR_H 228
-// The equirectangular charts' lighting tables, by row and column; a face
-// without those charts (Groundtrack Fuller) keeps none.
-#define ENR_TRIG_H (FACE_CHART?ENR_H:1)
-#define ENR_TRIG_W (FACE_CHART?ENR_W:1)
+// The pieces a scene's runs are kept in (see EnrScene): their size, and
+// how many the class plane and a Fuller sheet's tiles may take.
+#define ENR_RUN_PIECE 2048
+#define ENR_RUN_PIECES 32
+#define ENR_TILE_PIECES 16
 
 // Arithmetic for night and the body. Doubles match the browser renderer
 // exactly, and the watch uses them; ENR_FLOAT (single precision) remains
@@ -91,8 +92,10 @@ typedef struct {
   uint8_t tile_count,tile_face[ENR_TILES];
   int32_t tile_grid[ENR_TILES][6];
   // Which tile each pixel lies on, as row runs of (count, tile + 1; 0 none).
+  // Kept in pieces as the scene's class plane is (ENR_RUN_PIECE): row y's
+  // start at tile_offset[y].
   uint16_t tile_offset[ENR_H+1];
-  uint8_t *tile_runs;
+  uint8_t *tile_piece[ENR_TILE_PIECES];
   // Each night grid point's direction in its face's frame (n, u, v), x
   // 16384: ENR_NIGHT_POINTS of them.
   int16_t *dirs;
@@ -124,7 +127,9 @@ typedef struct {
   // Pebble GColor8 values: 0b11rrggbb.
   uint8_t zoned[ENR_ZONED][3];
   uint8_t space,space_ink,screen,waterline,terminator,night_dots,tints[5],depths[2];
-  enr_real row_cos[ENR_TRIG_H],row_sin[ENR_TRIG_H],col_cos[ENR_TRIG_W],col_sin[ENR_TRIG_W];
+  // The rows' and columns' cosines and sines (not a Fuller sheet's): the
+  // rows' in rows_block, the columns' after the minutes in theirs.
+  enr_real *row_cos,*row_sin,*col_cos,*col_sin;
   enr_real c1x,normal_x,normal_y;
   int16_t zulu_x,zulu_baseline,top_x,top_baseline,height_right,height_baseline;
   // The world band's tape: its ends, baseline, and where the minutes may go.
@@ -166,7 +171,9 @@ typedef struct {
   // before it.
   uint8_t event_count;
   struct {int16_t x,y,lx,box[4];uint8_t clear;char name[5];} events[16];
-  EnrMinute minutes[60];
+  // The hour's minutes, sixty, in a block of their own.
+  EnrMinute *minutes;
+  void *rows_block;
   // Home's acquisition circles, each allocated on its own: circle k has
   // circle_n[k] points, (x, y) bytes at circle_px[k].
   uint8_t circle_count,circle_n[60];
@@ -175,30 +182,34 @@ typedef struct {
   int32_t track_t0;
   int16_t track_step;
   EnrPoint *track;
-  // The class plane as row runs of (count, class) byte pairs; row y's runs
-  // are runs[row_offset[y]] up to runs[row_offset[y+1]].
+  // The class plane as row runs of (count, class) byte pairs, each row's
+  // making up its ENR_W pixels. A count past ENR_RUN_MAX is a stretch of
+  // bare ground told pixel by pixel (a shaded plate's dither): count -
+  // ENR_RUN_MAX bytes follow, two pixels' ground classes each, the first in
+  // the low nibble.
+  // The runs are kept in pieces of ENR_RUN_PIECE bytes, a row's all in one
+  // piece: row y's start at byte row_offset[y] % ENR_RUN_PIECE of piece
+  // row_offset[y] / ENR_RUN_PIECE. (A build leaves the watch's heap in
+  // pieces: there is room for these where there is none for the whole, nor
+  // for the scene as one block, so its minutes and tables lie apart too.)
+  // row_offset[ENR_H] is the last row's end.
+  #define ENR_RUN_MAX 200
   uint16_t row_offset[ENR_H+1];
-  const uint8_t *runs;
-  bool owns_runs;
+  uint8_t *run_piece[ENR_RUN_PIECES];
   // Rows with ground under them (bit y&7 of byte y>>3), where night can
   // change; set by enr_ready.
   uint8_t ground_rows[(ENR_H+7)/8];
   // The rows' cosines and sines, and night's thresholds, in 2^30 fixed
   // point, for the minute renderer's fast night.
-  int32_t row_q[ENR_TRIG_H][2],night_q[34];
+  int32_t (*row_q)[2],night_q[34];
   // Whether a class's colour differs between night's zones (enr_ready).
   uint8_t zone_matters[256];
 } EnrScene;
 
-// Parse a scene blob as src/native-scene.js writes it (host only:
-// native/host/enroute_parse.c). Allocates the track and circles
-// with the given allocator. With borrow, the class plane's runs stay in the blob,
-// which must then outlive the scene; otherwise they are copied. Returns
-// false on a malformed blob.
-bool enr_parse(const uint8_t *blob,size_t length,EnrScene *scene,void *(*alloc)(size_t),bool borrow);
+// Frees what a scene holds (not the scene itself).
 void enr_free(EnrScene *scene,void (*release)(void *));
 // Notes what the minute renderer needs from the class plane, once its runs
-// are in place (enr_parse does it itself).
+// are in place.
 void enr_ready(EnrScene *scene);
 
 // Draw minute 0-59 of the scene's hour into a 200x228 GColor8 frame buffer.

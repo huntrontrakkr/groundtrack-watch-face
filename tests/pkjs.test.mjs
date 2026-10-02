@@ -39,6 +39,17 @@ test('the phone gives up on a watch that stops taking messages',async()=>{
     p.listeners.appmessage({payload:{DataRequest:Math.floor(now/86400000)}});await p.quiet();
     assert.ok(p.messages.length<=3+6,`${p.messages.length} messages`);
     assert.ok(p.logs.includes('The watch is not taking a message'));
+    // Settings the watch didn't take are owed: tried again a few times, not
+    // for ever, and sent with the next thing the watch asks for.
+    let reach=false;const q=phone(bundle,now,{timeZone:'UTC',body:'moon'},()=>reach);
+    q.listeners.ready({});await q.quiet();
+    const tried=q.messages.filter(m=>m.Settings).length;
+    assert.ok(tried>=6&&tried<=6*10,`${tried} tries of the settings`);
+    reach=true;q.messages.length=0;
+    q.listeners.appmessage({payload:{DataRequest:-1}});await q.quiet();
+    assert.equal(q.messages.filter(m=>m.Settings).length,1);assert.equal(q.messages.filter(m=>m.Events).length,1);
+    q.messages.length=0;q.listeners.appmessage({payload:{DataRequest:-1}});await q.quiet();
+    assert.equal(q.messages.filter(m=>m.Settings||m.Events).length,0);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -111,11 +122,27 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
     const set=r.messages[0].Settings;
     assert.equal(JSON.stringify([set[2],set[3],set[17]>>1,set[21],set[22]]),JSON.stringify([2,0,0,3,1]));
-    // Events: from two hours ago to four days ahead, each its time and name.
+    // Events: the next twenty from two hours ago, each its time and name.
     const events=JSON.stringify([{epoch:now-3*3600000,title:'Old',label:'OLDDD'},{epoch:now+3600000,title:'Run',label:'RUNNN'},{epoch:now+5*86400000,title:'Far',label:'FARRR'}]);
     const pe=phone(bundle,now,{body:'sun',timeZone:zone,events});pe.listeners.ready({});await pe.quiet();
-    const ebytes=pe.messages.find(m=>m.Events).Events,et=(now+3600000)/1000;
-    assert.equal(JSON.stringify(ebytes),JSON.stringify([et&255,(et>>8)&255,(et>>16)&255,(et>>>24)&255,...'RUNNN'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
+    const ebytes=pe.messages.find(m=>m.Events).Events,et=(now+3600000)/1000,ft=(now+5*86400000)/1000;
+    assert.equal(JSON.stringify(ebytes),JSON.stringify([et&255,(et>>8)&255,(et>>16)&255,(et>>>24)&255,...'RUNNN',ft&255,(ft>>8)&255,(ft>>16)&255,(ft>>>24)&255,...'FARRR'].map(v=>typeof v==='string'?v.charCodeAt(0):v)));
+    // Asked for data, the phone sends the events only if they have moved on
+    // (the watch draws again for them); with no day missing (-1), no
+    // segments, only home's rise and set.
+    pe.messages.length=0;pe.listeners.appmessage({payload:{DataRequest:-1}});await pe.quiet();
+    assert.deepEqual(pe.messages.map(m=>Object.keys(m)[0]),['RiseSets']);
+    // What is stored may be anything: none of it stops the settings.
+    for(const stored of [{events:'"text"'},{events:'{"length":2}'},{events:'[null,{"epoch":1e300,"title":"x","label":"X"},{"epoch":'+(now+60000)+',"title":"No label"}]'},{home:'{"lat":null,"lon":null}'},{home:'[1,2]'},{'tle-25544':'{"text":"nonsense","fetched":'+now+',"epoch":'+now+'}','tle-tried-25544':String(now),body:'sat:25544'},
+      // (NOAA-20's kept elements are another satellite's: not used.)
+      {'tle-tried-43013':String(now),'tle-43013':JSON.stringify({text:readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').split('\n').slice(0,3).join('\n')+'\n',fetched:now,epoch:now}),body:'sat:43013'}]){
+      const b=phone(bundle,now,{timeZone:zone,...stored});b.listeners.ready({});await b.quiet();
+      b.listeners.appmessage({payload:{DataRequest:Math.floor(now/86400000),...(stored.body?{DataBody:Number(stored.body.slice(4))}:{})}});await b.quiet();
+      assert.ok(b.messages.find(m=>m.Settings),JSON.stringify(stored));
+      if(stored.body==='sat:43013'){assert.ok(!b.messages.some(m=>m.SatSegments));assert.equal(b.messages.find(m=>m.Status)?.Status,'NO ELEMENTS');}
+      if(stored.home)assert.equal(b.messages.find(m=>m.Settings).Settings[5]|b.messages.find(m=>m.Settings).Settings[6]<<8,4071,'home falls back to the zone\'s');
+    }
+    for(const response of ['null','7','"x"','[]','%7B'])pe.listeners.webviewclosed({response});
     // A satellite: its catalog number, kind (on the hour chart) and code; the
     // ISS is taken too (on the world band), a body no face has is not.
     const q=phone(bundle,now,{body:'sat:36585',plate:'crt',flag:'0',timeZone:zone});q.listeners.ready({});await q.quiet();
@@ -179,6 +206,16 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
     listeners.showConfiguration({});for(let i=0;i<300&&!opened;i++)await new Promise(r=>setTimeout(r,20));
     const config=JSON.parse(/var config=(\{.*?\}),s=config/s.exec(decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length)))?.[1]??'null');
     assert.equal(config.face,'enroute');
+    // An event's title may spell the page's own marks, or close its script.
+    let marked=null;const stored={events:JSON.stringify([{epoch:now+3600000,title:'__PREVIEW__ __CONFIG__ </script>\u2028',label:'PREVW'}])};
+    const c2=vm.createContext({console:{log:()=>{}},setTimeout,navigator:{},localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:()=>{}},
+      Pebble:{addEventListener:(n,f)=>{listeners[n]=f;},openURL:u=>{marked=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
+    vm.runInContext(`Date.now=()=>${now};`,c2);vm.runInContext(bundle,c2);
+    listeners.showConfiguration({});for(let i=0;i<300&&!marked;i++)await new Promise(r=>setTimeout(r,20));
+    const html=decodeURIComponent(marked.slice('data:text/html;charset=utf-8,'.length)),script=/<script>([\s\S]*?)<\/script>/.exec(html)[1];
+    assert.ok(!script.includes('var PV=__PREVIEW__')&&!script.includes('config=__CONFIG__'),'both marks are filled');
+    assert.doesNotThrow(()=>new vm.Script(script),'the page\'s script parses');
+    assert.equal(JSON.parse(/var config=(\{.*?\}),s=config/s.exec(html)[1]).events[0].title,'__PREVIEW__ __CONFIG__ </script>\u2028');
     assert.deepEqual(config.bodies.map(b=>b[0]).sort(),['sat:20580','sat:25544','sat:36585','sat:42738','sat:43013','sat:48274','sat:49260']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

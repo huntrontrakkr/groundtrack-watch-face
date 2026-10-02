@@ -66,26 +66,39 @@ test('every hour builds within the watch\'s memory',{skip:!cc&&'no C compiler'},
   }
 });
 
-// Each face alone, as its watch app is built, with room to spare: the
-// watch's heap is what its 128 KB leaves after the app itself (about 63 KB
-// on each), and a build that peaks near it fails on the hours that need a
-// little more. These budgets (counted with this machine's larger pointers,
-// so a little high) leave a sixth of the heap free at the peak, and a third
-// of it after, while the finished chart stays as each minute is drawn.
-const BUDGETS={enroute:{peak:52000,kept:44000},fuller:{peak:54000,kept:42000}};
-test('each face builds its hours with a fifth of its heap to spare',{skip:!cc&&'no C compiler'},()=>{
+// Each face alone, as its watch app is built, in a heap 5 KB short of the
+// watch's and modelled as the watch's is (native/host/heap_model.h: a block
+// takes the first free stretch that holds it), so a build that leaves the
+// heap in pieces and then wants one large block fails here as it does on
+// the watch, where counting bytes alone would pass it. The watch's heap is
+// what its 128 KB leaves after the app itself and the system's share. What
+// the finished chart keeps leaves room to draw a minute whole (about 11 KB,
+// and 12 KB on a Fuller sheet; drawn over the last, 3.6 KB more).
+const HEAPS={enroute:62100,fuller:62700},KEPT={enroute:47000,fuller:47000};
+test('each face builds its hours in less than the watch\'s heap, modelled as the watch\'s is',{skip:!cc&&'no C compiler'},()=>{
   const day=Date.parse('2026-09-30T00:00:00Z'),at=h=>new Date(day+h*3600e3).toISOString();
   const cases={
-    enroute:[['sun',{}],['moon',{}],['sat:36585',{}],['sat:42738',{}],['sat:42738',{span:'hour'}],['sat:25544',{}],['sat:25544',{tape:'slide'}],['sat:43013',{tape:'tape'}],['sat:25544',{tape:'clock'}]],
-    fuller:[['sat:25544',{projection:'fuller'}],['sat:43013',{projection:'fuller'}],['sun',{projection:'fuller'}],['moon',{projection:'fuller'}],['sat:36585',{projection:'fuller'}],['sat:42738',{projection:'fuller'}]]
+    enroute:[['sun',{}],['moon',{}],['sat:36585',{}],['sat:42738',{}],['sat:42738',{span:'hour'}],['sat:25544',{}],['sat:25544',{tape:'slide'}],['sat:43013',{tape:'tape'}],['sat:25544',{tape:'clock'}],['moon',{plate:'airbrush',readout:'callout'}],['sat:36585',{plate:'airbrush'}]],
+    fuller:[['sat:25544',{projection:'fuller'}],['sat:43013',{projection:'fuller'}],['sun',{projection:'fuller'}],['moon',{projection:'fuller'}],['sat:36585',{projection:'fuller'}],['sat:42738',{projection:'fuller'}],['sat:25544',{projection:'fuller',plate:'airbrush',readout:'callout'}],['sat:36585',{projection:'fuller',plate:'airbrush'}]]
   };
   for(const [face,list] of Object.entries(cases))for(const [body,more] of list)for(const hour of [0,7,14,21]){
-    const r=spawnSync(`native/host/build_check-${face}`,[],{input:input(body,at(hour),'console','America/New_York',{flag:true,...more})});
+    const r=spawnSync(`native/host/build_check-${face}`,[],{input:input(body,at(hour),more.plate||'console','America/New_York',{flag:!more.readout,...more}),env:{...process.env,HEAP_LIMIT:String(HEAPS[face]-5000)}});
     const what=`${face} ${body} ${JSON.stringify(more)} hour ${hour}`;
-    assert.equal(r.status,0,`${what}: ${r.stdout}${r.stderr}`);
+    assert.equal(r.status,0,`${what}: no chart in a heap of ${HEAPS[face]-5000} bytes: ${r.stdout}${r.stderr}`);
     const out=JSON.parse(r.stdout.toString());
-    assert.ok(out.peak<=BUDGETS[face].peak,`${what}: the build peaks at ${out.peak} bytes (budget ${BUDGETS[face].peak})`);
-    assert.ok(out.kept<=BUDGETS[face].kept,`${what}: the hour keeps ${out.kept} bytes (budget ${BUDGETS[face].kept})`);
+    assert.ok(out.kept<=KEPT[face],`${what}: the hour keeps ${out.kept} bytes (budget ${KEPT[face]})`);
+  }
+});
+
+// The same over hours of every body in odd zones at awkward dates with
+// every setting drawn at random, under the address and undefined-behaviour
+// sanitizers (tools/sweep.mjs); and builds starved of memory at every size,
+// which must fail holding nothing.
+test('a sweep of random hours and settings finds no fault, and starved builds fail cleanly',{skip:!cc&&'no C compiler',timeout:600000},()=>{
+  // (A part of what `node tools/sweep.mjs 2000` and `--starve 60` cover.)
+  for(const args of [['60','1'],['--starve','4','1']]){
+    const r=spawnSync(process.execPath,['tools/sweep.mjs',...args],{maxBuffer:1<<24,env:{...process.env,SWEEP_STEP:'1499'}});
+    assert.equal(r.status,0,`sweep ${args.join(' ')}: ${r.stdout.toString().slice(-3000)}`);
   }
 });
 

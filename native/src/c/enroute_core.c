@@ -132,8 +132,8 @@ static int32_t fuller_point(const EnrScene *s,const Night *n,int t,int x,int y){
 static const uint8_t *row_tiles(const EnrScene *s,int y){
   for(int k=0;k<TILE_ROWS;k++)if(work->tiles_y[k]==y)return work->tiles[k];
   const int k=work->tiles_next;work->tiles_next=(k+1)%TILE_ROWS;
-  const EnrFuller *f=s->fuller;const uint8_t *p=f->tile_runs+f->tile_offset[y],*end=f->tile_runs+f->tile_offset[y+1];
-  for(int x=0;p<end;p+=2)for(int j=0;j<p[0]&&x<W;j++)work->tiles[k][x++]=p[1];
+  const EnrFuller *f=s->fuller;const uint8_t *p=f->tile_piece[f->tile_offset[y]/ENR_RUN_PIECE]+f->tile_offset[y]%ENR_RUN_PIECE;
+  for(int x=0;x<W;p+=2)for(int j=0;j<p[0]&&x<W;j++)work->tiles[k][x++]=p[1];
   work->tiles_y[k]=y;return work->tiles[k];
 }
 // A pixel's height, computed when first asked and kept with its row's
@@ -170,20 +170,31 @@ static void touch(Ctx *c,int x,int y){
   if(y>c->box[3])c->box[3]=y;
 }
 
+// A row's runs (their piece, and where they start in it).
+static const uint8_t *row_runs_of(const EnrScene *s,int y){return s->run_piece[s->row_offset[y]/ENR_RUN_PIECE]+s->row_offset[y]%ENR_RUN_PIECE;}
 // A pixel's class: from the decoded rows when they hold it, otherwise by
 // walking its row's runs.
 static void decode_row(const EnrScene *s,int y,uint8_t *out){
-  const uint8_t *p=s->runs+s->row_offset[y],*end=s->runs+s->row_offset[y+1];
-  for(int x=0;p<end&&x<W;p+=2)for(int k=0;k<p[0]&&x<W;k++)out[x++]=p[1];
+  const uint8_t *p=row_runs_of(s,y);
+  for(int x=0;x<W;){
+    if(p[0]>ENR_RUN_MAX){const int n=p[0]-ENR_RUN_MAX;for(int k=1;k<=n&&x+1<W;k++){out[x++]=p[k]&15;out[x++]=p[k]>>4;}p+=n+1;}
+    else{if(!p[0])break;for(int k=0;k<p[0]&&x<W;k++)out[x++]=p[1];p+=2;}
+  }
+}
+// The class at x along a row's runs.
+static uint8_t run_class(const uint8_t *p,int x){
+  for(int at=0;at<W;){
+    if(p[0]>ENR_RUN_MAX){const int n=p[0]-ENR_RUN_MAX;if(x<at+2*n){const uint8_t b=p[1+((x-at)>>1)];return (x-at)&1?b>>4:b&15;}at+=2*n;p+=n+1;}
+    else{if(!p[0])break;at+=p[0];if(x<at)return p[1];p+=2;}
+  }
+  return G_SPACE;
 }
 // A pixel's class: from the decoded rows when they hold it, from the cache
 // when it holds its row, otherwise by walking its row's runs.
 static uint8_t class_at(const Ctx *c,int x,int y){
   if(c->rows[1]&&y>=c->row_y-1&&y<=c->row_y+1&&c->rows[y-c->row_y+1])return c->rows[y-c->row_y+1][x];
   const int slot=work->slot_of[y];if(slot!=255)return work->cache[slot][x];
-  const EnrScene *s=c->s;const uint8_t *p=s->runs+s->row_offset[y],*end=s->runs+s->row_offset[y+1];
-  for(int at=0;p<end;p+=2){at+=p[0];if(x<at)return p[1];}
-  return G_SPACE;
+  return run_class(row_runs_of(c->s,y),x);
 }
 // The rows of a pixel list decoded into the cache (lettering reads each of
 // its rows many times over).
@@ -542,7 +553,7 @@ static void draw_body(Ctx *c){
 }
 
 // Lettering in Departure Mono, and the chart's knockout under it.
-static const EnrGlyph *glyph(char ch){const char *p=strchr(ENR_FONT_CHARS,ch);return p&&ch?&ENR_FONT_GLYPHS[p-ENR_FONT_CHARS]:0;}
+static const EnrGlyph *glyph(char ch){const char *p=strchr(ENR_FONT_CHARS,ch);return p&&ch&&ENR_FONT_GLYPHS?&ENR_FONT_GLYPHS[p-ENR_FONT_CHARS]:0;}
 static int text_width(const char *text,int n){int w=0;for(int i=0;i<n;i++){const EnrGlyph *g=glyph(text[i]);if(g)w+=g->advance;}return w;}
 static int text_pixels(const char *text,int n,int x,int baseline,Px *out){
   int count=0,cx=x;
@@ -1043,7 +1054,8 @@ void enr_ready(EnrScene *s){
   s->night_q[0]=q30(S);s->night_q[1]=q30(C);
   for(int b=0;b<16;b++){s->night_q[2+b]=q30(S-(b+(enr_real)0.5)/16*(S-C));s->night_q[18+b]=b>=4?INT32_MIN/2:q30(b?S-b/(enr_real)4*(S-C):S);}
   memset(s->ground_rows,0,sizeof s->ground_rows);
-  for(int y=0;y<H;y++)for(unsigned k=s->row_offset[y];k<s->row_offset[y+1];k+=2)if((s->runs[k+1]&15)!=G_SPACE){s->ground_rows[y>>3]|=(uint8_t)(1<<(y&7));break;}
+  // (A row with no ground is one run of space, or two.)
+  for(int y=0;y<H;y++){const uint8_t *p=row_runs_of(s,y);for(int x=0;x<W;x+=p[0],p+=2)if(p[0]>ENR_RUN_MAX||!p[0]||(p[1]&15)!=G_SPACE){s->ground_rows[y>>3]|=(uint8_t)(1<<(y&7));break;}}
   // Which classes change colour with the zone (base_pixel's choices).
   for(int cls=0;cls<256;cls++){
     const int g=cls&15,l=cls>>4;const uint8_t *z=NULL,*z2=NULL;
@@ -1140,9 +1152,12 @@ void enr_free(EnrScene *s,void (*release)(void *)){
   s->circle_count=0;
   if(s->fig_bits)release(s->fig_bits);
   s->fig_bits=0;
-  if(s->owns_runs)release((void *)s->runs);
-  if(ROLLED(s)){release(s->fuller->tile_runs);release(s->fuller->dirs);release(s->fuller);s->fuller=0;}
-  s->track=0;s->runs=0;s->owns_runs=false;
+  for(int k=0;k<ENR_RUN_PIECES;k++){if(s->run_piece[k])release(s->run_piece[k]);s->run_piece[k]=0;}
+  if(s->minutes)release(s->minutes);
+  if(s->rows_block)release(s->rows_block);
+  s->minutes=0;s->rows_block=0;
+  if(ROLLED(s)&&s->fuller){for(int k=0;k<ENR_TILE_PIECES;k++)if(s->fuller->tile_piece[k])release(s->fuller->tile_piece[k]);release(s->fuller->dirs);release(s->fuller);s->fuller=0;}
+  s->track=0;
 }
 
 // The study's measures (enroute_core.h).
@@ -1177,9 +1192,7 @@ void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]){
 int enr_text_width(const char *text,int n){return text_width(text,n);}
 int enr_class(const EnrScene *scene,int x,int y){
   if(x<0||y<0||x>=W||y>=H)return -1;
-  const uint8_t *p=scene->runs+scene->row_offset[y],*end=scene->runs+scene->row_offset[y+1];
-  for(int at=0;p<end;p+=2){at+=p[0];if(x<at)return p[1];}
-  return G_SPACE;
+  return run_class(row_runs_of(scene,y),x);
 }
 int enr_zone(const EnrScene *scene,int minute,int x,int y){
   if(!work_begin(scene,false))return -1;

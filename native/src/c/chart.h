@@ -109,11 +109,3 @@ const char *chart_failure(void);
 // The figures the day's time callout sets each minute (20, 28 and 40 px),
 // read from the figures resource into the scene.
 bool chart_callout_figures(EnrScene *scene,MapReadFn read,void *source,void *(*alloc)(size_t));
-// The class plane (200x228 bytes) as row runs of (count, class), as the
-// phone packs them; allocated with alloc and owned by the scene.
-bool chart_runs(const uint8_t *classes,EnrScene *scene,void *(*alloc)(size_t));
-// The same over the plane itself where it can, shrunk with src->resize;
-// takes the plane either way.
-bool chart_runs_in_place(uint8_t *classes,EnrScene *scene,const ChartSources *src);
-// The same, returning the runs and filling row_offset[H+1].
-const uint8_t *chart_plane_runs(uint8_t *classes,uint16_t *row_offset,const ChartSources *src);

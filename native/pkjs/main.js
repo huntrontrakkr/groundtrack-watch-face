@@ -56,28 +56,37 @@ function zone(){
 
 function home(timeZone){
   var saved=setting('home',null);
-  if(saved){try{var h=JSON.parse(saved);if(h.none)return null;if(isFinite(h.lat)&&isFinite(h.lon))return {code:'HOM',name:'Home',lat:+h.lat,lon:+h.lon};}catch(error){}}
+  if(saved){try{var h=JSON.parse(saved);if(h.none)return null;if(typeof h.lat==='number'&&typeof h.lon==='number'&&Math.abs(h.lat)<=90&&Math.abs(h.lon)<=180)return {code:'HOM',name:'Home',lat:h.lat,lon:h.lon};}catch(error){}}
   return HOMES[timeZone]||null;
 }
 
 // Every message to the watch goes through one queue, one at a time. A
 // message the watch doesn't take is tried again a few times; after that the
-// queue is dropped, and the watch asks again for what it still lacks.
-var queue=[],pumping=false;
-function enqueue(message,group,done){queue.push({message:message,group:group,done:done,failures:0});pump();}
+// queue is dropped, and the watch asks again for the data it still lacks.
+// It never asks for its settings or events, so those dropped are owed: sent
+// with the next thing the watch asks for, and tried again a few times (the
+// watch may only have been out of reach).
+var queue=[],pumping=false,waiting=false,owed=false,owedTries=0;
+function enqueue(message){queue.push({message:message,failures:0});pump();}
+function dropped(){
+  var lost=queue.some(function(item){return item.message.Settings||item.message.Events;});
+  queue=[];
+  if(lost)owed=true;
+  // (Eight more tries over twenty minutes, then only when the watch asks.)
+  if(owed&&owedTries<8){owedTries++;setTimeout(payOwed,30000*owedTries);}
+}
+function payOwed(){if(!owed)return;owed=false;sendSettings();sendEvents();}
 function pump(){
-  if(pumping||!queue.length)return;
+  if(pumping||waiting||!queue.length)return;
   pumping=true;var item=queue[0];
-  Pebble.sendAppMessage(item.message,function(){
-    queue.shift();pumping=false;if(item.done)item.done(true);pump();
-  },function(){
+  function failed(){
     pumping=false;
-    if(++item.failures>5){
-      console.log('The watch is not taking a message');
-      queue=[];
-      if(item.done)item.done(false);
-    }else setTimeout(pump,500*item.failures);
-  });
+    if(++item.failures>5){console.log('The watch is not taking a message');dropped();}
+    else{waiting=true;setTimeout(function(){waiting=false;pump();},500*item.failures);}
+  }
+  try{
+    Pebble.sendAppMessage(item.message,function(){queue.shift();pumping=false;pump();},failed);
+  }catch(error){failed();}
 }
 
 // What the watch needs to draw its charts itself. Settings: body (0 Sun, 1
@@ -127,7 +136,10 @@ function sendSatellite(norad){
     if(problem){console.log('No elements for '+body+': '+(reason||problem));status(problem);return;}
     // From an hour ago, or for the whole-day chart from a day ago (its day
     // starts at local midnight).
-    var span=satelliteSpan(body),now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=view(body)==='day'?26*3600:3600;
+    // (The hour's chart starts 40 minutes before its local hour, which the
+    // watch may be 59 minutes into.)
+    var span,now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=view(body)==='day'?26*3600:6000;
+    try{span=satelliteSpan(body);}catch(error){console.log('No orbit for '+body+': '+error.message);return;}
     for(var t=Math.floor((now-back)/span)*span;t<now+SAT_DAYS*86400;t+=span){
       var seg;try{seg=encodeSatelliteSegment(satelliteSegmentFor(body,t*1000));}catch(error){break;}
       for(var k=0;k<seg.length;k++)bytes.push(seg[k]);sent++;
@@ -136,7 +148,8 @@ function sendSatellite(norad){
     if(bytes.length)enqueue({SatSegments:bytes});
     var timeZone=zone(),h=home(timeZone);
     if(h)for(var b=Math.floor(Date.now()/PASS_BLOCK)*PASS_BLOCK;b<Date.now()+SAT_DAYS*DAY;b+=PASS_BLOCK){
-      try{enqueue({Passes:Array.prototype.slice.call(encodePassBlock(body,h,b,timeZone))});}catch(error){break;}
+      // (With whose they are: the watch may have chosen another since.)
+      try{enqueue({Passes:Array.prototype.slice.call(encodePassBlock(body,h,b,timeZone)),DataBody:Number(norad)});}catch(error){break;}
     }
     console.log('Satellite '+norad+': '+sent+' segments sent');
   });
@@ -182,7 +195,9 @@ function elements(body,done){
   if(body.indexOf('sat:')!==0)return done(null);
   var norad=body.slice(4),key='tle-'+norad,kept=null;
   try{kept=JSON.parse(localStorage.getItem(key));}catch(error){}
-  function use(text,source){try{registerElements(text,source);return true;}catch(error){console.log('Elements for '+norad+' refused: '+error.message);return false;}}
+  // (Elements for another object are not this one's.)
+  function mine(e){if(e.norad!==Number(norad))throw new Error('elements for '+e.norad);return e;}
+  function use(text,source){try{mine(registerElements(text,source));return true;}catch(error){console.log('Elements for '+norad+' refused: '+error.message);return false;}}
   function fallback(reason){
     if(kept&&Date.now()-kept.epoch<FRESH&&use(kept.text,'celestrak'))return done(null);
     done(viewOf(body)==='world'?'NO ELEMENTS':null,reason);
@@ -197,7 +212,7 @@ function elements(body,done){
   request.onload=function(){
     if(request.status!==200)return fallback('CelesTrak answered '+request.status);
     var text=request.responseText;
-    try{var e=registerElements(text,'celestrak');}catch(error){return fallback(error.message);}
+    try{var e=mine(registerElements(text,'celestrak'));}catch(error){return fallback(error.message);}
     try{localStorage.setItem(key,JSON.stringify({text:text,fetched:Date.now(),epoch:e.epoch}));localStorage.removeItem('tle-tried-'+norad);}catch(error){}
     console.log('Elements for '+norad+' from CelesTrak, epoch '+new Date(e.epoch).toISOString());
     done(null);
@@ -216,24 +231,34 @@ function status(text){
 // Events, as the settings page gives them ({epoch, title}): the past day's
 // and after are kept, at most forty, each named with a five-letter code
 // unique on its local day (src/events.js), as the study names them.
-function storedEvents(){var v=[];try{v=JSON.parse(setting('events','[]'));}catch(error){}return v&&v.length!==undefined?v:[];}
+// (Only what saveEvents wrote: a time the calendar holds, a title, a label.)
+function storedEvents(){
+  var v=[];try{v=JSON.parse(setting('events','[]'));}catch(error){}
+  return Array.isArray(v)?v.filter(function(e){return e&&typeof e.epoch==='number'&&Math.abs(e.epoch)<4e12&&typeof e.title==='string'&&typeof e.label==='string';}):[];
+}
 function saveEvents(list){
   var timeZone=zone(),kept=[],now=Date.now();
-  list.filter(function(e){return e&&isFinite(e.epoch)&&typeof e.title==='string'&&e.title.trim()&&e.epoch>now-86400000;})
+  list.filter(function(e){return e&&typeof e.epoch==='number'&&e.epoch<4e12&&typeof e.title==='string'&&e.title.trim()&&e.epoch>now-86400000;})
     .sort(function(a,b){return a.epoch-b.epoch;}).slice(0,40).forEach(function(e){
       var day=localDay(e.epoch,timeZone),taken=kept.filter(function(k){return k.epoch>=day.start&&k.epoch<day.end;}).map(function(k){return k.label;});
       kept.push({epoch:Math.floor(e.epoch/60000)*60000,title:e.title.trim().slice(0,40),label:uniqueCode(e.title,taken)});
     });
   localStorage.setItem('events',JSON.stringify(kept));
 }
-// The watch's events: from two hours ago to four days ahead, at most
-// twenty, each its time (i32 Unix seconds) and name (5 characters).
-function sendEvents(){
+// The watch's events: the next twenty from two hours ago, each its time
+// (i32 Unix seconds) and name (5 characters). `changed` sends them only if
+// they are not the ones last sent (the watch draws its chart again for
+// them): later events come into the twenty as earlier ones pass.
+var eventsSent=null;
+function sendEvents(changed){
   var now=Date.now(),bytes=[];
-  storedEvents().filter(function(e){return e.epoch>now-7200000&&e.epoch<now+4*86400000;}).slice(0,20).forEach(function(e){
+  storedEvents().filter(function(e){return e.epoch>now-7200000;}).slice(0,20).forEach(function(e){
     var t=Math.floor(e.epoch/1000);bytes.push(t&255,(t>>8)&255,(t>>16)&255,(t>>>24)&255);
     for(var k=0;k<5;k++)bytes.push(k<e.label.length?e.label.charCodeAt(k):0);
   });
+  var key=bytes.join(',');
+  if(changed&&key===eventsSent)return;
+  eventsSent=key;
   enqueue({Events:bytes.length?bytes:[0]});
 }
 
@@ -276,7 +301,8 @@ Pebble.addEventListener('showConfiguration',function(){
       face:FACE,bodies:BODIES.filter(function(b){return b.indexOf('sat:')===0;}).map(function(b){var c=catalogEntry(b);return [b,c.code+' · '+c.name,c.note];}),
       plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),figureSets:FIGURE_SETS,preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
-    var page=CONFIG_PAGE.replace('__CONFIG__',function(){return JSON.stringify(config).replace(/</g,'\\u003c');}).replace('__PREVIEW__',function(){return JSON.stringify(previewInputs());});
+    // (Both in one pass: an event's title may spell either mark.)
+    var page=CONFIG_PAGE.replace(/__CONFIG__|__PREVIEW__/g,function(mark){return JSON.stringify(mark==='__CONFIG__'?config:previewInputs()).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');});
     Pebble.openURL('data:text/html;charset=utf-8,'+encodeURIComponent(page));
   }
   setTimeout(function(){open(null);},5000);
@@ -286,6 +312,7 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(!e||!e.response||e.response==='CANCELLED')return;
   var chosen;
   try{chosen=JSON.parse(e.response.charAt(0)==='{'?e.response:decodeURIComponent(e.response));}catch(error){console.log('Unreadable settings');return;}
+  if(!chosen||typeof chosen!=='object')return;
   if(BODIES.indexOf(chosen.body)>=0)localStorage.setItem('body',chosen.body);
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
   if(READOUTS.indexOf(chosen.readout)>=0)localStorage.setItem('readout',chosen.readout);
@@ -298,19 +325,24 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(TRANSFERS.indexOf(chosen.transfer)>=0)localStorage.setItem('transfer',chosen.transfer);
   if(chosen.clock24==='1'||chosen.clock24==='0')localStorage.setItem('clock24',chosen.clock24);
   if(typeof chosen.home==='string')localStorage.setItem('home',chosen.home);
-  if(chosen.events&&chosen.events.length!==undefined)saveEvents(chosen.events);
+  if(Array.isArray(chosen.events))saveEvents(chosen.events);
   // The watch draws again in the new settings, with home's rise and set
   // for the new home.
+  owed=false;owedTries=0;
   sendSettings();sendRiseSets();sendEvents();
 });
 
 // On launch, the settings: the watch asks for anything else it lacks.
-Pebble.addEventListener('ready',function(){sendSettings();sendEvents();});
+Pebble.addEventListener('ready',function(){owed=false;owedTries=0;sendSettings();sendEvents();});
 Pebble.addEventListener('appmessage',function(e){
-  // Segments from a UTC day (days since 1970), and home's rise and set.
+  // Segments from a UTC day (days since 1970; -1: none are missing), and
+  // home's rise and set or a satellite's own data; and with them what the
+  // watch is owed, and its events if they have moved on.
   var from=e.payload.DataRequest;
   if(from!==undefined){
-    sendSegments(from);
+    owedTries=0;
+    if(owed)payOwed();else sendEvents(true);
+    if(from>=0)sendSegments(from);
     if(e.payload.DataBody)sendSatellite(e.payload.DataBody);else sendRiseSets();
   }
 });

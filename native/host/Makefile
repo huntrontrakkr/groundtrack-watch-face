@@ -6,12 +6,12 @@ harness: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h .
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The watch's chart builder's memory, as a watch's heap would see it.
-build_check: build_check.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
+build_check: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 
 # The same for one face alone, as its watch app is built (the all-faces
 # build above peaks elsewhere): build_check-enroute, -fuller.
-build_check-%: build_check.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
+build_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
 	$(CC) $(CFLAGS) -std=gnu11 -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 
 # Host check of the shared sine and cosine.
@@ -48,6 +48,25 @@ shim-check: ../src/c/main.c
 	$(CC) -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Istub -I../src/c -DENR_FLOAT -fsyntax-only ../src/c/main.c
 	arm-none-eabi-gcc -std=gnu11 -Wall -Wno-unused-parameter -Istub -I../src/c -DENR_FLOAT -mcpu=cortex-m4 -mthumb -fsyntax-only ../src/c/main.c
 
+# The harness and the memory check with the address and undefined-behaviour
+# sanitizers, for each app as it is built (tools/sweep.mjs runs them):
+# san-harness-enroute, san-harness-fuller, san-build_check-enroute, ...
+# (Shifts of negative numbers are the fixed-point code's own, and defined
+# by the compilers used.)
+SANFLAGS=-std=gnu11 -O1 -g -fsanitize=address,undefined -fno-sanitize=shift-base -fno-sanitize-recover=undefined -fno-omit-frame-pointer -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
+san-harness-%: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/chart.h
+	$(CC) $(SANFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
+san-build_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h
+	$(CC) $(SANFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
+
+# The watch app itself on the host (watch_sim.c: main.c and watch_data.c
+# over a stand-in SDK with a clock that is told the time), sanitized, for
+# each app: watch_sim-enroute, watch_sim-fuller. tests/watch.test.mjs plays
+# the phone to it.
+SIMFLAGS=$(SANFLAGS) -Wno-unused-function -Istub -I../src/c -DPBL_SDK_3 -Dmain=watch_main -Dtime=sim_time -Dmalloc=sim_malloc -Dfree=sim_free -Drealloc=sim_realloc
+watch_sim-%: watch_sim.c heap_model.h ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c stub/pebble.h ../src/c/watch_data.h ../src/c/chart.h
+	$(CC) $(SIMFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ watch_sim.c ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c -lm
+
 clean:
-	rm -f harness harness-exact harness-float map_test segments_test fmath_test build_check *.o
+	rm -f harness harness-exact harness-float map_test segments_test fmath_test build_check build_check-* san-* watch_sim-* *.o
 .PHONY: arm shim-check clean
