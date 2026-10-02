@@ -30,3 +30,22 @@ test('with the world sliding too, the satellite stays under the index',async()=>
   // The fixed ruler is unchanged by default.
   const fixed=r.render({...state(24),tape:undefined});assert.ok(fixed.figure.index.x>SCALE.x0&&fixed.figure.index.x<W/2);
 });
+
+test('the sliding world leaves the tape\'s panel as the tape alone draws it, and keeps its date, every minute',async()=>{
+  // (The band's columns come round as it slides; the panel's must not: the
+  // tape's labels a little past its ends once came back in at the far side,
+  // "45 45", and the date went missing the minute the satellite stood at
+  // the centre.)
+  const r=await renderer(),PANEL=67;
+  for(const hour of [0,5,11]){
+    let dated=0;
+    for(let m=0;m<60;m++){
+      const epoch=HOUR+hour*3600000+m*MINUTE,tape=Buffer.from(r.render({...state(0,'tape'),epoch}).frame),slide=Buffer.from(r.render({...state(0,'slide'),epoch}).frame);
+      assert.ok(tape.subarray(0,PANEL*W).equals(slide.subarray(0,PANEL*W)),`hour ${hour} minute ${m}: the panel differs`);
+      // The date's row of lettering, under the panel (ink on the plate's space).
+      const s=r.scene,row=slide.subarray((s.height.baseline-6)*W,(s.height.baseline+1)*W),ground=row[W-1];
+      if(row.subarray(0,W/2).some(v=>v!==ground))dated++;
+    }
+    assert.equal(dated,60,`hour ${hour}: the date is drawn in ${dated} of its 60 minutes`);
+  }
+});

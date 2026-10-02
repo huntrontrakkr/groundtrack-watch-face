@@ -281,15 +281,19 @@ static uint8_t late_ink(const EnrScene *s,int ground,int x,int y,int z){
 }
 // (The sliding band is the world round: its columns wrap.)
 static int sliding_x(const EnrScene *s,int x){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?((x%W)+W)%W:x;}
+// (Only the band's rows come round: what is drawn in the panel above them,
+// the tape's labels a little past its ends say, is cut off at the edge.)
+#define SLIDE_TOP 67
+#define PLOT_X(c,x,y) ((y)>=SLIDE_TOP?sliding_x((c)->s,(x)):(x))
 static void plot(Ctx *c,int x,int y,uint8_t color){
-  x=sliding_x(c->s,x);
+  x=PLOT_X(c,x,y);
   if(x<0||y<0||x>=W||y>=H)return;
   if(c->measure){touch(c,x,y);return;}
   c->frame[y*c->stride+x]=color;
 }
 // A knockout: plain ground, without night's screen.
 static void clear(Ctx *c,int x,int y){
-  x=sliding_x(c->s,x);
+  x=PLOT_X(c,x,y);
   if(x<0||y<0||x>=W||y>=H)return;
   if(c->measure){touch(c,x,y);return;}
   plot(c,x,y,base_color(c->s,class_at(c,x,y)&15,zone(c,x,y)));
@@ -580,7 +584,7 @@ static void letter(Ctx *c,const Px *px,int n,int ink_key,int halo){
   if(s_figures_only)halo=0;
   for(int i=0;i<n;i++)for(int dy=-halo;dy<=halo;dy++)for(int dx=-halo;dx<=halo;dx++)clear(c,px[i].x+dx,px[i].y+dy);
   for(int i=0;i<n;i++){
-    const int wx=sliding_x(c->s,px[i].x),cx=wx<0?0:wx>W-1?W-1:wx,cy=px[i].y<0?0:px[i].y>H-1?H-1:px[i].y;
+    const int wx=PLOT_X(c,px[i].x,px[i].y),cx=wx<0?0:wx>W-1?W-1:wx,cy=px[i].y<0?0:px[i].y>H-1?H-1:px[i].y;
     const bool space=(class_at(c,cx,cy)&15)==G_SPACE;
     plot(c,px[i].x,px[i].y,space?c->s->space_ink:c->s->zoned[ink_key][zone_at(c,wx,px[i].y)]);
   }
@@ -988,7 +992,7 @@ enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_Z
 // the route, between the tape's panel and the bottom margin). What stands
 // still over the band (the height, the source line) is drawn on the band
 // at its turned columns, before the turn.
-#define SLIDE_TOP TAPE_P
+_Static_assert(SLIDE_TOP==TAPE_P,"the band is turned from under the tape's panel");
 #define SLIDE_BOTTOM (H-10)
 static int slide_offset(const EnrScene *s,const EnrMinute *m){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?(((int)js_round(m->mx)-W/2)%W+W)%W:0;}
 static void slide_rows(uint8_t *frame,int stride,int off){
@@ -1024,7 +1028,7 @@ static void draw_moving(Ctx *c,int part){
   const int off=slide_offset(s,m);
   // The margins' corner, or in its place the watch's state.
   if(s->height_right&&(!part||part==PART_HEIGHT))draw_text(c,s_status[0]?s_status:m->corner,s_status[0]?(int)sizeof s_status:(int)sizeof m->corner,0,s->height_right+off,s->height_baseline);
-  if(world&&off&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
+  if(world&&(s->flags&ENR_SLIDING_WORLD)&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint64_t *mask,const uint64_t *nmask,const Night *from){
   minute=minute<0?0:minute>59?59:minute;
