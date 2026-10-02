@@ -13,9 +13,13 @@ Releases from the workflow publish to it once the repository variable `GROUNDTRA
 
 ## Description
 
-The hour as an aeronautical chart. The ground route of the Sun, the Moon, a GPS satellite or Japan's QZSS runs across the map in magenta, from this hour's compass rose to the next hour's reporting point, graduated like a ruler a mark every minute. The body stands on the route at the minute.
+Two faces in one, for the Sun, the Moon and any satellite.
 
-Choose the International Space Station, Tiangong, Hubble, Landsat 9 or NOAA-20 and the chart becomes mission control's plotboard: the orbit across a band of the whole world, each tracking station with the circle within which it could hear a low orbit. Above it the hour runs on an instrument tape: a fixed ruler, a sliding tape, the world sliding with it, or simply a clock.
+Enroute is the hour as an aeronautical chart: the ground route across the map from this hour's compass rose to the next hour's reporting point, a mark every minute, the body on it. For the Sun, the Moon and the slower, higher satellites.
+
+The Plotboard is mission control's wall: a band of the whole world with the tracking stations, the hour above it on a ruler, a sliding tape or a clock. A fast satellite's hour runs across it, or a slow one's whole day.
+
+Follow one of 68 satellites (space stations, Starlink, navigation, weather, Earth observation, telescopes) or find any other at CelesTrak by name or number. The Sun and Moon can be marked beside it.
 
 Contour relief, the continental shelf and the coastline come from public-domain elevation data, stored on the watch, and the calculated Sun brings the night across the map.
 

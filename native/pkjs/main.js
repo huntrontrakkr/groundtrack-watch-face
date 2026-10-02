@@ -11,7 +11,8 @@
 //   body ('sun', 'moon' or 'sat:' and a catalog number), face ('enroute' or
 //   'plotboard': which of Groundtrack's two faces; without it, the body's
 //   own), also ('sun', 'moon' or both, comma-separated: marked beside the
-//   body), sats (JSON [{norad, name, code, period, ecc, still}]: satellites added
+//   body), hourFigures ('1' or '0': the hour chart with or without its hour
+//   figures), legend ('1': a Fuller sheet's scale bar), sats (JSON [{norad, name, code, period, ecc, still}]: satellites added
 //   from CelesTrak on the settings page),
 //   plate, readout ('off', 'flag' or 'callout'; before it, flag '1' or
 //   '0'), numerals (the callout's figures: colon, plain, even, mono, accent),
@@ -45,7 +46,6 @@ import RULES_TEXT from 'groundtrack-rules-text';
 // Sunlight mapping).
 import PAGE_ASSETS from 'groundtrack-page-assets';
 import SUNLIGHT from '../../data/sunlight-colors.json';
-import {chartInput} from '../../src/chart-input.js';
 import {devicePosition} from './device-position.js';
 
 // GPS and QZSS have nominal orbits to fall back on, as the study does.
@@ -111,7 +111,8 @@ function pump(){
 // and, on the fixed tape, how its minutes fall on the route (0 off, 1 a
 // vernier, 2 a comb, 3 chevrons), the figure set (FIGURE_SETS' index), the
 // margins' corner, and which of the Sun (1) and Moon (2) are marked beside
-// the body.
+// the body, whether the hour chart is bare of its hour figures, and whether
+// a Fuller sheet carries its scale bar.
 var FIGURES=FIGURE_SETS.map(function(f){return f[0];});
 // The margins' corner: the day of the year (the world band: the height), the
 // body's ground point, the Moon's light.
@@ -125,11 +126,14 @@ function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r
 function face(body){return FACE==='fuller'?'fuller':faceFor(setting('face',''),viewOf(body));}
 function chart(body){return chartOf(face(body),body,viewOf(body),setting('span','day'),plotOf(body));}
 function daily(body){var c=chart(body);return c==='day'||c==='worldday';}
+// (The hour chart bare of its hour figures: hourFigures '0'.)
+function bare(){return setting('hourFigures','1')==='0';}
 function also(){return setting('also','').split(',').filter(function(k){return k==='sun'||k==='moon';});}
 function watchSettings(){
   var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
   var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null,numerals=NUMERALS.indexOf(setting('numerals','even'));
-  var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,READOUTS.indexOf(readout()),setting('clock24','1')==='0'?0:1,h?1:0];
+  // (A bare hour chart has the time in full beside the body.)
+  var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,bare()&&chart(body)==='hour'?2:READOUTS.indexOf(readout()),setting('clock24','1')==='0'?0:1,h?1:0];
   function i32(v){bytes.push(v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255);}
   i32(h?Math.round(h.lat*100):0);i32(h?Math.round(h.lon*100):0);
   i32(sat?Number(body.slice(4)):0);
@@ -140,7 +144,7 @@ function watchSettings(){
   var transfer=TRANSFERS.indexOf(setting('transfer','off'));
   var figures=FIGURES.indexOf(setting('figures','michroma')),corner=CORNERS.indexOf(setting('corner','day'));
   bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?FIGURES.indexOf('michroma'):figures,corner<0?0:corner,
-    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0));
+    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,setting('legend','0')==='1'?1:0);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -380,45 +384,26 @@ function currentBody(){var b=setting('body',FIRST);return known(b)?b:FIRST;}
 // A data-URL page can't reliably ask for the phone's location itself (as
 // Dymaxion found), so the phone takes a coarse fix first, waiting at most
 // five seconds, and passes it in, rounded to 0.01°.
-// The preview's inputs: this hour's chart for the body chosen and (where
-// the face draws them) the Sun and Moon, in the settings as they are; the
-// page changes their settings' lines itself. A body without its data (a
-// satellite's elements not yet fetched) has none.
+// What the page's preview is made from. The page makes each chart input
+// itself (src/page-input.js, with the core among its assets), in the
+// settings as they stand on it, so every choice is previewed; from here it
+// has the element sets the phone has kept, the time zone and its city, and
+// the calendar's events.
 function previewInputs(){
-  var now=Date.now(),timeZone=zone(),parts=clockParts(now,timeZone),start=Math.floor(now/60000)*60000-Number(parts.m)*60000;
-  // Every body the phone can draw now: the Sun and Moon, GPS and QZSS (on
-  // their nominal orbits if nothing better is kept), the satellite chosen
-  // and the few others whose elements it fetched last. Each on each face
-  // it can be on (under body@face); a day chart's hour has an input of its
-  // own (body@face/hour).
-  var texts={},kept=[];
+  var timeZone=zone(),tles={};
   bodies().forEach(function(body){
     if(body.indexOf('sat:')!==0)return;
     var k=null;try{k=JSON.parse(localStorage.getItem('tle-'+body.slice(4)));}catch(error){}
-    if(k&&k.text)kept.push([body,k]);
+    if(k&&typeof k.text==='string')tles[body.slice(4)]=k.text;
   });
-  kept.sort(function(a,b){return (b[1].fetched||0)-(a[1].fetched||0);});
-  var shown=['sun','moon','sat:36585','sat:42738',currentBody()];
-  kept.forEach(function(k){if(shown.length<11||k[0]===currentBody()){try{registerElements(k[1].text,'celestrak');if(shown.indexOf(k[0])<0)shown.push(k[0]);}catch(error){}}});
-  shown.filter(function(b,i){return shown.indexOf(b)===i;}).forEach(function(body){
-    var v=viewOf(body);
-    (FACE==='fuller'?['fuller']:v==='world'?['plotboard']:['enroute','plotboard']).forEach(function(f){
-      (v==='day'&&f!=='plotboard'?['day','hour']:['day']).forEach(function(span){
-        try{
-          texts[body+'@'+f+(span==='hour'?'/hour':'')]=chartInput({body:body,start:start,plate:setting('plate','enroute'),readout:readout()==='off'?false:readout(),numerals:setting('numerals','even'),margin:setting('margin','utc'),
-            span:span,tape:setting('tape','fixed'),transfer:setting('transfer','off'),figures:setting('figures','michroma'),corner:setting('corner','day'),also:also(),
-            events:calendarLink()?storedEvents():[],clock24:setting('clock24','1')!=='0',zone:timeZone,home:home(timeZone),projection:FACE==='fuller'?'fuller':'chart',face:f});
-        }catch(error){console.log('No preview for '+body+': '+error.message);}
-      });
-    });
-  });
-  return {assets:PAGE_ASSETS,sunlight:SUNLIGHT.colors,texts:texts,minute:Number(parts.m)};
+  // (now: the phone's clock, which the page's follows.)
+  return {assets:PAGE_ASSETS,sunlight:SUNLIGHT.colors,tles:tles,zone:timeZone,preset:HOMES[timeZone]||null,events:calendarLink()?storedEvents():[],now:Date.now()};
 }
 Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
@@ -459,6 +444,8 @@ Pebble.addEventListener('webviewclosed',function(e){
   });
   if(known(chosen.body))localStorage.setItem('body',chosen.body);
   if(chosen.face==='enroute'||chosen.face==='plotboard')localStorage.setItem('face',chosen.face);
+  if(chosen.legend==='1'||chosen.legend==='0')localStorage.setItem('legend',chosen.legend);
+  if(chosen.hourFigures==='1'||chosen.hourFigures==='0')localStorage.setItem('hourFigures',chosen.hourFigures);
   if(Array.isArray(chosen.also))localStorage.setItem('also',chosen.also.filter(function(k){return k==='sun'||k==='moon';}).join(','));
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);
   if(READOUTS.indexOf(chosen.readout)>=0)localStorage.setItem('readout',chosen.readout);

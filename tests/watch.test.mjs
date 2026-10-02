@@ -36,13 +36,13 @@ const TLE_FILE=process.env.WATCH_TLE||'tests/fixtures/celestrak-2026-09-29.tle';
 if(process.env.WATCH_TLE){const {registerElements}=await import('../src/satellites.js');const l=readFileSync(TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<l.length;i+=3)registerElements(l.slice(i,i+3).join('\n')+'\n','celestrak');}
 const sets=file=>Object.fromEntries(readFileSync(file,'utf8').trim().split('\n').reduce((sets,line,i)=>{if(i%3===0)sets.push([]);sets.at(-1).push(line);return sets;},[]).map(l=>[Number(l[1].slice(2,7)),l.join('\n')+'\n']));
 let TLES=sets(TLE_FILE);
-// The watch's heap: what its 128 KB leaves after the app (about 64.1 KB of
-// code and data on Groundtrack, 64.3 on Fuller) and the system's own share,
+// The watch's heap: what its 128 KB leaves after the app (about 64.5 KB of
+// code and data on Groundtrack, 65.0 on Fuller) and the system's own share,
 // as the emulator reports it free when a build starts, with the lettering's
 // glyphs; modelled as the watch's is (native/host/heap_model.h), a block
 // taking the first stretch that holds it, so a heap left in pieces by a
 // build fails here as it does there. The tests run in 2 KB less.
-const HEAPS={enroute:62600+1687-2000,fuller:62400+1687-2000};
+const HEAPS={enroute:62250+1687-2000,fuller:61700+1687-2000};
 // What the app holds for its life: the lettering's glyphs (1,679 bytes, in a
 // block of the heap's).
 const GLYPHS=1688;
@@ -101,7 +101,7 @@ async function answer(w,ph,rounds=4){
 // A phone's storage for a case: its settings, home, events and (kept as
 // fetched an hour before) the fixture's elements.
 function storage(c,t){
-  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),
+  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',
     home:c.home?JSON.stringify({lat:c.home.lat,lon:c.home.lon}):JSON.stringify({none:true}),events:JSON.stringify((c.events||[]).map(([minutes,title])=>({epoch:t+minutes*60000,title,label:nameCode(title)})))};
   // (Events come from a calendar's link: read a moment ago, as the phone keeps it.)
   if((c.events||[]).length){s.calendar='https://calendar.example/private/basic.ics';s['calendar-fetched']=String(t);}
@@ -123,7 +123,7 @@ const what=(face,c,t)=>`${face} ${JSON.stringify(c)} at ${new Date(t).toISOStrin
 async function expected(face,c,t){
   const r=await renderer();
   r.render({body:c.body,epoch:t,timeZone:c.zone,clock24:c.clock24!==false,plate:c.plate||'enroute',readout:c.readout==='off'?false:c.readout||'flag',numerals:c.numerals||'even',zone:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',
-    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart',face:c.face,also:c.also||[]});
+    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart',face:c.face,also:c.also||[],bare:!!c.bare,legend:!!c.legend});
   return Buffer.from(r.last.frame);
 }
 async function same(face,c,w,label){
@@ -190,7 +190,7 @@ test('every satellite draws on each face, each in every form its chart takes',{s
   for(const app of ['enroute','fuller'])for(const body of ['sun','moon',...Object.keys(TLES).map(n=>'sat:'+n)]){
     const sat=body.startsWith('sat:'),fast=viewOf(body)==='world';
     const band=[{tape:'fixed',readout:'flag'},{tape:'tape',also:['sun','moon']},{tape:'slide',also:['moon']},{tape:'clock',readout:'callout'},{tape:'route',also:['sun']}].map(f=>({face:'plotboard',...f}));
-    const chart=viewOf(body)==='day'?[{span:'day'},{span:'hour',readout:'callout'}]:[{readout:'flag',also:['sun','moon']},{readout:'callout'}];
+    const chart=viewOf(body)==='day'?[{span:'day'},{span:'hour',readout:'callout'}]:[{readout:'flag',also:['sun','moon']},{readout:'callout'},{readout:'off',bare:true}];
     const forms=app==='fuller'?(sat?chart:[{also:['sun','moon']}]):fast?band:sat?[...chart.map(f=>({face:'enroute',...f})),...band]:band;
     for(const form of forms){
       const c={body,zone:'America/New_York',home:NY,plate:'console',...form,t0:t},label=what(app,c,t);
@@ -298,8 +298,8 @@ test('the whole catalog draws: every satellite listed, on each face that can sho
   const t=Date.parse('2026-10-02T19:07:00Z'),tapes=['fixed','tape','slide','route','clock'];let n=0;
   for(const entry of CATALOG){
     const body='sat:'+entry.norad,fast=viewOf(body)==='world';
-    const cases=[['enroute',{face:'plotboard',tape:tapes[n%5],also:n%2?['sun','moon']:[]}],['fuller',{readout:n%2?'flag':'callout'}]];
-    if(!fast)cases.push(['enroute',{face:'enroute',span:n%2?'hour':'day',readout:n%3?'flag':'callout'}]);
+    const cases=[['enroute',{face:'plotboard',tape:tapes[n%5],also:n%2?['sun','moon']:[]}],['fuller',{readout:n%2?'flag':'callout',legend:n%3!==0}]];
+    if(!fast)cases.push(['enroute',{face:'enroute',span:n%2?'hour':'day',readout:n%3?'flag':'callout',bare:n%4===0}]);
     n++;
     for(const [app,form] of cases){
       const c={body,zone:n%2?'Asia/Tokyo':'America/New_York',home:n%2?{lat:35.68,lon:139.69}:NY,plate:n%3?'enroute':'console',...form,t0:t},label=`${entry.code} ${what(app,c,t)}`;

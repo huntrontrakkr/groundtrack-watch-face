@@ -35,6 +35,10 @@ typedef struct {
   uint8_t corner;
   // The Sun (1) and the Moon (2) marked beside the body.
   uint8_t also;
+  // The hour chart without its hour figures.
+  uint8_t bare;
+  // A Fuller sheet's scale bar, in its open space.
+  uint8_t legend;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);

@@ -25,12 +25,16 @@ test('every setting offered changes the face, and none that changes it is withhe
         key==='tape'?(rules.tape?5:1):
         key==='transfer'?(rules.transfer?'some':1):
         key==='span'?(rules.span?2:1):
+        key==='bare'?(rules.bare?2:1):
+        // (A sheet with no open space for it has no scale bar.)
+        key==='legend'?(rules.legend?'upto':1):
         key==='corner'?(rules.light?3:2):
         'all';
+      if(expected==='upto')continue;
       if(expected==='all')assert.equal(c.distinct,c.of,`${at}: only ${c.distinct} of its ${c.of} values draw differently`);
       else if(expected==='some')assert.ok(c.distinct>=c.of-1,`${at}: only ${c.distinct} of its ${c.of} values draw differently`);
       else assert.equal(c.distinct,expected,`${at}: ${c.distinct} of its values draw differently, the page offers ${expected}`);
     }
   }
-  assert.deepEqual(Object.keys(SETTINGS).sort(),['clock24','corner','events','figures','home','margin','numerals','plate','readout','span','tape','transfer']);
+  assert.deepEqual(Object.keys(SETTINGS).sort(),['bare','clock24','corner','events','figures','home','legend','margin','numerals','plate','readout','span','tape','transfer']);
 });

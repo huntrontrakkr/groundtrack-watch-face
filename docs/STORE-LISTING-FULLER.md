@@ -13,7 +13,7 @@ Releases from the workflow publish to it once the repository variable `GROUNDTRA
 
 ## Description
 
-The Earth unfolded as Buckminster Fuller unfolded it, rolled along the route. The icosahedron rolls across the watch face face by face under the Sun, the Moon, the International Space Station, Tiangong, Hubble, Landsat 9, NOAA-20, GPS or QZSS, printing each face as it touches down, so the route never meets a cut: a satellite's hour unrolls into a band of faces, the Sun's and the Moon's day into a strip across the whole net.
+The Earth unfolded as Buckminster Fuller unfolded it, rolled along the route. The icosahedron rolls across the watch face face by face under the Sun, the Moon or any satellite (68 are listed, from the Space Station and Starlink to GPS and the weather satellites, and any other can be found at CelesTrak), printing each face as it touches down, so the route never meets a cut: a satellite's hour unrolls into a band of faces, the Sun's and the Moon's day into a strip across the whole net.
 
 The hour is set along the route as on an aeronautical chart: a compass rose turned to true north, the next hour's reporting point, minute graduations and the hour's figures. The tracking stations that can hear the satellite this hour are marked with their circles, and home has its own.
 

@@ -499,6 +499,8 @@ static void bold_pixel(Ctx *c,int x,int y,void *arg){
   // a third, on the other side. (The sliding band's columns wrap.)
   const bool steep=*(bool *)arg,heavy=FACE_ROLL&&c->s->heavy;x=sliding_x(c->s,x);const int bx=sliding_x(c->s,steep?(heavy?x-1:x+1):x),by=steep?y:(heavy?y+1:y-1);
   if(bx<0||by<0||bx>=W||by>=H)return;
+  // (On the world band, within the band: the builder's route stops there.)
+  if(VIEW_IS_WORLD(c->s->view)&&(by<c->s->height_baseline+6||by>H-10))return;
   const int layer=class_at(c,bx,by)>>4;
   // Only what was drawn before the route (ground, grid, the network's ink
   // and knockouts, a one-ink plate's casing) lies under the bold line.
@@ -658,17 +660,11 @@ static void draw_readout(Ctx *c){
 }
 // Of what was drawn after the body, what the browser draws after the minute
 // flag too: home's mark and the margins.
-static bool after_flag(const EnrScene *s,int x,int y){
-  const int16_t *b=s->home_box;
-  return y<14||y>=H-16||(abs(x-s->home_x)<=6&&abs(y-s->home_y)<=6)||(x>=b[0]&&x<b[0]+b[2]&&y>=b[1]&&y<b[1]+b[3]);
-}
-// What was drawn after the body in the hour's layer (with `flag`, only what
-// was drawn after the flag), drawn again over it.
-static void draw_late(Ctx *c,const int *box,bool flag){
+// What was drawn after the body in the hour's layer, drawn again over it.
+static void draw_late(Ctx *c,const int *box){
   if(box[0]>box[2]||c->measure)return;
   const EnrScene *s=c->s;
   for(int y=box[1]<0?0:box[1];y<=box[3]&&y<H;y++)for(int x=box[0]<0?0:box[0];x<=box[2]&&x<W;x++){
-    if(flag&&!after_flag(s,x,y))continue;
     const uint8_t cls=class_at(c,x,y);const int layer=cls>>4;
     if(layer==L_LATE_CLEARED)plot(c,x,y,base_color(s,cls&15,zone(c,x,y)));
     else if(layer==L_LATE_INK)plot(c,x,y,late_ink(s,cls&15,x,y,fix_zone(c,x,y,zone(c,x,y))));
@@ -1048,15 +1044,13 @@ static void draw_moving(Ctx *c,int part){
     // The body, then what lies over it; the flag, then what lies over that.
     Ctx box=*c;box.measure=true;
     draw_body(c);
-    if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_body(&box);draw_late(c,box.box,false);}
-    if(flag){
-      draw_flag(c);
-      if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_flag(&box);draw_late(c,box.box,true);}
-    }
+    if(!part){box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_body(&box);draw_late(c,box.box);}
+    // (Measured with the body, the flag's box; drawn last of all, below.)
+    if(flag&&part)draw_flag(c);
   }
   if((VIEW_IS_DAY(s->view)||(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_CALLOUT)))&&(!part||part==PART_CALLOUT)){
+    // (Over what the hour's layer drew late, as the flag is: it is the time.)
     draw_callout(c);
-    if(!part){Ctx box=*c;box.measure=true;box.box[0]=W;box.box[1]=H;box.box[2]=-1;box.box[3]=-1;draw_callout(&box);draw_late(c,box.box,true);}
   }
   if(world&&(!part||part==PART_INDEX)){if(s->clock)draw_panel_clock(c);else if(s->flags&ENR_SLIDING_TAPE)draw_sliding_tape(c);else draw_index(c);}
   if(world&&!s->clock&&!(s->flags&ENR_SLIDING_TAPE)&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
@@ -1067,6 +1061,8 @@ static void draw_moving(Ctx *c,int part){
   // The margins' corner, or in its place the watch's state.
   if(s->height_right&&(!part||part==PART_HEIGHT))draw_text(c,s_status[0]?s_status:m->corner,s_status[0]?(int)sizeof s_status:(int)sizeof m->corner,0,s->height_right+off,s->height_baseline);
   if(world&&(s->flags&ENR_SLIDING_WORLD)&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
+  // The minute flag over everything: it is the time.
+  if(flag&&!part)draw_flag(c);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint64_t *mask,const uint64_t *nmask,const Night *from){
   minute=minute<0?0:minute>59?59:minute;
@@ -1179,7 +1175,10 @@ static __attribute__((noinline)) void moved(const EnrScene *scene,int from,int m
   // A symbol inked by one point's night is drawn again whole when that
   // point's night changes.
   if((scene->flags&ENR_NIGHT_ZONES)&&(scene->zoned[ENR_INK][0]!=scene->zoned[ENR_INK][1]||scene->zoned[ENR_INK][0]!=scene->zoned[ENR_INK][2])){
-    const int16_t pts[3][3]={{scene->c0[0],scene->c0[1],21},{scene->c1[0],(int16_t)(scene->c1[1]-1),6}};
+    // (As wide round the reporting point as round the rose: where the two
+    // stand close, a slow body's hour on the world band, the rose's ink
+    // nearer the reporting point takes that point's night.)
+    const int16_t pts[3][3]={{scene->c0[0],scene->c0[1],21},{scene->c1[0],(int16_t)(scene->c1[1]-1),21}};
     const int n=2+scene->station_count;
     for(int k=0;k<n+scene->event_count;k++){
       const int x=k<2?pts[k][0]:k<n?scene->stations[k-2][0]:scene->events[k-n].x,y=k<2?pts[k][1]:k<n?scene->stations[k-2][1]:scene->events[k-n].y,r=k<2?pts[k][2]:k<n?3:5;

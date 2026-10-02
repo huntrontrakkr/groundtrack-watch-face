@@ -243,8 +243,8 @@ static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)
 static void take_settings(const uint8_t *b,size_t n){
   if(n<25)return;
   WatchSettings s;memset(&s,0,sizeof s);
-  s.version=8;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
-  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;s.also=n>27?b[27]:0;
+  s.version=10;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
+  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;s.also=n>27?b[27]:0;s.bare=n>28?b[28]:0;s.legend=n>29?b[29]:0;
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;

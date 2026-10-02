@@ -26,18 +26,20 @@ const data={
 };
 
 // The settings page's preview runs the watch's own core (public/core.wasm,
-// tools/build-core.sh) on the face's resources: one gzip of them all, in
+// tools/build-core.sh) on the face's resources, from chart inputs it makes
+// itself (src/page-input.js, a script of its own): one gzip of them all, in
 // base64, with each part's kind (core_api.h's CORE_MAP ... CORE_LAND; -1
-// the core) and place.
+// the core, -2 the script) and place.
 const PARTS={enroute:[[-1,'public/core.wasm'],[0,'native/resources/map.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']],
   fuller:[[-1,'public/core.wasm'],[3,'public/fuller.bin'],[4,'native/resources/land.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']]}[face];
 const pageAssets={
   name:'groundtrack-page-assets',
   setup(b){
     b.onResolve({filter:/^groundtrack-page-assets$/},()=>({path:'page-assets',namespace:'groundtrack'}));
-    b.onLoad({filter:/^page-assets$/,namespace:'groundtrack'},()=>{
-      const files=PARTS.map(([,f])=>readFileSync(fileURLToPath(new URL(f,root)))),parts=[];let at=0;
-      for(let k=0;k<files.length;k++){parts.push([PARTS[k][0],at,files[k].length]);at+=files[k].length;}
+    b.onLoad({filter:/^page-assets$/,namespace:'groundtrack'},async()=>{
+      const script=await build({entryPoints:[fileURLToPath(new URL('src/page-input.js',root))],bundle:true,format:'iife',globalName:'GroundtrackInput',platform:'browser',target:'es2015',minify:true,legalComments:'none',plugins:[data],write:false,logLevel:'warning'});
+      const kinds=[...PARTS.map(p=>p[0]),-2],files=[...PARTS.map(([,f])=>readFileSync(fileURLToPath(new URL(f,root)))),Buffer.from(script.outputFiles[0].contents)],parts=[];let at=0;
+      for(let k=0;k<files.length;k++){parts.push([kinds[k],at,files[k].length]);at+=files[k].length;}
       return {contents:`export default ${JSON.stringify({gz:gzipSync(Buffer.concat(files),{level:9}).toString('base64'),parts})};`,loader:'js'};
     });
   }

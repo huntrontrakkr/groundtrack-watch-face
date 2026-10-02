@@ -31,19 +31,23 @@ export const VIEW_CODES={hour:0,world:1,day:2,worldday:3};
 //             the time, and a callout chosen there is the flag)
 //   numerals  whether the time figures' style shows (a callout, or the world
 //             band's clock)
+//   bare      whether the hour figures can be left off (the hour chart: the
+//             route alone then, and the time in full beside the body, the
+//             readout no longer a choice)
+//   legend    a scale bar in a Fuller sheet's open space (Groundtrack Fuller)
 //   tape      the world band's panel; transfer: its scale's minutes brought
 //             down to the route (under the fixed ruler and the sliding
 //             tapes: the route's own ruler needs none, the clock has no
 //             scale; nor does a whole day's route, marked in hours, take any)
 //   span      QZSS's choice of the day or the hour
 //   light     the Moon's light in the corner (the Moon's charts only)
-export function settingsFor(face,body,view,{span='day',readout='flag',tape='fixed',plot='hour'}={}){
-  const chart=chartOf(face,body,view,span,plot),world=chart==='world'||chart==='worldday';
-  const shown=world&&readout==='callout'?'flag':readout;
+export function settingsFor(face,body,view,{span='day',readout='flag',tape='fixed',plot='hour',bare=false}={}){
+  const chart=chartOf(face,body,view,span,plot),world=chart==='world'||chart==='worldday',alone=bare&&chart==='hour';
+  const shown=alone?'callout':world&&readout==='callout'?'flag':readout;
   return {chart,
-    readout:chart==='day'||(world&&tape!=='fixed'&&tape!=='route')?[]:world?['off','flag']:['off','flag','callout'],
-    readoutShown:shown,
-    numerals:chart==='day'||(chart==='hour'&&readout==='callout')||(world&&tape==='clock'),
+    readout:chart==='day'||alone||(world&&tape!=='fixed'&&tape!=='route')?[]:world?['off','flag']:['off','flag','callout'],
+    readoutShown:shown,bare:chart==='hour',legend:face==='fuller',
+    numerals:chart==='day'||(chart==='hour'&&shown==='callout')||(world&&tape==='clock'),
     tape:world,transfer:chart==='world'&&tape!=='clock'&&tape!=='route',
     span:view==='day'&&face!=='plotboard',light:body==='moon'};
 }

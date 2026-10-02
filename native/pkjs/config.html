@@ -8,7 +8,7 @@
   :root{--ink:#10204a;--route:#d4148c;--paper:#fff;--water:#e6f7fb;--line:#9fb3c8;color-scheme:light}
   *{box-sizing:border-box}
   body{margin:0;background:var(--water);color:var(--ink);font:16px/1.4 -apple-system,system-ui,Roboto,"Segoe UI",sans-serif}
-  header{padding:20px 18px 8px}
+  header{padding:10px 18px 4px}
   h1{margin:0;font:600 13px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;text-transform:uppercase}
   header p{margin:6px 0 0;font-size:14px;opacity:.75}
   form{padding:0 12px 96px}
@@ -38,10 +38,13 @@
   .actions button{flex:1;padding:14px;border:0;font-weight:600}
   #save{background:var(--route);color:#fff}
   #cancel{background:var(--paper);color:var(--ink);border:1px solid var(--line)}
-  .preview{position:sticky;top:0;z-index:1;display:flex;gap:10px;justify-content:center;padding:10px 0 8px;background:var(--water)}
-  .preview figure{margin:0;text-align:center;flex:0 1 200px}
-  .preview canvas{width:100%;max-width:200px;aspect-ratio:200/228;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
-  .preview figcaption{font-size:12px;opacity:.7;margin-top:4px}
+  /* The preview stays at the top of the screen while the settings scroll under it. */
+  .preview{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;gap:12px;align-items:center;justify-content:center;padding:8px 12px;background:var(--water);border-bottom:1px solid var(--line)}
+  .preview canvas{width:140px;height:160px;flex:none;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .preview .side{flex:0 1 150px;min-width:0;font-size:12px}
+  .preview .side p{margin:6px 0 4px;opacity:.75}
+  body{padding-top:178px}
+  #colours{padding:2px 8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font-size:12px}
   details.card{margin:12px 0;border:1px solid var(--line);border-radius:10px;background:var(--paper);overflow:hidden}
   details.card>summary{display:flex;align-items:baseline;gap:10px;min-height:52px;padding:14px;cursor:pointer;list-style:none}
   details.card>summary::-webkit-details-marker{display:none}
@@ -85,15 +88,18 @@
 </style>
 </head>
 <body>
-<header>
-  <h1 id="title">Groundtrack</h1>
-  <p>A setting is shown only where it changes the face. The preview is the watch's own drawing.</p>
-</header>
 <div class="preview" aria-label="A preview of the face in these settings">
-  <figure><canvas id="preview" width="200" height="228"></canvas><figcaption>The watch, this minute</figcaption></figure>
-  <figure><canvas id="preview-screen" width="200" height="228"></canvas><figcaption>On the watch's screen</figcaption></figure>
+  <canvas id="preview" width="200" height="228"></canvas>
+  <div class="side">
+    <h1 id="title">Groundtrack</h1>
+    <p id="colours-now"></p>
+    <button type="button" id="colours"></button>
+    <p id="preview-note"></p>
+  </div>
 </div>
-<p id="preview-note" class="note" style="text-align:center"></p>
+<header>
+  <p>A setting is shown only where it changes the face. The preview is the watch's own drawing of this minute, in the settings as they stand here.</p>
+</header>
 <form id="form">
   <details class="card" id="sec-face" open><summary><span class="title">Face</span><span class="now" id="now-face"></span></summary>
     <p class="note field">Groundtrack is two faces, each with settings of its own. What you follow says which can show it.</p>
@@ -111,8 +117,8 @@
       <p class="note field" id="find-note">The search goes to CelesTrak, which keeps the orbit of everything tracked round the Earth.</p>
     </div>
     <div class="group" id="also-group"><h3>Also marked on the chart</h3>
-      <label class="row"><input type="checkbox" name="also" value="sun"><span class="name">The Sun<span class="note">Where it stands overhead, when that is on the chart</span></span></label>
-      <label class="row"><input type="checkbox" name="also" value="moon"><span class="name">The Moon<span class="note">In its phase, where it stands overhead</span></span></label>
+      <label class="row"><input type="checkbox" name="also" value="sun"><span class="name">The Sun<span class="note">Where it stands overhead, when that is on the chart (not beside itself)</span></span></label>
+      <label class="row"><input type="checkbox" name="also" value="moon"><span class="name">The Moon<span class="note">In its phase, where it stands overhead (not beside itself)</span></span></label>
     </div>
   </details>
   <details class="card" id="sec-chart" open><summary><span class="title" id="chart-title">Chart</span><span class="now" id="now-chart"></span></summary>
@@ -127,6 +133,10 @@
       <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Sliding tape and world<span class="note">The map scrolls too, the body always under the pointer. Drawn whole each minute, which costs battery</span></span></label>
       <label class="row"><input type="radio" name="tape" value="route"><span class="name">The route's ruler<span class="note" id="route-note"></span></span></label>
       <label class="row"><input type="radio" name="tape" value="clock"><span class="name">Clock<span class="note">The time in large figures instead of a scale</span></span></label>
+    </div>
+    <div class="group" id="bare-group"><h3>The hour's large figures</h3>
+      <label class="row"><input type="radio" name="hourFigures" value="1"><span class="name">Shown<span class="note">This hour over the route's start, the next over its end</span></span></label>
+      <label class="row"><input type="radio" name="hourFigures" value="0"><span class="name">Left off<span class="note">The route alone, the time in full beside the body</span></span></label>
     </div>
     <div class="group" id="readout-group"><h3 id="readout-title">The minute, marked on the route</h3>
       <label class="row"><input type="radio" name="readout" value="off"><span class="name">Unmarked<span class="note">The body on the graduated route is the index</span></span></label>
@@ -160,6 +170,9 @@
   <details class="card" id="sec-look"><summary><span class="title">Look</span><span class="now" id="now-look"></span></summary>
     <div class="group"><h3>Plate</h3><div id="plates" class="tiles"></div><p class="picked-note" id="plate-note"></p></div>
     <div class="group"><h3>Hour figures</h3><div id="figure-sets" class="tiles"></div><p class="picked-note" id="figures-note"></p></div>
+    <div class="group" id="legend-group"><h3>In the sheet's open space</h3>
+      <label class="row"><input type="checkbox" name="legend"><span class="name">A scale bar<span class="note">A round length of the ground at the sheet's scale, where the net leaves room for it</span></span></label>
+    </div>
     <div class="group"><h3>The bottom right corner</h3>
       <label class="row"><input type="radio" name="corner" value="day"><span class="name" id="corner-day">Day of the year<span class="note">DAY 270</span></span></label>
       <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
@@ -218,7 +231,9 @@
   // does not take keeps its value, for the charts that do; the face asked
   // for is kept while a satellite too fast for it is on the other.
   var s={},info={};
-  ['body','face','plate','figures','readout','numerals','corner','margin','span','tape','transfer'].forEach(function(k){s[k]=config.settings[k];});
+  ['body','face','plate','figures','readout','numerals','corner','margin','span','tape','transfer','hourFigures'].forEach(function(k){s[k]=config.settings[k];});
+  if(s.hourFigures!=='0')s.hourFigures='1';
+  s.legend=config.settings.legend==='1';
   s.clock24=config.settings.clock24!=='0';
   s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
   config.bodies.forEach(function(b){info[b[0]]={name:b[1],note:b[2],view:b[3],period:b[4],group:b[5],plot:b[6]};});
@@ -289,7 +304,7 @@
   }
   function hide(id,hidden){document.getElementById(id).hidden=hidden;}
   function label(name){var c=form.querySelector('input[name='+name+']:checked');return c?c.parentNode.querySelector('.name').firstChild.nodeValue.trim():'';}
-  function rules(){return RULES.settingsFor(face(),s.body,info[s.body].view,{span:s.span,readout:s.readout,tape:s.tape,plot:info[s.body].plot});}
+  function rules(){return RULES.settingsFor(face(),s.body,info[s.body].view,{span:s.span,readout:s.readout,tape:s.tape,plot:info[s.body].plot,bare:s.hourFigures==='0'});}
   function render(){
     var r=rules(),kind=KINDS[r.chart],world=r.chart==='world'||r.chart==='worldday',daily=r.chart==='worldday',sat=s.body.indexOf('sat:')===0;
     if(!fuller){
@@ -300,7 +315,7 @@
       document.getElementById('face-why').hidden=!why;document.getElementById('face-why').textContent=why?info[s.body].name.split(' · ').pop()+' is on the Plotboard. '+why:'';
     }
     // (The Sun or Moon followed is not marked beside itself.)
-    radios('also').forEach(function(a){a.checked=s.also.indexOf(a.value)>=0;a.parentNode.hidden=a.value===s.body;});
+    radios('also').forEach(function(a){var own=a.value===s.body;a.checked=!own&&s.also.indexOf(a.value)>=0;a.disabled=own;a.parentNode.classList.toggle('off',own);});
     document.getElementById('route-note').textContent=daily?'A ruler of the day: each hour\'s mark stands over the body\'s place at that hour, the pointer over the body':'A ruler as long as the hour\'s run across the world: each minute\'s mark stands over that minute\'s place on the orbit, the pointer over the satellite';
     show('body',s.body);show('plate',s.plate);show('figures',s.figures);show('margin',s.margin);
     document.getElementById('chart-title').textContent=FACES[face()];
@@ -309,11 +324,13 @@
     hide('tape-group',!r.tape);show('tape',s.tape);
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
+    hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;
+    hide('bare-group',!r.bare);show('hourFigures',s.hourFigures);
     hide('readout-group',!r.readout.length);show('readout',r.readoutShown,r.readout);
     document.getElementById('readout-title').textContent=world?'The minute, marked on the panel':'The minute, marked on the route';
     var fixed=document.getElementById('readout-fixed');
     fixed.hidden=!!r.readout.length;
-    fixed.textContent=r.chart==='day'?'The whole-day chart always carries the time in full beside the body.':'The panel carries the time. (Under a ruler the minute can also be marked with a flag.)';
+    fixed.textContent=r.chart==='day'?'The whole-day chart always carries the time in full beside the body.':r.chart==='hour'?'Without the hour\'s figures, the time stands in full beside the body.':'The panel carries the time. (Under a ruler the minute can also be marked with a flag.)';
     hide('numerals-group',!r.numerals);show('numerals',s.numerals);
     document.getElementById('numerals-title').textContent=world?'The clock\'s figures':'The time\'s figures';
     show('corner',s.corner==='light'&&!r.light?'day':s.corner,r.light?null:['day','point']);
@@ -324,14 +341,15 @@
     document.getElementById('figures-note').textContent=named(config.figureSets||[],s.figures)[2];
     var marked=s.also.filter(function(k){return k!==s.body;}).map(function(k){return k==='sun'?'Sun':'Moon';});
     document.getElementById('now-follow').textContent=info[s.body].name.split(' · ')[0]+(marked.length?' · with the '+marked.join(' and '):'');
-    document.getElementById('now-chart').textContent=[r.span?label('span'):null,r.tape?label('tape'):null,r.readout.length?label('readout'):null].filter(Boolean).join(' · ')||kind[0];
+    document.getElementById('now-chart').textContent=[r.span?label('span'):null,r.tape?label('tape'):null,r.bare&&s.hourFigures==='0'?'No hour figures':null,r.readout.length?label('readout'):null].filter(Boolean).join(' · ')||kind[0];
     document.getElementById('now-time').textContent=(s.clock24?'24-hour':'12-hour')+' · '+(s.margin==='body'?'Zone time':'Zulu');
     document.getElementById('now-look').textContent=named(config.plates,s.plate)[1]+' · '+named(config.figureSets||[],s.figures)[1];
   }
   form.addEventListener('change',function(e){
     var t=e.target;
     if(t.name==='clock24')s.clock24=t.checked;
-    else if(t.name==='also')s.also=radios('also').filter(function(a){return a.checked;}).map(function(a){return a.value;});
+    else if(t.name==='legend')s.legend=t.checked;
+    else if(t.name==='also'){if(t.checked&&s.also.indexOf(t.value)<0)s.also.push(t.value);if(!t.checked)s.also=s.also.filter(function(k){return k!==t.value;});}
     else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;
     render();
   });
@@ -371,6 +389,8 @@
       s.sats.push(entry);added(entry);
     }
     s.tles[e.norad]=e.tle;s.body=key;
+    // (For the preview: charted as the page says, on the elements it came with.)
+    if(GT)try{if(info[key].group==='yours')GT.addSatellite(s.sats.filter(function(x){return x.norad===e.norad;})[0]);GT.registerElements(e.tle,'celestrak');}catch(error){}
     foundList.textContent='';findBox.value='';findNote.textContent=e.name+' chosen.'+(info[key].group==='yours'?' It is kept under Your satellites.':'');
     bodies();render();paint();
   }
@@ -421,7 +441,7 @@
     var mode=picked('home');
     document.getElementById('now-home').textContent=mode==='none'?'None':mode==='preset'?config.preset:lat&&lon?(placeName||lat+', '+lon):'Not set';
   }
-  function setPlace(lat,lon,name){form.elements.lat.value=(+lat).toFixed(2);form.elements.lon.value=(+lon).toFixed(2);placeName=name||'';place();}
+  function setPlace(lat,lon,name){form.elements.lat.value=(+lat).toFixed(2);form.elements.lon.value=(+lon).toFixed(2);placeName=name||'';place();paint();}
   form.addEventListener('change',place);
   ['lat','lon'].forEach(function(k){form.elements[k].addEventListener('input',function(){placeName='';place();});});
   place();
@@ -482,73 +502,104 @@
   form.elements.calendar.addEventListener('input',calendar);calendar();
   function close(result){location.href='pebblejs://close#'+encodeURIComponent(result);}
   // ---- The preview: the watch's own core (compiled to WebAssembly) builds
-  // and draws this hour, this minute, in the settings as they are on this
-  // page, from the hour's chart input the phone made; beside it the same
-  // frame as the watch's reflective screen shows its colours (Pebble's
-  // Sunlight mapping). Bodies the phone had no data for are not previewed.
-  var PV=__PREVIEW__,W=200,H=228,core=null,framePtr=0;
-  var NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock','route'],TRANSFERS=['off','vernier','comb','chevrons'],CORNERS=['day','point','light'];
+  // and draws this hour, this minute, from the chart input this page makes
+  // for the settings as they stand on it (src/page-input.js, as the phone
+  // would give the watch), so every choice shows: any body on any face. A
+  // satellite the phone has no elements for yet is fetched from CelesTrak
+  // here, once, and its elements go to the phone with the settings. Shown
+  // as the watch's reflective screen shows its colours (Pebble's Sunlight
+  // mapping), or as drawn. The minute is kept up while the page is open.
+  var PV=__PREVIEW__,W=200,H=228,core=null,framePtr=0,GT=null,skew=(PV&&PV.now||Date.now())-Date.now(),screen=true,built=null,drawnMinute=-1,fetching={},failed={};
   function note(text){document.getElementById('preview-note').textContent=text||'';}
+  // (Without a preview the bar stays, saying why.)
+  function blank(on){document.getElementById('preview').style.visibility=on?'hidden':'';document.getElementById('colours').hidden=on;document.getElementById('colours-now').hidden=on;}
   function bytesOf(b64){var bin=atob(b64),out=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
   function boot(){
     if(!PV||!window.WebAssembly||!window.DecompressionStream)return Promise.reject(new Error('This phone cannot show the preview.'));
     var gz=new Blob([bytesOf(PV.assets.gz)]).stream().pipeThrough(new DecompressionStream('gzip'));
     return new Response(gz).arrayBuffer().then(function(buf){
       var all=new Uint8Array(buf),wasm=null;
-      PV.assets.parts.forEach(function(p){if(p[0]<0)wasm=all.subarray(p[1],p[1]+p[2]);});
+      PV.assets.parts.forEach(function(p){
+        if(p[0]===-1)wasm=all.subarray(p[1],p[1]+p[2]);
+        // (The script that makes the chart inputs: it leaves GroundtrackInput.)
+        if(p[0]===-2)(0,eval)(new TextDecoder().decode(all.subarray(p[1],p[1]+p[2]))+'\n;window.GroundtrackInput=GroundtrackInput;');
+      });
       return WebAssembly.instantiate(wasm,{wasi_snapshot_preview1:{fd_close:function(){return 0;},fd_seek:function(){return 0;},fd_write:function(){return 0;}}}).then(function(r){
         core=r.instance.exports;
         PV.assets.parts.forEach(function(p){if(p[0]<0)return;var at=core.core_alloc(p[2]);new Uint8Array(core.memory.buffer,at,p[2]).set(all.subarray(p[1],p[1]+p[2]));core.core_source(p[0],at,p[2]);});
         framePtr=core.core_alloc(W*H);
+        // The orbits to hand: GPS's and QZSS's nominal ones, then what the
+        // phone has kept and what this page has found.
+        GT=window.GroundtrackInput;GT.registerNominal();
+        s.sats.forEach(function(e){try{GT.addSatellite(e);}catch(error){}});
+        [PV.tles||{},s.tles].forEach(function(sets){Object.keys(sets).forEach(function(n){try{GT.registerElements(sets[n],'celestrak');}catch(error){}});});
       });
     });
   }
-  // The hour's chart input with this page's settings in it (as the phone
-  // will send them: a setting the chart does not take is the watch's to
-  // ignore).
-  function inputFor(text){
-    var lines=text.split('\n');
-    function set(key,value){if(value==null||value<0)return;for(var i=0;i<lines.length;i++)if(lines[i].split(' ')[0]===key){lines[i]=key+' '+value;return;}lines.push(key+' '+value);}
-    set('plate',config.plates.map(function(p){return p[0];}).indexOf(s.plate));
-    set('flag',s.readout==='flag'?1:0);set('readout',s.readout==='flag'?1:s.readout==='callout'?2:0);
-    set('numerals',NUMERALS.indexOf(s.numerals));set('zonebody',s.margin==='body'?1:0);
-    set('tape',TAPES.indexOf(s.tape));set('transfer',TRANSFERS.indexOf(s.transfer));
-    set('figures',(config.figureSets||[]).map(function(f){return f[0];}).indexOf(s.figures));
-    set('corner',CORNERS.indexOf(s.corner));set('clock24',s.clock24?1:0);
-    set('also',(s.also.indexOf('sun')>=0?1:0)|(s.also.indexOf('moon')>=0?2:0));
-    if(picked('home')==='none')set('home',0);
-    return lines.join('\n');
+  // Home as the form has it (the preview follows it).
+  function homeNow(){
+    var mode=picked('home');
+    if(mode==='preset')return PV.preset;
+    if(mode!=='custom')return null;
+    var lat=parseFloat(form.elements.lat.value.replace(',','.')),lon=parseFloat(form.elements.lon.value.replace(',','.'));
+    return lat>=-90&&lat<=90&&lon>=-180&&lon<=180?{code:'HOM',name:'Home',lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100}:null;
+  }
+  function inputNow(){
+    var now=Date.now()+skew,minute=Number(GT.clockParts(now,PV.zone).m),start=Math.floor(now/60000)*60000-minute*60000;
+    return {minute:minute,text:GT.chartInput({body:s.body,start:start,plate:s.plate,readout:s.readout==='off'?false:s.readout,numerals:s.numerals,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,
+      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend})};
+  }
+  // A satellite's elements for the preview, asked of CelesTrak once.
+  function need(n){
+    if(failed[n]){note('No preview: CelesTrak has not given this satellite\'s orbit. The watch draws it once the phone has it.');return;}
+    note('Fetching its orbit from CelesTrak for the preview…');
+    if(fetching[n]||!window.fetch){if(!window.fetch)failed[n]=true;return;}
+    fetching[n]=true;
+    var stop=typeof AbortController==='function'?new AbortController():null,late=setTimeout(function(){if(stop)stop.abort();},20000);
+    fetch(config.elementsUrl+'?CATNR='+n+'&FORMAT=TLE',stop?{signal:stop.signal}:{})
+      .then(function(r){if(!r.ok)throw new Error('elements');return r.text();})
+      .then(function(text){var e=GT.registerElements(text,'celestrak');if(e.norad!==Number(n))throw new Error('elements');s.tles[n]=String(text).replace(/\r/g,'').slice(0,400);})
+      .catch(function(){failed[n]=true;})
+      .then(function(){clearTimeout(late);delete fetching[n];paint();});
+  }
+  function show_(){
+    var frame=new Uint8Array(core.memory.buffer,framePtr,W*H),canvas=document.getElementById('preview'),ctx=canvas.getContext('2d'),img=ctx.createImageData(W,H);
+    for(var i=0;i<W*H;i++){
+      var c=frame[i],r=((c>>4)&3)*85,g=((c>>2)&3)*85,b=(c&3)*85;
+      if(screen){var hx='#'+[r,g,b].map(function(v){return (v<16?'0':'')+v.toString(16).toUpperCase();}).join(''),m=PV.sunlight[hx];if(m){r=parseInt(m.slice(1,3),16);g=parseInt(m.slice(3,5),16);b=parseInt(m.slice(5,7),16);}}
+      img.data[4*i]=r;img.data[4*i+1]=g;img.data[4*i+2]=b;img.data[4*i+3]=255;
+    }
+    ctx.putImageData(img,0,0);
+    document.getElementById('colours-now').textContent=screen?'As the watch\'s screen shows it.':'In the colours as drawn.';
+    document.getElementById('colours').textContent=screen?'Show as drawn':'Show as on the watch';
   }
   function paint(){
-    if(!core)return;
-    // (Each face has its own input, and a day chart's hour another.)
-    var text=PV.texts[s.body+'@'+face()+(rules().span&&s.span==='hour'?'/hour':'')];
-    var box=document.querySelector('.preview');
-    if(!text){box.style.display='none';note('No preview of this satellite yet: the phone has not fetched its orbit. It will once you save.');return;}
-    box.style.display='';
-    var bytes=new TextEncoder().encode(inputFor(text)),at=core.core_alloc(bytes.length);
-    new Uint8Array(core.memory.buffer,at,bytes.length).set(bytes);
+    if(!core||!GT)return;
+    if(s.body.indexOf('sat:')===0&&!GT.elementsFor(s.body)){blank(true);window.previewDrawn=null;need(s.body.slice(4));return;}
+    var made;try{made=inputNow();}catch(error){blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
+    blank(false);
+    // (The hour is built again only when its input has changed.)
+    if(made.text!==built){
+      var bytes=new TextEncoder().encode(made.text),at=core.core_alloc(bytes.length);
+      new Uint8Array(core.memory.buffer,at,bytes.length).set(bytes);
+      var ok=core.core_build(at,bytes.length,0);core.core_free(at);
+      if(!ok){built=null;blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
+      built=made.text;
+    }
+    core.core_render(0,made.minute,framePtr);drawnMinute=made.minute;
+    show_();
     // (What was drawn, for tests to draw again.)
-    window.previewDrawn={input:new TextDecoder().decode(bytes),minute:PV.minute};
-    var ok=core.core_build(at,bytes.length,0);core.core_free(at);
-    if(!ok){note('No preview for this hour.');return;}
-    core.core_render(0,PV.minute,framePtr);
-    var frame=new Uint8Array(core.memory.buffer,framePtr,W*H);
-    [['preview',false],['preview-screen',true]].forEach(function(p){
-      var canvas=document.getElementById(p[0]),ctx=canvas.getContext('2d'),img=ctx.createImageData(W,H);
-      for(var i=0;i<W*H;i++){
-        var c=frame[i],r=((c>>4)&3)*85,g=((c>>2)&3)*85,b=(c&3)*85;
-        if(p[1]){var hx='#'+[r,g,b].map(function(v){return (v<16?'0':'')+v.toString(16).toUpperCase();}).join(''),m=PV.sunlight[hx];if(m){r=parseInt(m.slice(1,3),16);g=parseInt(m.slice(3,5),16);b=parseInt(m.slice(5,7),16);}}
-        img.data[4*i]=r;img.data[4*i+1]=g;img.data[4*i+2]=b;img.data[4*i+3]=255;
-      }
-      ctx.putImageData(img,0,0);
-    });
+    window.previewDrawn={input:made.text,minute:made.minute,screen:screen};
     note('');
   }
+  document.getElementById('colours').addEventListener('click',function(){screen=!screen;if(core&&drawnMinute>=0){show_();if(window.previewDrawn)window.previewDrawn.screen=screen;}});
+  // The minute moves on, and home with what is typed.
+  setInterval(function(){if(core&&GT&&Number(GT.clockParts(Date.now()+skew,PV.zone).m)!==drawnMinute)paint();},5000);
+  ['lat','lon'].forEach(function(k){form.elements[k].addEventListener('input',paint);});
   bodies();render();
   // (Whatever stops the preview, a throw included, stops only the preview:
   // Save and Cancel below are still wired.)
-  new Promise(function(done){done(boot());}).then(paint).catch(function(error){document.querySelector('.preview').style.display='none';console.log(error&&error.message);});
+  new Promise(function(done){done(boot());}).then(paint).catch(function(error){blank(true);note('This phone cannot show the preview.');console.log(error&&error.message);});
   form.addEventListener('change',paint);
   document.getElementById('cancel').addEventListener('click',function(){close('CANCELLED');});
   document.getElementById('save').addEventListener('click',function(){
@@ -562,9 +613,9 @@
     }
     var link=form.elements.calendar.value.trim();
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
-    // (The elements that came with the satellites added here go with them.)
-    var tles={};s.sats.forEach(function(e){if(s.tles[e.norad])tles[e.norad]=s.tles[e.norad];});if(s.tles[s.body.slice(4)])tles[s.body.slice(4)]=s.tles[s.body.slice(4)];
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,sats:s.sats,tles:tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    // (The elements this page fetched, with the satellites added here and
+    // for the previews, go with them: the phone need not ask again.)
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,hourFigures:s.hourFigures,legend:s.legend?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

@@ -22,6 +22,14 @@ d=dbm.dumb.open(sys.argv[1],'c')
 for k,v in zip(['body','plate','readout','numerals','margin','span','clock24','tape','transfer','figures','corner'],sys.argv[2:]):d[k.encode()]=v.encode()
 import os
 if os.environ.get('EVENTS_STORED'):d[b'events']=os.environ['EVENTS_STORED'].encode()
+# GT_FACE: Groundtrack's face (enroute, plotboard; default the body's own);
+# ALSO: the Sun and Moon marked beside the body (sun, moon or sun,moon);
+# SATS: the satellites added from CelesTrak, as the phone keeps them;
+# HOUR_FIGURES: 0 for the hour chart without its hour figures; LEGEND: 1
+# for a Fuller sheet's scale bar.
+for env,key in [('GT_FACE','face'),('ALSO','also'),('SATS','sats'),('HOUR_FIGURES','hourFigures'),('LEGEND','legend')]:
+    if key.encode() in d:del d[key.encode()]
+    if os.environ.get(env):d[key.encode()]=os.environ[env].encode()
 # ELEMENTS_URL: where the phone fetches element sets (a local server of the
 # test fixture, rather than CelesTrak).
 if os.environ.get('ELEMENTS_URL'):d[b'elementsUrl']=os.environ['ELEMENTS_URL'].encode()

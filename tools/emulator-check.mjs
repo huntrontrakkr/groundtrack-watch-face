@@ -6,7 +6,7 @@
 //
 //   node tools/emulator-check.mjs <out-dir> [body] [plate] [flag|noflag|callout] [zone]
 //
-// NUMERALS, MARGIN, SPAN, TAPE, TRANSFER, CLOCK24 and PROJECTION (chart,
+// NUMERALS, MARGIN, SPAN, TAPE, TRANSFER, CLOCK24, GT_FACE, ALSO, SATS and PROJECTION (chart,
 // fuller: Groundtrack Fuller) give the phone's other settings
 // (native/pkjs/main.js; defaults even, utc, day, fixed, 1), EVENTS_STORED its
 // events as it keeps them.
@@ -53,7 +53,10 @@ if(shot.width!==W||shot.height!==H)throw new Error(`Screenshot is ${shot.width}x
 const start=civilHour(at,zone),minute=Math.floor((at-start)/MINUTE);
 // The core, the watch's own code, draws the reference frame.
 const read=f=>new Uint8Array(readFileSync(f)),core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack')});
-const e=process.env,state={body,epoch:start+minute*MINUTE,plate,readout:flagArg==='noflag'?false:flagArg==='callout'?true:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',figures:e.FIGURES||'michroma',corner:e.CORNER||'day',projection:e.PROJECTION||'chart',events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null};
+const e=process.env,state={body,epoch:start+minute*MINUTE,plate,readout:flagArg==='noflag'?false:flagArg==='callout'?true:flagArg,numerals:e.NUMERALS||'even',zone:e.MARGIN||'utc',span:e.SPAN||'day',tape:e.TAPE||'fixed',transfer:e.TRANSFER||'off',figures:e.FIGURES||'michroma',corner:e.CORNER||'day',projection:e.PROJECTION||'chart',events:e.EVENTS_STORED?JSON.parse(e.EVENTS_STORED):[],clock24:e.CLOCK24!=='0',timeZone:zone,home:HOMES[zone]||null,
+  // (GT_FACE: Groundtrack's face; ALSO: the Sun and Moon marked beside; SATS: satellites added, as the phone keeps them.)
+  face:e.GT_FACE||undefined,also:e.ALSO?e.ALSO.split(','):[],bare:e.HOUR_FIGURES==='0',legend:e.LEGEND==='1'};
+if(e.SATS){const {addSatellite}=await import('../src/satellites.js');for(const x of JSON.parse(e.SATS))addSatellite(x);}
 // STATUS: the watch's own state shown in the corner (NO LINK, BAT 18).
 if(e.STATUS)core.status(e.STATUS);
 const ref=Buffer.from(new CoreRenderer(core).render(state).buf);
