@@ -33,6 +33,8 @@ jobs:
         run: npm run build:native
       - name: Check each app's size against its budget
         run: node tools/check-app-size.mjs
+      - name: Check that no function keeps much on the watch's 2 KB stack
+        run: node tools/check-stack.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: groundtrack-native

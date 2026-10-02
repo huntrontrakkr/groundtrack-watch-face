@@ -63,7 +63,7 @@ san-build_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.
 # over a stand-in SDK with a clock that is told the time), sanitized, for
 # each app: watch_sim-enroute, watch_sim-fuller. tests/watch.test.mjs plays
 # the phone to it.
-SIMFLAGS=$(SANFLAGS) -Wno-unused-function -Istub -I../src/c -DPBL_SDK_3 -Dmain=watch_main -Dtime=sim_time -Dmalloc=sim_malloc -Dfree=sim_free -Drealloc=sim_realloc
+SIMFLAGS=$(SANFLAGS) -Wno-unused-function -Istub -I../src/c -DPBL_SDK_3 -Dmain=watch_main -Dtime=sim_time -Dmalloc=sim_malloc -Dfree=sim_free -Drealloc=sim_realloc -DNO_STACK
 watch_sim-%: watch_sim.c heap_model.h ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c stub/pebble.h ../src/c/watch_data.h ../src/c/chart.h
 	$(CC) $(SIMFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ watch_sim.c ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c -lm
 

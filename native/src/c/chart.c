@@ -653,7 +653,7 @@ static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char
 // bearings worked out as they are drawn.
 #define TAKEN (FACE_CHART?64:32)
 #define BEARINGS (FACE_CHART?72:1)
-typedef struct {Px scratch[SCRATCH];Box taken[TAKEN];Px home_code[64];double sb[BEARINGS],cb[BEARINGS];uint8_t ring[2*120];} Draw;
+typedef struct {Px scratch[SCRATCH];Box taken[TAKEN];Px home_code[64];double sb[BEARINGS],cb[BEARINGS];uint8_t ring[2*120];Box labels[10];} Draw;
 // The drawing's lists: the track on the screen, the pixel lists and
 // placements, and room for the hour figures' digits, only those drawn
 // (FIGURE_ROOM, chart_data.h).
@@ -975,9 +975,12 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   if(in->plate<0||in->plate>=TABLE_PLATES||!read_plate(src,in->plate,&b->plate))FAIL;
   // The figure set's table, Jost's for an unknown set.
-  {const int set=in->figures>=0&&in->figures<FIGURE_SETS?in->figures:0;uint8_t t[6*50];
-  if(src->figures(src->figure_source,FIGURE_TABLE_AT(set),t,sizeof t)!=sizeof t)FAIL;
-  for(int k=0;k<50;k++){const uint8_t *e=t+6*k;b->glyphs[k]=(FigureGlyph){e[0],e[1],(uint32_t)e[2]|(uint32_t)e[3]<<8|(uint32_t)e[4]<<16|(uint32_t)e[5]<<24};}
+  {const int set=in->figures>=0&&in->figures<FIGURE_SETS?in->figures:0;uint8_t t[6*10];
+  // (Ten at a time: the stack is small.)
+  for(int k=0;k<50;k++){
+    if(k%10==0&&src->figures(src->figure_source,FIGURE_TABLE_AT(set)+6*k,t,sizeof t)!=sizeof t)FAIL;
+    const uint8_t *e=t+6*(k%10);b->glyphs[k]=(FigureGlyph){e[0],e[1],(uint32_t)e[2]|(uint32_t)e[3]<<8|(uint32_t)e[4]<<16|(uint32_t)e[5]<<24};
+  }
   s_glyphs=b->glyphs;}
   const Plate *pal=&b->plate;
   if(FACE_ROLL&&(!FACE_CHART||in->fuller)){if(!fuller_begin(b))FAIL;return b;}
@@ -1050,8 +1053,8 @@ fail:
   chart_abort(b);
   return NULL;
 }
-static bool finish_draw(ChartBuild *b);
-static bool finish_minutes(ChartBuild *b,int m0,int m1);
+static __attribute__((noinline)) bool finish_draw(ChartBuild *b);
+static __attribute__((noinline)) bool finish_minutes(ChartBuild *b,int m0,int m1);
 // Which tile each pixel of rows up to `to` lies on, found again (the ground
 // had no room to keep it), as the scene's row runs. False without memory.
 static bool fuller_tile_rows(ChartBuild *b,int to){
@@ -1095,8 +1098,9 @@ static void ground_again(ChartBuild *b){
 // The ground a slice of rows at a time, then the drawing, then the minutes
 // a few at a time.
 #define CHART_STEP_MINUTES 6
-int chart_step(ChartBuild *b){
-  if(b->ground){
+// (Each stage a function of its own, not folded into chart_step: the
+// watch's stack is 2 KB, and one stage's frame must not lie under another's.)
+static __attribute__((noinline)) int ground_slice(ChartBuild *b){
     const int r=FACE_ROLL&&(!FACE_CHART||b->fc)?fuller_ground_step(b,b->fine?1:FULLER_STEP_ROWS):ground_step(b->ground,b->tiles,CHART_STEP_ROWS);
     if((b->plate.flags&PLATE_SHADE)&&b->shade<SHADE_AGAIN&&(b->sink.failed||b->sink.n>SHADE_RUNS(b))){ground_again(b);return 1;}
     if(r<=0){
@@ -1107,7 +1111,9 @@ int chart_step(ChartBuild *b){
       }
     }
     return r<0?-1:1;
-  }
+}
+int chart_step(ChartBuild *b){
+  if(b->ground)return ground_slice(b);
   if(!b->out)return finish_draw(b)?1:-1;
   if(FACE_ROLL&&b->out->fuller&&b->tile_row<H)return fuller_tile_rows(b,b->tile_row+TILE_STEP_ROWS)?1:-1;
   if(b->minute<60){
@@ -1129,8 +1135,8 @@ static bool finish_draw(ChartBuild *b){
   const ChartInput *in=&b->in;const ChartSources *src=&b->src;
   const Plate *pal=&b->plate;
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
-  const int count=b->count,h0=b->h0,h1=b->h1;const Cam cam=b->cam;const bool world=FACE_WORLD&&(!FACE_HOUR||cam.world);
-  const int top=cam.top,bottom=cam.bottom;
+  const int count=b->count,h0=b->h0,h1=b->h1;const Cam *const cam=&b->cam;const bool world=FACE_WORLD&&(!FACE_HOUR||cam->world);
+  const int top=cam->top,bottom=cam->bottom;
   Draw *draw=NULL;Px *scratch=NULL;EnrScene *out=NULL;EnrPoint *points=NULL;int16_t zulu_x=0,zulu_baseline=0;
   int16_t tape_lo=0,tape_hi=0;
   // The drawing's lists, and the plane, nothing drawn. (The lists first:
@@ -1155,7 +1161,7 @@ static bool finish_draw(ChartBuild *b){
   }
   else{
   if(make_track(in,src,track)!=count)FAIL;
-  for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(&cam,lon);track[i].b=sy(&cam,lat);}
+  for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(cam,lon);track[i].b=sy(cam,lat);}
   }
   draw=(Draw *)(b->lists+track_bytes);
   // Past the drawing's lists, room for the figures' bitmaps.
@@ -1166,7 +1172,7 @@ static bool finish_draw(ChartBuild *b){
 
   // Graticule: crosses every 5 degrees (30 on the world band), ticks every
   // degree (10) along the edges of the map.
-  const bool day=FACE_HOUR&&cam.day;
+  const bool day=FACE_HOUR&cam->day;
   const int step=world?30:day?10:5,minor=world?10:day?5:1;
   if(rolled){
     // Rolling Fuller: the net's outline in ink, folds inside it dotted.
@@ -1186,17 +1192,17 @@ static bool finish_draw(ChartBuild *b){
       }
     }
   }else
-  {const double g0lat=glat(&cam,bottom),g0lon=glon(&cam,0),g1lat=glat(&cam,top),g1lon=glon(&cam,W);
+  {const double g0lat=glat(cam,bottom),g0lon=glon(cam,0),g1lat=glat(cam,top),g1lon=glon(cam,W);
   for(double lat=ceil(g0lat/step)*step;lat<=g1lat;lat+=step)for(double lon=ceil(g0lon/step)*step;lon<=g1lon;lon+=step){
-    const double x=js_round(sx(&cam,lon)),y=js_round(sy(&cam,lat));if(!(y>=top&&y<=bottom))continue;
+    const double x=js_round(sx(cam,lon)),y=js_round(sy(cam,lat));if(!(y>=top&&y<=bottom))continue;
     for(int d=-2;d<=2;d++){plot(&cv,x+d,y,L_GRID);plot(&cv,x,y+d,L_GRID);}
   }
   for(double lon=ceil(g0lon/minor)*minor;lon<=g1lon;lon+=minor){
-    const double x=js_round(sx(&cam,lon));const int len=f_fmod(lon,step)==0?4:2;
+    const double x=js_round(sx(cam,lon));const int len=f_fmod(lon,step)==0?4:2;
     for(int d=0;d<len;d++){plot(&cv,x,top+d,L_GRID);plot(&cv,x,bottom-d,L_GRID);}
   }
   for(double lat=ceil(g0lat/minor)*minor;lat<=g1lat;lat+=minor){
-    const double y=js_round(sy(&cam,lat));const int len=f_fmod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
+    const double y=js_round(sy(cam,lat));const int len=f_fmod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
     for(int d=0;d<len;d++){plot(&cv,d,y,L_GRID);plot(&cv,W-1-d,y,L_GRID);}
   }}
 
@@ -1209,7 +1215,7 @@ static bool finish_draw(ChartBuild *b){
   if(!world){taken[taken_n++]=(Box){0,H-16,W,16};if(in->home)taken[taken_n++]=(Box){0,0,W,14};}
   bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};uint16_t *const marks=notes->marks;int mark_n=0;Px *const home_code=draw->home_code;int home_code_n=0;
   if(in->home){
-    double qx,qy;project(&cam,in->home_lat,in->home_lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
+    double qx,qy;project(cam,in->home_lat,in->home_lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
     if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!(rolled&&fuller_locate(b->fc,x,y,NULL)<0)&&!overlaps(taken,taken_n,box)){
       home_code_n=text_pixels("HOM",right?x+7:x-7-w,y+4,home_code);taken[taken_n++]=box;home_mark=true;hx=x;hy=y;home_box=box;
@@ -1221,20 +1227,20 @@ static bool finish_draw(ChartBuild *b){
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
   int16_t (*const shown)[2]=notes->shown;uint8_t *const shown_table=notes->shown_table;int nshown=0;
-  const bool ringed=world||(rolled&&cam.wide);
+  const bool ringed=world||(rolled&cam->wide);
   if(ringed&&FACE_CHART)bearings(5,draw->sb,draw->cb);
   for(unsigned s=0;s<(day?0:TABLE_STATIONS);s++){
     // On a whole-orbit Fuller sheet, only the stations that hear the
     // satellite this hour.
-    if(rolled&&cam.wide&&!(b->heard>>s&1))continue;
+    if(rolled&cam->wide&&!(b->heard>>s&1))continue;
     Station st;{uint8_t t[20];if(src->tables(src->table_source,TABLE_STATION_AT(s),t,20)!=20)FAIL;memcpy(st.code,t,4);st.code[3]=0;memcpy(&st.lat,t+4,8);memcpy(&st.lon,t+12,8);}
-    double qx,qy;project(&cam,st.lat,st.lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
+    double qx,qy;project(cam,st.lat,st.lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
     const int w=text_width(st.code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
     if(overlaps(taken,taken_n,box))continue;
     if(taken_n<TAKEN)taken[taken_n++]=box;
     if(nshown<32){shown[nshown][0]=(int16_t)x;shown[nshown][1]=(int16_t)y;shown_table[nshown]=(uint8_t)s;nshown++;}
-    if(ringed){const int n=circle_pixels(&cam,st.lat,st.lon,acquisition,5,FACE_CHART?draw->sb:NULL,FACE_CHART?draw->cb:NULL,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
+    if(ringed){const int n=circle_pixels(cam,st.lat,st.lon,acquisition,5,FACE_CHART?draw->sb:NULL,FACE_CHART?draw->cb:NULL,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
     for(int dy=-2;dy<=2;dy++)for(int dx=-2;dx<=2;dx++){const int r=dx*dx+dy*dy;if(r<=5&&r>=3)plot(&cv,x+dx,y+dy,L_INK);}
     plot(&cv,x,y,L_INK);
     const int n=text_pixels(st.code,right?x+5:x-5-w,y+4,scratch);AVOID(bounds_of(scratch,n));letter(&cv,scratch,n,L_INK,1);
@@ -1262,7 +1268,7 @@ static bool finish_draw(ChartBuild *b){
   // and numbered every three, longest at the two midnights. Where the day's
   // track crosses itself two hours meet, and the later label gives way.
   if(day){
-    Box labels[10];int nlabels=0;
+    Box *const labels=draw->labels;int nlabels=0;
     for(int i=0;i<count;i+=12){
       const TrackPoint *a=&track[i>0?i-1:0],*q=&track[i<count-1?i+1:count-1],*p=&track[i];
       const double l0=f_sqrt((q->a-a->a)*(q->a-a->a)+(q->b-a->b)*(q->b-a->b)),len=l0?l0:1;
@@ -1286,7 +1292,7 @@ static bool finish_draw(ChartBuild *b){
     if(r64(since,60)||m<=0||m>=60||(world&&m%5))continue;
     const double len0=f_sqrt((track[i+1].a-track[i-1].a)*(track[i+1].a-track[i-1].a)+(track[i+1].b-track[i-1].b)*(track[i+1].b-track[i-1].b)),len=len0?len0:1;
     double nx=-(track[i+1].b-track[i-1].b)/len,ny=(track[i+1].a-track[i-1].a)/len;
-    if(cam.slow?nx*cam.nx+ny*cam.ny>0:ny<0){nx=-nx;ny=-ny;}
+    if(cam->slow?nx*cam->nx+ny*cam->ny>0:ny<0){nx=-nx;ny=-ny;}
     const int size=world?(m%15==0?4:2):m%15==0?6:m%5==0?4:2;
     for(int s=1;s<=size;s++)plot(&cv,track[i].a+nx*s,track[i].b+ny*s,L_ROUTE);
     if(!world&&m%15==0){
@@ -1306,7 +1312,7 @@ static bool finish_draw(ChartBuild *b){
   double north=0;
   if(rolled){
     double lat,lon,q0x,q0y,q1x,q1y;if(!body_position(src,in->body,in->start+T_OF(b,h0),&lat,&lon))FAIL;
-    project(&cam,lat,lon,&q0x,&q0y);project(&cam,lat+.5<89.9?lat+.5:89.9,lon,&q1x,&q1y);
+    project(cam,lat,lon,&q0x,&q0y);project(cam,lat+.5<89.9?lat+.5:89.9,lon,&q1x,&q1y);
     const double l=f_sqrt((q1x-q0x)*(q1x-q0x)+(q1y-q0y)*(q1y-q0y)),nl=l?l:1;north=f_atan2((q1x-q0x)/nl,-(q1y-q0y)/nl);
   }
   for(int a=0;a<720;a++){const double t=a*PI/360;plot(&cv,c0x+js_round(f_sin(t+north)*R),c0y-js_round(f_cos(t+north)*R),L_INK);}
@@ -1394,13 +1400,13 @@ static bool finish_draw(ChartBuild *b){
     const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
     Figures fig;if(!load_figures(src,size,hour,next,&fig,room,room_size))FAIL;
     int hx0=PLACE(c0x,hw),hy0=gy,nx0=PLACE(c1x,nw),ny0=gy;
-    if(FACE_CHART&&cam.slow){
+    if(FACE_CHART&cam->slow){
       // Each figure stands off its station on the route's open side.
       // Held on the face, a wide figure can come back over the rose (20 px
       // round the station): it then stands off along the route's open side
       // until it is clear.
-      #define STAND(cx,cy,w,ox,oy) do{double d=26+fabs(cam.nx)*(w)/2.0+fabs(cam.ny)*fh/2.0;\
-        for(int k_=0;k_<40;k_++,d+=2){int vx=(int)js_round((cx)+cam.nx*d-(w)/2.0),vy=(int)js_round((cy)+cam.ny*d-fh/2.0);vx=vx<W-4-(w)?vx:W-4-(w);ox=vx>4?vx:4;vy=vy<H-18-fh?vy:H-18-fh;oy=vy>4?vy:4;\
+      #define STAND(cx,cy,w,ox,oy) do{double d=26+fabs(cam->nx)*(w)/2.0+fabs(cam->ny)*fh/2.0;\
+        for(int k_=0;k_<40;k_++,d+=2){int vx=(int)js_round((cx)+cam->nx*d-(w)/2.0),vy=(int)js_round((cy)+cam->ny*d-fh/2.0);vx=vx<W-4-(w)?vx:W-4-(w);ox=vx>4?vx:4;vy=vy<H-18-fh?vy:H-18-fh;oy=vy>4?vy:4;\
           const int nx_=(cx)<ox?ox:(cx)>ox+(w)?ox+(w):(cx),ny_=(cy)<oy?oy:(cy)>oy+fh?oy+fh:(cy);\
           if((nx_-(cx))*(nx_-(cx))+(ny_-(cy))*(ny_-(cy))>=22*22)break;}}while(0)
       STAND(c0x,c0y,hw,hx0,hy0);STAND(c1x,c1y,nw,nx0,ny0);
@@ -1545,8 +1551,8 @@ static bool finish_draw(ChartBuild *b){
   for(int k=0;k<5;k++)out->tints[k]=k<pal->tint_count?pal->tints[k]:0;
   for(int k=0;k<2;k++)out->depths[k]=k<pal->depth_count?pal->depths[k]:0;
   if(!rolled){
-  for(int y=0;y<H;y++){const double lat=glat(&cam,y+.5)*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
-  for(int x=0;x<W;x++){const double lon=glon(&cam,x+.5)*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}
+  for(int y=0;y<H;y++){const double lat=glat(cam,y+.5)*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
+  for(int x=0;x<W;x++){const double lon=glon(cam,x+.5)*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}
   }else{
     // A Fuller sheet is lit from its faces' grids: their frames, each
     // tile's place, which tile each pixel lies on, the grid's directions.
@@ -1561,7 +1567,7 @@ static bool finish_draw(ChartBuild *b){
     else if(!(f->dirs=night_dirs(src,b->lists)))FAIL;
     out->heavy=heavy;
   }
-  out->c1x=(enr_real)c1x_;out->normal_x=cam.slow?(enr_real)cam.nx:0;out->normal_y=cam.slow?(enr_real)cam.ny:-1;
+  out->c1x=(enr_real)c1x_;out->normal_x=cam->slow?(enr_real)cam->nx:0;out->normal_y=cam->slow?(enr_real)cam->ny:-1;
   out->zulu_x=zulu_x;out->zulu_baseline=zulu_baseline;out->top_x=top_x;out->top_baseline=top_baseline;out->height_right=height_right;out->height_baseline=height_baseline;
   if(world&&!in->tape){out->tape_x0=TAPE_X0;out->tape_x1=TAPE_X1;out->tape_baseline=TAPE_BASELINE;out->tape_lo=tape_lo;out->tape_hi=tape_hi;}
   out->home_x=home_mark?(int16_t)hx:-1000;out->home_y=home_mark?(int16_t)hy:-1000;
@@ -1592,7 +1598,7 @@ static bool finish_draw(ChartBuild *b){
   out->mark_count=(uint8_t)mark_n;for(int k=0;k<mark_n;k++){out->marks[k][0]=(uint8_t)(marks[k]%W);out->marks[k][1]=(uint8_t)(marks[k]/W);}
   if(home_mark){out->home_box[0]=(int16_t)home_box.x;out->home_box[1]=(int16_t)home_box.y;out->home_box[2]=(int16_t)home_box.w;out->home_box[3]=(int16_t)home_box.h;}
   b->out=out;b->forward=forward;b->minute=0;
-  if((world||(rolled&&cam.wide&&!day))&&in->home){b->sb=alloc(2*120*sizeof(double));if(!b->sb)FAIL;b->cb=b->sb+120;bearings(3,b->sb,b->cb);}
+  if((world||(rolled&cam->wide&&!day))&&in->home){b->sb=alloc(2*120*sizeof(double));if(!b->sb)FAIL;b->cb=b->sb+120;bearings(3,b->sb,b->cb);}
    release(b->lists);b->lists=NULL;
    return true;
 fail:
@@ -1603,14 +1609,17 @@ fail:
 // Minutes m0 up to m1 of the scene; home's acquisition circles, minutes
 // that plot the same pixels sharing one.
 static bool finish_minutes(ChartBuild *b,int m0,int m1){
-  const ChartInput *in=&b->in;const ChartSources *src=&b->src;const Cam cam=b->cam;const bool world=FACE_WORLD&&(!FACE_HOUR||cam.world),forward=b->forward;
-  EnrScene *const out=b->out;uint8_t ring[2*120];
+  const ChartInput *in=&b->in;const ChartSources *src=&b->src;const Cam *const cam=&b->cam;const bool world=FACE_WORLD&&(!FACE_HOUR||cam->world),forward=b->forward;
+  // (The circle's pixels in the notes' room for home's mark, which the
+  // scene has by now.)
+  _Static_assert(sizeof(((Notes *)0)->marks)>=2*120,"the notes hold a circle's pixels");
+  EnrScene *const out=b->out;uint8_t *const ring=(uint8_t *)b->notes.marks;
   for(int m=m0;m<m1;m++){
     const int64_t t=in->start+m*60;EnrMinute *e=&out->minutes[m];
     double lat,lon,altitude;if(!body_position(src,0,t,&lat,&lon))FAIL;
     e->sun[0]=(enr_real)(f_cos(lat*RAD)*f_cos(lon*RAD));e->sun[1]=(enr_real)(f_cos(lat*RAD)*f_sin(lon*RAD));e->sun[2]=(enr_real)f_sin(lat*RAD);
     if(!body_place(src,in->body,t,&lat,&lon,&altitude))FAIL;
-    double mx,my;project(&cam,lat,lon,&mx,&my);e->mx=(enr_real)mx;e->my=(enr_real)my;
+    double mx,my;project(cam,lat,lon,&mx,&my);e->mx=(enr_real)mx;e->my=(enr_real)my;
     const Segment *seg=src->segment(src->segment_context,(int32_t)q64(t,86400));if(!seg)FAIL;
     bool waxing;double fraction;seg_moon_light(seg,t,&fraction,&waxing);e->moon_fraction=(enr_real)fraction;e->waxing=waxing;
     // The margin's time: Zulu, or the nautical zone's under the body (15
@@ -1642,8 +1651,8 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     else if(in->corner==2&&in->body==1){p=put_int(p,(int)js_round(fraction*100),1);memcpy(p,waxing?"% WAX":"% WAN",5);}
     else{memcpy(p,"DAY ",4);put_int(p+4,in->day_of_year,3);}}
     // A Fuller satellite sheet's home circle follows the satellite's height.
-    if(FACE_ROLL&&(!FACE_CHART||b->fc)&&cam.wide&&!cam.day&&in->home){
-      const int n=circle_pixels_on(&cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring,true);int k=0;
+    if(FACE_ROLL&&(!FACE_CHART||b->fc)&cam->wide&&!cam->day&&in->home){
+      const int n=circle_pixels_on(cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring,true);int k=0;
       for(;k<out->circle_count;k++)if(out->circle_n[k]==n&&!memcmp(out->circle_px[k],ring,2*n))break;
       if(k==out->circle_count){
         if(k>=60||!(out->circle_px[k]=src->alloc(n?2*n:1)))FAIL;
@@ -1654,7 +1663,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     if(world){
       if(!in->tape)e->index=(int16_t)js_round(forward?TAPE_X0+(double)(TAPE_X1-TAPE_X0)*m/60:TAPE_X1-(double)(TAPE_X1-TAPE_X0)*m/60);
       if(in->home){
-        const int n=circle_pixels(&cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring);int k=0;
+        const int n=circle_pixels(cam,in->home_lat,in->home_lon,reach(altitude,10),3,b->sb,b->cb,ring);int k=0;
         for(;k<out->circle_count;k++)if(out->circle_n[k]==n&&!memcmp(out->circle_px[k],ring,2*n))break;
         if(k==out->circle_count){
           if(k>=60||!(out->circle_px[k]=src->alloc(n?2*n:1)))FAIL;

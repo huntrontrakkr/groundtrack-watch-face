@@ -99,6 +99,31 @@ static void need_data(time_t now){
   if(missing>=0||more)request_data(now,missing);
   else{s_data_ok_until=n.start+3600;s_data_tries=0;}
 }
+// How deep the stack has been, in bytes. PebbleOS gives an app 2 KB of it
+// less a 32-byte guard (APP_STACK_NORMAL_SIZE in its app_manager.c), just
+// below the app itself, whose header leads it; and the system's own calls
+// run on it too. Past the guard a watch stops the app; the emulator does
+// not, so the app marks what it has not yet used as it starts, and the
+// build's log says how much of that has since been written over.
+#define STACK_BYTES (2048-32)
+#ifdef NO_STACK
+// (Off the watch, the simulator's stack is the host's.)
+static void stack_mark(void){}
+static unsigned stack_deepest(void){return 0;}
+#else
+extern const uint8_t __pbl_app_info[];
+#define STACK_MARK 0xA5
+// (The addresses as numbers: the stack is no part of the header's object.)
+static void stack_mark(void){
+  volatile uint8_t here=0;const uintptr_t top=(uintptr_t)__pbl_app_info;
+  for(uintptr_t a=top-STACK_BYTES;a<(uintptr_t)&here-96;a++)*(volatile uint8_t *)a=STACK_MARK;
+}
+static unsigned stack_deepest(void){
+  const uintptr_t top=(uintptr_t)__pbl_app_info;uintptr_t a=top-STACK_BYTES;
+  while(a<top&&*(volatile const uint8_t *)a==STACK_MARK)a++;
+  return (unsigned)(top-a);
+}
+#endif
 static uint32_t now_ms(void){time_t t;uint16_t ms;time_ms(&t,&ms);return (uint32_t)t*1000+ms;}
 static void build_step(void *data);
 static void build_abort(void){
@@ -130,7 +155,7 @@ static void build_step(void *data){
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
-  if(scene){s_now.scene=scene;s_chart_serial++;s_status[0]=0;s_status_phone=false;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: about %lu ms of work; heap free %u",(unsigned long)s_build_ms,(unsigned)heap_bytes_free());}
+  if(scene){s_now.scene=scene;s_chart_serial++;s_status[0]=0;s_status_phone=false;APP_LOG(APP_LOG_LEVEL_INFO,"Chart built: about %lu ms of work; heap free %u; stack %u of %u",(unsigned long)s_build_ms,(unsigned)heap_bytes_free(),stack_deepest(),(unsigned)STACK_BYTES);}
   else{s_status_phone=false;set_status("NO ROOM FOR THE CHART");APP_LOG(APP_LOG_LEVEL_ERROR,"Chart not finished: %s; heap free %u",chart_failure(),(unsigned)heap_bytes_free());}
   layer_mark_dirty(s_layer);
   // A build that ran over the hour's end made the last hour's chart.
@@ -174,6 +199,8 @@ static void update(Layer *layer,GContext *ctx){
 }
 
 static void tick(struct tm *when,TimeUnits changed){
+  // (The stack's deepest, logged when it has grown: a minute's drawing too.)
+  {static unsigned logged;const unsigned d=stack_deepest();if(d>logged){logged=d;APP_LOG(APP_LOG_LEVEL_INFO,"Stack %u of %u",d,(unsigned)STACK_BYTES);}}
   check(time(NULL));
   s_tick_redraw=true;
   layer_mark_dirty(s_layer);
@@ -196,6 +223,10 @@ static void data_arrived(bool changed){
   s_data_changed|=changed;
   if(s_data_timer)app_timer_reschedule(s_data_timer,1500);else s_data_timer=app_timer_register(1500,data_settled,NULL);
 }
+// A check a moment on, from the event loop: a message's handler is already
+// a quarter of the stack down, and a build starts deep.
+static void check_now(void *data){check(time(NULL));layer_mark_dirty(s_layer);}
+static void check_soon(void){app_timer_register(1,check_now,NULL);}
 static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24);}
 // Settings as the phone packs them: body, plate, flag, clock24, home, then
 // home's latitude and longitude in hundredths of a degree (i32 each), then
@@ -212,11 +243,11 @@ static void take_settings(const uint8_t *b,size_t n){
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
-  if(!memcmp(&s,&s_settings,sizeof s)){check(time(NULL));return;}
+  if(!memcmp(&s,&s_settings,sizeof s)){check_soon();return;}
   s_settings=s;settings_save(&s);
   // Drawn again in the new settings.
   build_abort();chart_free(&s_now);s_status[0]=0;s_status_phone=false;
-  check(time(NULL));layer_mark_dirty(s_layer);
+  check_soon();layer_mark_dirty(s_layer);
 }
 
 static void inbox(DictionaryIterator *in,void *context){
@@ -263,6 +294,7 @@ static void window_load(Window *window){
 static void window_unload(Window *window){layer_destroy(s_layer);}
 
 static void init(void){
+  stack_mark();
   // The chart lettering's glyphs, from font.bin, kept for the app's life
   // (in the heap, not the size-capped code).
   {uint8_t *font=malloc(ENR_FONT_BYTES);if(font){memset(font,0,ENR_FONT_BYTES);resource_load(resource_get_handle(RESOURCE_ID_FONT),font,ENR_FONT_BYTES);enr_font_load(font);}}

@@ -79,10 +79,15 @@ typedef struct {int16_t x,y;} Px;
 // and broken up): the masks only when drawing over the last minute, the
 // Fuller heights only for a Fuller sheet, the class cache if there is room.
 #define CACHE_ROWS 16
+#define DIGITS 128
 typedef struct {
   // The pixel list and the two nights, each its own piece (2.5 and 2.8
   // KB: after a Fuller build no free stretch may hold the whole).
+  // (Past the list's SCRATCH pixels, DIGITS more for the flag's minute; the
+  // minute's boxes and a turned row lie here too: the watch's stack is
+  // 2 KB, the system's own calls on it as well.)
   Px *scratch_px;uint8_t window[3][ENR_W];
+  int boxes[4*(3+16)];uint8_t turned[ENR_W];
   uint64_t *mask,*nmask;
   #define TILE_ROWS 4
   uint8_t tiles[TILE_ROWS][ENR_W];int tiles_y[TILE_ROWS],tiles_next;
@@ -95,7 +100,7 @@ typedef struct {
 } Work;
 static Work *work;
 #define scratch (work->scratch_px)
-static void night_ready(const EnrScene *s,Night *n,const EnrMinute *m){
+static __attribute__((noinline)) void night_ready(const EnrScene *s,Night *n,const EnrMinute *m){
   if(n->m==m)return;
   n->m=m;for(int k=0;k<NIGHT_ROWS;k++)n->held[k]=-100;
   if(ROLLED(s)){
@@ -412,7 +417,7 @@ static int neighbours_again(Ctx *c,uint8_t *const row[3],int x,int y,bool anchor
 // row's mask marks and, in the blocks nmask marks, only the pixels whose
 // night differs from the minute `from` drew (the frame holds that minute).
 // Returns the pixels drawn.
-static int draw_base(Ctx *c,const uint64_t *mask,const uint64_t *nmask,const Night *from){
+static __attribute__((noinline)) int draw_base(Ctx *c,const uint64_t *mask,const uint64_t *nmask,const Night *from){
   const EnrScene *s=c->s;
   const bool zones=s->flags&ENR_NIGHT_ZONES,terminator=s->flags&ENR_TERMINATOR;
   const bool anchored=zones&&(s->zoned[ENR_INK][0]!=s->zoned[ENR_INK][1]||s->zoned[ENR_INK][0]!=s->zoned[ENR_INK][2]);
@@ -622,7 +627,7 @@ static void draw_flag(Ctx *c){
   letter(c,px,n,ENR_ROUTE,1);
   // The minutes in a colour that stands off the pennant's ink, not the
   // ground showing through.
-  Px digits[128];const int k=text_pixels(m->minute,2,d>0?sx+4:sx-fw+2,top+10,digits);
+  Px *const digits=work->scratch_px+SCRATCH;const int k=text_pixels(m->minute,2,d>0?sx+4:sx-fw+2,top+10,digits);
   for(int i=0;i<k;i++){const int x=digits[i].x,y=digits[i].y;plot(c,x,y,on_ink(s,s->zoned[ENR_ROUTE][zone_at(c,x,y)]));}
 }
 
@@ -960,7 +965,8 @@ static int minute_boxes(Ctx *c,Box *out){
 // lettering and of the names before it.
 static void draw_events(Ctx *c){
   const EnrScene *s=c->s;if(!s->event_count)return;
-  Box boxes[3+16];int nb=minute_boxes(c,boxes);
+  _Static_assert(sizeof(Box)==4*sizeof(int),"a box is four ints");
+  Box *const boxes=(Box *)work->boxes;int nb=minute_boxes(c,boxes);
   for(int k=0;k<s->event_count;k++){
     if(!s->events[k].clear)continue;
     const int16_t *b=s->events[k].box;bool free=true;
@@ -987,7 +993,7 @@ enum {PART_ALL,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_Z
 static int slide_offset(const EnrScene *s,const EnrMinute *m){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?(((int)js_round(m->mx)-W/2)%W+W)%W:0;}
 static void slide_rows(uint8_t *frame,int stride,int off){
   if(!FACE_WORLD||!off)return;
-  uint8_t turned[W];
+  uint8_t *const turned=work->turned;
   for(int y=SLIDE_TOP;y<=SLIDE_BOTTOM;y++){
     uint8_t *row=frame+y*stride;
     memcpy(turned,row+off,W-off);memcpy(turned+W-off,row,off);memcpy(row,turned,W);
@@ -1035,7 +1041,7 @@ static void work_end(void);
 static bool work_begin(const EnrScene *s,bool masks){
   work=malloc(sizeof(Work));if(!work)return false;
   memset(work,0,sizeof *work);
-  work->scratch_px=malloc(sizeof(Px)*SCRATCH);work->night=malloc(sizeof(Night)*2);
+  work->scratch_px=malloc(sizeof(Px)*(SCRATCH+DIGITS));work->night=malloc(sizeof(Night)*2);
   if(!work->scratch_px||!work->night){work_end();return false;}
   memset(work->night,0,sizeof(Night)*2);for(int k=0;k<TILE_ROWS;k++)work->tiles_y[k]=-1;for(int k=0;k<CACHE_ROWS;k++)work->cache_y[k]=-1;memset(work->slot_of,255,sizeof work->slot_of);
   if(masks){work->mask=malloc(sizeof(uint64_t)*2*H);if(!work->mask){work_end();return false;}work->nmask=work->mask+H;}
@@ -1089,7 +1095,7 @@ void enr_ready(EnrScene *s){
   }
 }
 // The blocks where night can differ between two minutes.
-static void night_blocks(const Ctx *a,const Ctx *b,uint64_t *mask){
+static __attribute__((noinline)) void night_blocks(const Ctx *a,const Ctx *b,uint64_t *mask){
   const EnrScene *s=a->s;
   // Night never shows over space.
   for(int y=0;y<H;y++)if(s->ground_rows[y>>3]>>(y&7)&1)for(int k=0;k<BLOCKS;k++){
@@ -1103,19 +1109,24 @@ static void box_blocks(const int *box,uint64_t *mask){
   uint64_t bits=0;for(int b=x0>>2;b<=x1>>2;b++)bits|=(uint64_t)1<<b;
   for(int y=y0;y<=y1;y++)mask[y]|=bits;
 }
-static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);
+static void moved(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);
 int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
   if(!work_begin(scene,from>=0&&from<=59)){
     // Without room for the masks, the minute whole.
     if(!work_begin(scene,false))return -1;
     from=-1;
   }
-  const int drawn=update(scene,from,minute,frame,row_stride);
+  // (What changed is found first and its frame left, before the minute is
+  // drawn: the watch's stack is 2 KB.)
+  minute=minute<0?0:minute>59?59:minute;
+  const bool over=from>=0&&from<=59;
+  if(over)moved(scene,from,minute,frame,row_stride);
+  const int drawn=over?render(scene,minute,frame,row_stride,work->mask,work->nmask,&work->night[1]):render(scene,minute,frame,row_stride,NULL,NULL,NULL);
   work_end();return drawn;
 }
-static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
-  minute=minute<0?0:minute>59?59:minute;
-  if(from<0||from>59)return render(scene,minute,frame,row_stride,NULL,NULL,NULL);
+// The blocks to draw again over minute `from`: in work->mask those drawn
+// whole, in work->nmask those whose night is to be tested.
+static __attribute__((noinline)) void moved(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride){
   // The sliding band turned back to its own columns, as minute `from` was
   // drawn; render turns it on again.
   slide_rows(frame,row_stride,(W-slide_offset(scene,&scene->minutes[from]))%W);
@@ -1143,7 +1154,6 @@ static int update(const EnrScene *scene,int from,int minute,uint8_t *frame,int r
   }
   // Blocks drawn whole need no change test.
   for(int y=0;y<H;y++)nmask[y]&=~mask[y];
-  return render(scene,minute,frame,row_stride,mask,nmask,&work->night[1]);
 }
 
 void enr_free(EnrScene *s,void (*release)(void *)){
@@ -1183,7 +1193,7 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
 }
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]){
   out[0]=out[1]=out[2]=out[3]=0;
-  Work w;memset(&w,0,sizeof w);Px px[SCRATCH];w.scratch_px=px;work=&w;
+  Work w;memset(&w,0,sizeof w);Px px[SCRATCH+DIGITS];w.scratch_px=px;work=&w;
   const int k=text_pixels(text,n,x,baseline,scratch);int x0=W,y0=H,x1=-1,y1=-1;
   for(int i=0;i<k;i++){const Px p=scratch[i];x0=p.x<x0?p.x:x0;y0=p.y<y0?p.y:y0;x1=p.x>x1?p.x:x1;y1=p.y>y1?p.y:y1;}
   if(x1>=x0){out[0]=(int16_t)x0;out[1]=(int16_t)y0;out[2]=(int16_t)(x1-x0+1);out[3]=(int16_t)(y1-y0+1);}
