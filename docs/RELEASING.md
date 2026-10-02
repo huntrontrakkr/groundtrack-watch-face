@@ -17,10 +17,10 @@ The *Release watch app* workflow (`.github/workflows/release.yml`) runs the test
 
 ## The store listing
 
-There are no listings yet. To publish to the Pebble store:
+There are no listings yet. A listing is public from the moment it exists. To publish to the Pebble store, signed in with `pebble login` as the account that will own them:
 
-1. Create each face's listing in the Pebble developer dashboard, with the copy in [STORE-LISTING.md](STORE-LISTING.md) (Groundtrack) and [STORE-LISTING-FULLER.md](STORE-LISTING-FULLER.md).
+1. `python tools/release.py package` (or put a release's downloads in `release-artifacts/`), then `python tools/release.py create` makes each face's listing from the verified package: the copy in [STORE-LISTING.md](STORE-LISTING.md) (Groundtrack) and [STORE-LISTING-FULLER.md](STORE-LISTING-FULLER.md), the release notes, and the gallery in `docs/screenshots/store/<face>/` (drawn by the watch's own code: `node tools/render-store.mjs`). It goes through the Pebble tool's own publishing code, as `pebble publish` does, and prints each listing's id. Run with the Pebble tool's Python (`~/.local/share/uv/tools/pebble-tool/bin/python`).
 2. Set the repository variables `GROUNDTRACK_STORE_APP_ID` and `GROUNDTRACK_FULLER_STORE_APP_ID` to the listings' ids (a face without one isn't published).
-3. Set the repository secret `PEBBLE_FIREBASE_REFRESH_TOKEN` to a refresh token for the account that owns it.
+3. Set the repository secret `PEBBLE_FIREBASE_REFRESH_TOKEN` to a refresh token for the account that owns them, for releases from the workflow.
 
 `tools/release.py publish` then checks the account owns the listing, refuses to replace a newer version, uploads the package (with any gallery in `docs/screenshots/store/<face>/emery_*`), and verifies the public version, the download's checksum and the listing's text. A rerun verifies instead of uploading twice. Run by hand, it uses `pebble login`.

@@ -10,6 +10,8 @@ package  copies each face's .pbw to release-artifacts/, deflated, every member
          byte for byte, with SHA256SUMS and the release notes
 check    verifies the packaged .pbw: identity, version, platform, the limits
          the store and the watch hold it to
+create   makes a face's store listing from the verified package (once; it is
+         public from then on)
 publish  uploads it to the Pebble app store and verifies the public listing
 
 No credentials are written to the repo. Publishing needs each face's store
@@ -171,6 +173,47 @@ def public_app(face):
     return response.json()["data"][0]
 
 
+def create(version, face):
+    """Creates a face's store listing from the verified package, with the
+    listing's copy, the release notes and the face's gallery, through the
+    Pebble tool's own publishing code (as `pebble publish` creates one). A
+    listing is public as soon as it exists. Prints its id, which goes in the
+    repository variable named by face.store_env."""
+    import requests
+    from pebble_tool.commands.publish import PublishCommand
+    pbw = ROOT / "release-artifacts" / face.name
+    validate_pbw(pbw, version, face)
+    token = access_token()
+    r = requests.get(API + "/api/v1/developer/me", headers={"Authorization": "Bearer " + token}, timeout=30)
+    r.raise_for_status()
+    me = r.json()
+    existing = me.get("app_lookup", {}).get("by_app_uuid", {}).get(face.uuid)
+    if existing:
+        print(f"{face.title} already has a listing: {existing}")
+        return existing
+    gallery = sorted((ROOT / "docs/screenshots/store" / face.key).glob("emery_*"))
+    if not gallery:
+        raise RuntimeError(f"No gallery for {face.title} in docs/screenshots/store/{face.key} (node tools/render-store.mjs).")
+    details = {"name": face.title, "version": version, "description": description(face),
+               "source": "https://github.com/huntrontrakkr/groundtrack-watch-face", "category": "faces",
+               "icon_small_path": "", "icon_large_path": ""}
+    metadata = {"app_uuid": face.uuid, "version": version, "platforms": ["emery"], "app_name": face.title, "app_type": "watchface"}
+    payload = PublishCommand._create_app(API, token, str(pbw), metadata, details, notes_for(version).read_text().strip(), True,
+                                         [str(p) for p in gallery if p.suffix == ".gif"], [str(p) for p in gallery if p.suffix == ".png"])
+    app_id = PublishCommand._extract_app_id(payload)
+    if not app_id:
+        r = requests.get(API + "/api/v1/developer/me", headers={"Authorization": "Bearer " + token}, timeout=30)
+        r.raise_for_status()
+        app_id = r.json().get("app_lookup", {}).get("by_app_uuid", {}).get(face.uuid)
+    if not app_id:
+        raise RuntimeError(f"{face.title}'s listing was created but its id was not returned: see the developer dashboard.")
+    failed = (payload.get("screenshotResults") or {}).get("failed") or []
+    for item in failed:
+        print(f"  screenshot not taken: {item.get('filename')}: {item.get('error')}")
+    print(f"Created {face.title}'s listing: {app_id} (https://apps.repebble.com/{app_id}); set {face.store_env} to it.")
+    return app_id
+
+
 def publish(version, face):
     if not face.store_id:
         raise RuntimeError(f"No store listing for {face.title} yet: create it in the Pebble developer dashboard and set {face.store_env}.")
@@ -234,7 +277,7 @@ def publish(version, face):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["package", "check", "publish"])
+    parser.add_argument("command", choices=["package", "check", "create", "publish"])
     parser.add_argument("--tag")
     parser.add_argument("--face", choices=["all", *FACES], default="all")
     args = parser.parse_args()
@@ -244,6 +287,9 @@ def main():
         package(version, faces)
     elif args.command == "check":
         check(version, faces, args.tag)
+    elif args.command == "create":
+        for face in faces:
+            create(version, face)
     else:
         for face in faces:
             if face.store_id:
