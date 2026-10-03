@@ -139,6 +139,10 @@ typedef struct {
   // The hour figure as the time, its minutes beside it (the hour chart's
   // counter readout): 0 none, 1 in the 40 and 28 px figures, 2 in 72 and 40.
   bool wash;uint8_t counter;
+  // How the height (or light) bands are drawn: 0 flat; else a pattern of
+  // the band's ink over the land's (1 density dots, 2 hatching, 3 raster
+  // rows, 4 a mesh).
+  uint8_t pattern;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;
   // Pebble GColor8 values: 0b11rrggbb.

@@ -265,7 +265,16 @@ static uint8_t base_color(const EnrScene *s,int ground,int z){
 // with the height's tint (2x2, a plus, 3x3); water a single point; between
 // the dots, the plain ground.
 static const uint16_t LATTICE_DOT[4]={0x0660,0x0672,0x0777,0x0020};  // rows of the cell, 4 bits each: tint 0, 1, 2+, water
+// The band patterns, each band's lit pixels in a 4x4 cell (bit (y&3)*4+(x&3)):
+// density dots (ordered, sparse to solid); hatching, densest in deep
+// shadow (as with shaded relief, band 0) to none in full light; raster
+// rows, more of them as the band rises. (The mesh is a line every 8 px.)
+static const uint16_t PATTERN[3][5]={{0x0405,0x8525,0xA5A7,0xAFAF,0xFFFF},{0x96F9,0x9669,0x1248,0x0208,0x0000},{0x000F,0x0F0F,0x0F0F,0x0FFF,0xFFFF}};
 static uint8_t ground_color(const EnrScene *s,int ground,int z,int x,int y){
+  if(s->pattern&&ground>=G_TINT0&&ground<G_DEPTH0){
+    const int k=ground-G_TINT0;
+    return (s->pattern==4?(x&7)&&(y&7):PATTERN[s->pattern-1][k]>>((y&3)*4+(x&3))&1)?s->tints[k]:s->zoned[ENR_LAND][z];
+  }
   if(s->wash&&ground<2&&s->tints[ground]&&((x+y)&3)&&!z)return s->tints[ground];
   if(!s->lattice)return base_color(s,ground,z);
   if(ground==G_SPACE)return s->space;
@@ -1107,7 +1116,7 @@ void enr_ready(EnrScene *s){
   for(int cls=0;cls<256;cls++){
     const int g=cls&15,l=cls>>4;const uint8_t *z=NULL,*z2=NULL;
     if(l==L_CONTOUR)z=s->zoned[ENR_CONTOUR];else if(l==L_COAST)z=s->zoned[ENR_COAST];else if(l==L_SHELF)z=s->zoned[ENR_SHELF];
-    else if(l<=L_WATERLINE||l==L_CLEARED||l==L_EARLY_CLEARED||l==L_LATE_CLEARED){if(l!=L_WATERLINE)z=g==G_WATER?s->zoned[ENR_WATER]:g==G_LAND?s->zoned[ENR_LAND]:NULL;
+    else if(l<=L_WATERLINE||l==L_CLEARED||l==L_EARLY_CLEARED||l==L_LATE_CLEARED){if(l!=L_WATERLINE)z=g==G_WATER?s->zoned[ENR_WATER]:g==G_LAND||(s->pattern&&l<L_WATERLINE&&g>=G_TINT0&&g<G_DEPTH0)?s->zoned[ENR_LAND]:NULL;
       // On the lattice: the dots take the zoned colours; what is cleared is plain.
       if(s->lattice){if(l<=L_WATERLINE&&g!=G_SPACE)z=g==G_WATER||g>=G_DEPTH0?s->zoned[ENR_WATER]:s->zoned[ENR_LAND];else z=NULL;}
     }

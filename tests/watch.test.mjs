@@ -36,13 +36,13 @@ const TLE_FILE=process.env.WATCH_TLE||'tests/fixtures/celestrak-2026-09-29.tle';
 if(process.env.WATCH_TLE){const {registerElements}=await import('../src/satellites.js');const l=readFileSync(TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<l.length;i+=3)registerElements(l.slice(i,i+3).join('\n')+'\n','celestrak');}
 const sets=file=>Object.fromEntries(readFileSync(file,'utf8').trim().split('\n').reduce((sets,line,i)=>{if(i%3===0)sets.push([]);sets.at(-1).push(line);return sets;},[]).map(l=>[Number(l[1].slice(2,7)),l.join('\n')+'\n']));
 let TLES=sets(TLE_FILE);
-// The watch's heap: what its 128 KB leaves after the app (about 64.5 KB of
-// code and data on Groundtrack, 65.0 on Fuller) and the system's own share,
+// The watch's heap: what its 128 KB leaves after the app (about 65.0 KB of
+// code and data on Groundtrack, 65.2 on Fuller) and the system's own share,
 // as the emulator reports it free when a build starts, with the lettering's
 // glyphs; modelled as the watch's is (native/host/heap_model.h), a block
 // taking the first stretch that holds it, so a heap left in pieces by a
 // build fails here as it does there. The tests run in 2 KB less.
-const HEAPS={enroute:62250+1687-2000,fuller:61700+1687-2000};
+const HEAPS={enroute:62100+1687-2000,fuller:61550+1687-2000};
 // What the app holds for its life: the lettering's glyphs (1,679 bytes, in a
 // block of the heap's).
 const GLYPHS=1688;

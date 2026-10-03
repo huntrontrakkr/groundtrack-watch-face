@@ -182,14 +182,79 @@ export const PLATES={
     water:inks(['#555555','#555555','#000000']),land:inks(['#AAAA55','#555500','#555500']),coast:inks(['#000000','#000000','#AAAA55']),
     contour:inks(['#555500','#000000','#000000']),shelf:inks(['#000000','#000000','#555555']),grid:inks(['#000000','#000000','#555555']),
     route:inks(['#FF0000','#FF0000','#FF0000']),ink:inks(['#000000','#000000','#FFFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
-    space:hex('#000000'),spaceInk:hex('#FFFFFF')}
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')},
+  // From real navigation and observation displays, and one engraver's art.
+  // A pattern draws each height band (or light band, with shade) as a 4x4
+  // pattern of its ink over the land's: 'dots' by density, 'hatch' as line
+  // hatching, 'raster' as rows, 'mesh' as a grid.
+  // The ground-proximity terrain display of airliners (Honeywell EGPWS):
+  // terrain in dot densities of green, yellow and red on black, the route
+  // in the navigation display's magenta.
+  // (The lowlands black, as terrain far below the aircraft is.)
+  terrain:{name:'Terrain',note:'Ground-proximity display: green, yellow, red by dot density',night:'zones',terminator:hex('#555555'),pattern:'dots',
+    tints:[[300,hex('#000000')],[1000,hex('#00AA00')],[2000,hex('#FFFF00')],[3500,hex('#FFFF00')],[Infinity,hex('#FF0000')]],
+    water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#00AAAA','#00AAAA','#005555']),
+    contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#005555','#005555','#005555']),
+    route:inks(['#FF00FF','#FF00FF','#FF00FF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#55FFFF','#55FFFF','#55FFFF']),
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')},
+  // A thermal imager in white-hot polarity: the land the warm grey by day,
+  // darker on the cold heights; by night the sea, holding its heat, brighter
+  // than the land.
+  whitehot:{name:'White Hot',note:'Thermal imager: warm land by day, warmer sea by night',night:'zones',pattern:'dots',
+    tints:[[300,hex('#555555')],[1000,hex('#555555')],[2000,hex('#000000')],[3500,hex('#000000')],[Infinity,hex('#000000')]],
+    water:inks(['#555555','#555555','#AAAAAA']),land:inks(['#AAAAAA','#555555','#555555']),coast:inks(['#555555','#AAAAAA','#AAAAAA']),
+    contour:inks(['#555555','#555555','#000000']),shelf:inks(['#555555','#555555','#AAAAAA']),grid:inks(['#000000','#000000','#000000']),
+    route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')},
+  // The night-attack head-up displays of the F-15E and F-16 (LANTIRN):
+  // infrared video drawn as green raster, brighter and denser with height,
+  // and the symbology stroked over it.
+  raster:{name:'Raster',note:'Night-attack HUD: green raster video, stroked symbology',night:'zones',terminator:hex('#005500'),pattern:'raster',
+    tints:[[300,hex('#005500')],[1000,hex('#00AA00')],[2000,hex('#00AA00')],[3500,hex('#55FF55')],[Infinity,hex('#AAFFAA')]],
+    water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#00AA00','#00AA00','#005500']),
+    contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000000','#000000','#000000']),grid:inks(['#005500','#005500','#005500']),
+    route:inks(['#55FF55','#55FF55','#55FF55']),ink:inks(['#55FF55','#55FF55','#55FF55']),mark:inks(['#AAFFAA','#AAFFAA','#AAFFAA']),
+    space:hex('#000000'),spaceInk:hex('#55FF55')},
+  // The synthetic vision of business-jet cockpits: terrain in earth tones
+  // on a grid mesh, the sea blue, the flight path magenta, and the panel the
+  // sky.
+  synthetic:{name:'Synthetic Vision',note:'Cockpit synthetic vision: terrain on a mesh, sky above',night:'screen',pattern:'mesh',
+    tints:[[300,hex('#55AA55')],[1000,hex('#AAAA55')],[2000,hex('#AA5500')],[3500,hex('#AA5555')],[Infinity,hex('#FFFFFF')]],
+    water:inks(['#0055AA','#0055AA','#0055AA']),land:inks(['#555500','#555500','#555500']),coast:inks(['#55AAFF','#55AAFF','#55AAFF']),
+    contour:inks(['#555500','#555500','#555500']),shelf:inks(['#0055AA','#0055AA','#0055AA']),grid:inks(['#55AAFF','#55AAFF','#55AAFF']),
+    route:inks(['#FF00FF','#FF00FF','#FF00FF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    screen:hex('#000055'),space:hex('#0055AA'),spaceInk:hex('#FFFFFF')},
+  // A ship's electronic chart (IHO S-52): buff land, white deep water, the
+  // safety contour bold; and its own dusk and night colour tables, dimmed
+  // to keep the bridge's night vision.
+  bridge:{name:'Bridge',note:'Ship\'s electronic chart: its day, dusk and night tables',night:'zones',
+    water:inks(['#FFFFFF','#000055','#000000']),land:inks(['#AAAA55','#555500','#000000']),coast:inks(['#555555','#AAAAAA','#555555']),
+    contour:inks(['#AAAA55','#555500','#000000']),shelf:inks(['#0055AA','#0055AA','#000055']),grid:inks(['#AAAAAA','#555555','#000055']),
+    route:inks(['#FF5500','#FF5500','#AA5500']),ink:inks(['#000000','#AAAAAA','#555555']),mark:inks(['#AA0000','#FF5555','#AA0000']),
+    space:hex('#FFFFFF'),spaceInk:hex('#000000')},
+  // The painted globe of the Vostok and Soyuz navigation instrument (the
+  // Globus), turning under its crosshair: muted sea, sand land, a red
+  // track, and the panel its grey faceplate.
+  globus:{name:'Globus',note:'Soyuz navigation globe: a painted Earth, a grey faceplate',night:'screen',
+    water:inks(['#55AAAA','#55AAAA','#55AAAA']),land:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),coast:inks(['#555500','#555500','#555500']),
+    contour:inks(['#AAAA55','#AAAA55','#AAAA55']),shelf:inks(['#55AAAA','#55AAAA','#55AAAA']),grid:inks(['#555555','#555555','#555555']),
+    route:inks(['#AA0000','#AA0000','#AA0000']),ink:inks(['#000000','#000000','#000000']),mark:inks(['#000000','#000000','#000000']),
+    screen:hex('#005555'),space:hex('#555555'),spaceInk:hex('#FFFFFF')},
+  // A copperplate engraving: the relief hatched by light from the
+  // northwest, densest in shadow, the coasts waterlined, a red route.
+  engraved:{name:'Engraved',note:'Copperplate engraving: relief hatched by light, coasts waterlined',night:'screen',shade:true,pattern:'hatch',waterline:hex('#555555'),
+    tints:[[300,hex('#550000')],[500,hex('#AA5500')],[1000,hex('#AA5500')],[2000,hex('#AA5500')],[Infinity,hex('#AA5500')]],
+    water:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),land:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),coast:inks(['#000000','#000000','#000000']),
+    contour:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),shelf:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),grid:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),
+    route:inks(['#AA0000','#AA0000','#AA0000']),ink:inks(['#000000','#000000','#000000']),mark:inks(['#000000','#000000','#000000']),
+    screen:hex('#555555'),space:hex('#FFFFFF'),spaceInk:hex('#000000')}
 };
 // The order the plates are offered in, like with like: paper charts,
 // shaded relief, blue line drawings, tracking boards, mission control's
-// glass, single-ink displays, the Earth from space. (PLATES' own order is
+// glass and the cockpit's, single-ink displays, the Earth from space. (PLATES' own order is
 // their number on the watch, and only grows.)
-export const PLATE_ORDER=['enroute','sectional','hypsometric','survey','sunlight','airbrush','planetary','moonlit','blueprint','staratlas',
-  'trackingboard','rodgeryoung','console','operations','dotmatrix','crt','amber','red','vector','nightside','infrared','graphite','odyssey'];
+export const PLATE_ORDER=['enroute','sectional','hypsometric','survey','bridge','globus','sunlight','engraved','airbrush','planetary','moonlit','blueprint','staratlas',
+  'trackingboard','rodgeryoung','console','operations','dotmatrix','synthetic','terrain','crt','raster','amber','red','vector','nightside','infrared','whitehot','graphite','odyssey'];
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // Acquisition circle: ground range at which a 410 km orbit rises 5 degrees

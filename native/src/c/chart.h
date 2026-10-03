@@ -14,6 +14,8 @@
 // are the light classes); PLATE_LATTICE: the ground as a lattice of dots,
 // their size by height (the tints), drawn by the minute renderer.
 enum {PLATE_ZONES=1,PLATE_SCAN=2,PLATE_TERMINATOR=4,PLATE_NIGHT_DOTS=8,PLATE_MONO=16,PLATE_DOTS=32,PLATE_WATERLINE=64,PLATE_SHADE=128,PLATE_LATTICE=256,PLATE_HAL=512,PLATE_WASH=1024};
+// The band pattern (EnrScene's pattern), in flags' bits 11 to 13.
+#define PLATE_PATTERN(f) ((f)>>11&7)
 // PLATE_HAL: the Sun drawn as HAL 9000's eye (2001: A Space Odyssey).
 typedef struct {
   uint16_t flags;

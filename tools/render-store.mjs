@@ -25,10 +25,10 @@ const GALLERIES={
   enroute:[
     ['sun',{body:'sun',epoch:at('2026-09-30T17:24:00Z'),plate:'enroute',readout:'flag'}],
     ['iss',{body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'crt',readout:'flag'}],
-    ['moon',{body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'airbrush',readout:true,numerals:'colon'}],
+    ['moon',{body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'engraved',readout:true,numerals:'colon'}],
     ['qzss',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'staratlas',readout:'flag'}],
-    ['clock',{body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'odyssey',tape:'clock',readout:'flag'}],
-    ['survey',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'survey',readout:'counter',events:[ev('2026-09-28T15:40:00Z','Launch')]}],
+    ['clock',{body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'raster',tape:'clock',readout:'flag'}],
+    ['terrain',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'terrain',readout:'counter',events:[ev('2026-09-28T15:40:00Z','Launch')]}],
     ['nightside',{body:'sat:25544',epoch:at('2026-09-30T02:21:00Z'),plate:'nightside',readout:'flag'}],
     ['infrared',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'infrared',readout:'counter',numerals:'plain'}],
     ['rodgeryoung',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'rodgeryoung',face:'plotboard',tape:'route',readout:'off',also:['sun','moon']}]
@@ -37,7 +37,7 @@ const GALLERIES={
     ['operations',{body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',readout:'counter',numerals:'colon',corner:'light',legend:true,also:['moon']}],
     ['sun',{body:'sun',epoch:at('2026-09-30T17:24:00Z'),plate:'odyssey',readout:true}],
     ['moon',{body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'airbrush',readout:true,numerals:'colon'}],
-    ['trackingboard',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'trackingboard',readout:true}],
+    ['synthetic',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'synthetic',readout:true}],
     ['noaa',{body:'sat:43013',epoch:at('2026-09-30T17:42:00Z'),plate:'planetary',readout:'flag'}],
     ['moonlit',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'moonlit',readout:'counter',numerals:'even'}]
   ]
