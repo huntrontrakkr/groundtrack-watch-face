@@ -244,7 +244,7 @@ static void take_settings(const uint8_t *b,size_t n){
   if(n<25)return;
   WatchSettings s;memset(&s,0,sizeof s);
   s.version=11;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
-  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;s.also=n>27?b[27]:0;s.bare=n>28?b[28]:0;s.legend=n>29?b[29]:0;
+  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;s.also=n>27?b[27]:0;s.bare=n>28?b[28]:0;s.legend=n>29?b[29]:0;s.vibe=n>30?b[30]:0;
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
@@ -276,20 +276,26 @@ static void inbox(DictionaryIterator *in,void *context){
 }
 static void outbox_failed(DictionaryIterator *it,AppMessageResult reason,void *context){s_data_asked_at=0;if(s_data_tries)s_data_tries--;}
 
-// The watch's own state in the margins' corner: the phone out of reach,
-// then a low battery (at most 20%, not charging); the minute drawn whole
-// again when it changes.
+// The watch's own state: the battery and charging on the fuel line, the
+// phone out of reach there (dashed) and in the margins' corner (NO LINK);
+// the minute drawn whole again when it changes.
 static void show_state(void){
-  static char shown[8];char text[8]={0};
-  const BatteryChargeState b=battery_state_service_peek();const int c=b.charge_percent;
-  if(!connection_service_peek_pebble_app_connection())memcpy(text,"NO LINK",7);
-  else if(c<=20&&!b.is_charging){memcpy(text,"BAT ",4);text[4]=(char)('0'+c/10);text[5]=(char)('0'+c%10);}
-  if(!memcmp(text,shown,8))return;
-  memcpy(shown,text,8);enr_status(text);s_drawn_minute=-1;if(s_layer)layer_mark_dirty(s_layer);
+  static uint16_t shown=0xFFFF;
+  const BatteryChargeState b=battery_state_service_peek();
+  const bool linked=connection_service_peek_pebble_app_connection();
+  const int state=(b.is_charging?ENR_CHARGING:0)|(linked?0:ENR_NO_LINK);
+  const uint16_t now=(uint16_t)(b.charge_percent|state<<8);
+  if(now==shown)return;
+  shown=now;enr_status(linked?"":"NO LINK");enr_power(b.charge_percent,state);s_drawn_minute=-1;if(s_layer)layer_mark_dirty(s_layer);
 }
 static void battery_changed(BatteryChargeState state){show_state();}
 // (The phone back in reach is asked at the next tick for what is missing.)
-static void connection_changed(bool connected){show_state();if(connected){s_data_asked_at=0;s_data_tries=0;s_data_ok_until=0;}}
+// (Out of reach: a double pulse, if asked for and not in quiet time.)
+static void connection_changed(bool connected){
+  show_state();
+  if(connected){s_data_asked_at=0;s_data_tries=0;s_data_ok_until=0;}
+  else if(s_settings.vibe&&!quiet_time_is_active())vibes_double_pulse();
+}
 static void window_load(Window *window){
   Layer *root=window_get_root_layer(window);
   s_layer=layer_create(layer_get_bounds(root));

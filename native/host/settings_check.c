@@ -1,5 +1,6 @@
 // A watch upgrade must preserve every old preference and ignore the old
-// structure's padding, the record's spare byte.
+// structure's padding, now the vibration's byte: an old record comes up
+// with it off, and a new one keeps it.
 #include "../src/c/watch_data.h"
 #include <assert.h>
 #include <string.h>
@@ -15,14 +16,14 @@ int main(void){
   _Static_assert(sizeof(WatchSettings)==36,"the new switch fits the old settings record");
   WatchSettings old={.version=10,.body=BODY_SATELLITE,.plate=11,.readout=2,.clock24=0,.home=1,
     .lat100=4071,.lon100=-7401,.norad=25544,.station=1,.view=VIEW_WORLD,.code="ISS",
-    .numerals=ENR_ACCENT,.zone_body=1,.tape=2,.transfer=3,.figures=3,.corner=2,.also=3,.bare=1,.legend=1,.spare=0xa5};
+    .numerals=ENR_ACCENT,.zone_body=1,.tape=2,.transfer=3,.figures=3,.corner=2,.also=3,.bare=1,.legend=1,.vibe=0xa5};
   length=sizeof old;memcpy(kept,&old,length);
-  WatchSettings loaded;settings_load(&loaded);old.version=11;old.spare=0;
+  WatchSettings loaded;settings_load(&loaded);old.version=11;old.vibe=0;
   assert(!memcmp(&old,&loaded,sizeof old));
-  settings_save(&loaded);settings_load(&old);assert(!memcmp(&old,&loaded,sizeof old));
+  loaded.vibe=1;settings_save(&loaded);settings_load(&old);assert(!memcmp(&old,&loaded,sizeof old)&&old.vibe==1);
   for(int invalid=0;invalid<2;invalid++){
     length=invalid?sizeof kept:sizeof kept-1;memset(kept,0xff,sizeof kept);settings_load(&loaded);
-    assert(loaded.version==11&&loaded.spare==0&&loaded.figures==2);
+    assert(loaded.version==11&&loaded.vibe==0&&loaded.figures==2);
   }
   return 0;
 }

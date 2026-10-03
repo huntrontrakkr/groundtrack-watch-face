@@ -11,7 +11,7 @@ import {settingsFor} from '../src/settings-rules.js';
 import {viewOf,plotOf} from '../src/satellites.js';
 import {execFileSync} from 'node:child_process';
 
-test('an upgrade preserves settings and leaves the record\'s spare byte alone',()=>{
+test('an upgrade preserves settings, the vibration off for an older record',()=>{
   execFileSync('make',['-s','-C','native/host','settings_check'],{stdio:'pipe'});
   execFileSync('native/host/settings_check',[],{stdio:'pipe'});
 });

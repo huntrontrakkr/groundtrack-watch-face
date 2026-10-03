@@ -7,7 +7,7 @@ set -e
 cd "$(dirname "$0")/.."
 sdk="${WASI_SDK:-$(ls -d "$HOME"/.local/wasi/wasi-sdk-* 2>/dev/null | tail -1)}"
 [ -x "$sdk/bin/clang" ] || { echo "wasi-sdk not found: set WASI_SDK" >&2; exit 1; }
-exports="core_alloc core_free core_source core_build core_failure core_scene core_layout core_render core_render_update core_measure core_text_box core_text_width core_class core_zone core_status"
+exports="core_alloc core_free core_source core_build core_failure core_scene core_layout core_render core_render_update core_measure core_text_box core_text_width core_class core_zone core_status core_power"
 flags=""
 for e in $exports; do flags="$flags -Wl,--export=$e"; done
 "$sdk/bin/clang" --target=wasm32-wasi -std=gnu11 -Oz -ffp-contract=off -mexec-model=reactor \

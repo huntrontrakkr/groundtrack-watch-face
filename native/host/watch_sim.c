@@ -96,7 +96,7 @@ static void redraw(void){
 
 // ---- services
 static TickHandler s_tick;static AppFocusHandler s_focus;static BatteryStateHandler s_battery;static ConnectionHandlers s_connection;
-static BatteryChargeState s_charge={80,false,false};static bool s_linked=true;
+static BatteryChargeState s_charge={100,false,false};static bool s_linked=true;
 void tick_timer_service_subscribe(TimeUnits u,TickHandler h){s_tick=h;}
 void tick_timer_service_unsubscribe(void){s_tick=NULL;}
 void app_focus_service_subscribe(AppFocusHandler h){s_focus=h;}
@@ -105,6 +105,10 @@ BatteryChargeState battery_state_service_peek(void){return s_charge;}
 void battery_state_service_subscribe(BatteryStateHandler h){s_battery=h;}
 void battery_state_service_unsubscribe(void){s_battery=NULL;}
 bool connection_service_peek_pebble_app_connection(void){return s_linked;}
+// Vibrations made, and quiet time (the simulator's 'quiet' command).
+static int s_vibes;static bool s_quiet;
+void vibes_double_pulse(void){s_vibes++;}
+bool quiet_time_is_active(void){return s_quiet;}
 void connection_service_subscribe(ConnectionHandlers h){s_connection=h;}
 void connection_service_unsubscribe(void){}
 void app_log(uint8_t level,const char *file,int line,const char *fmt,...){}
@@ -145,7 +149,7 @@ static size_t unhex(const char *hex,uint8_t *out){size_t n=0;for(;hex[0]&&hex[1]
 static void state(void){
   redraw();
   uint32_t h=2166136261u;for(size_t i=0;i<sizeof s_frame.data;i++)h=(h^s_frame.data[i])*16777619u;
-  printf("{\"t\":%lld,\"note\":%s%s%s,\"chart\":%s,\"hash\":%u,\"heap\":%u,\"peak\":%u}\n.\n",(long long)(s_ms/1000),s_drawn==0?"\"":"",s_drawn==0?s_note:"null",s_drawn==0?"\"":"",s_drawn==1?"true":"false",(unsigned)h,(unsigned)hm_live,(unsigned)hm_peak);
+  printf("{\"t\":%lld,\"note\":%s%s%s,\"chart\":%s,\"hash\":%u,\"heap\":%u,\"peak\":%u,\"vibes\":%d}\n.\n",(long long)(s_ms/1000),s_drawn==0?"\"":"",s_drawn==0?s_note:"null",s_drawn==0?"\"":"",s_drawn==1?"true":"false",(unsigned)h,(unsigned)hm_live,(unsigned)hm_peak,s_vibes);
   fflush(stdout);
 }
 static void run_to(int64_t to){
@@ -182,6 +186,8 @@ void app_event_loop(void){
     }
     else if(!strncmp(line,"link ",5)){s_linked=atoi(line+5)!=0;if(s_connection.pebble_app_connection_handler)s_connection.pebble_app_connection_handler(s_linked);}
     else if(!strncmp(line,"battery ",8)){s_charge.charge_percent=(uint8_t)atoi(line+8);if(s_battery)s_battery(s_charge);}
+    else if(!strncmp(line,"charging ",9)){s_charge.is_charging=atoi(line+9)!=0;if(s_battery)s_battery(s_charge);}
+    else if(!strncmp(line,"quiet ",6))s_quiet=atoi(line+6)!=0;
     else if(!strncmp(line,"focus",5)){if(s_focus)s_focus(true);}
     else if(!strncmp(line,"frame ",6)){line[strcspn(line,"\n")]=0;redraw();FILE *f=fopen(line+6,"wb");fwrite(s_frame.data,1,sizeof s_frame.data,f);fclose(f);}
     else{fprintf(stderr,"no command: %s",line);exit(3);}

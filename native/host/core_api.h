@@ -38,6 +38,8 @@ void core_text_box(const char *text,int n,int x,int baseline,int16_t *out);
 int core_text_width(const char *text,int n);
 // The watch's state in the margins' corner (enr_status): "NO LINK", "BAT 18", or n 0 for none.
 void core_status(const char *text,int n);
+// The battery for the fuel line: percent, and ENR_CHARGING | ENR_NO_LINK.
+void core_power(int percent,int state);
 int core_class(int slot,int x,int y);
 int core_zone(int slot,int minute,int x,int y);
 int core_render_update(int slot,int from,int minute,uint8_t *frame);

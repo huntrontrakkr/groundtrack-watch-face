@@ -252,6 +252,9 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
 // text until cleared: "NO LINK", "BAT 18" (at most 7 characters; "" for
 // none).
 void enr_status(const char *text);
+// The battery for the fuel line along the top edge: its percent and state.
+enum {ENR_CHARGING=1,ENR_NO_LINK=2};
+void enr_power(int percent,int state);
 // Lettering's box, set at x on a baseline; its width.
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]);
 // A pixel's class (ground nibble, layer nibble; with the world sliding, the

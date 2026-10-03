@@ -89,6 +89,9 @@ export class Core{
   textBox(text,x,baseline){const bytes=new TextEncoder().encode(text),at=this.x.core_alloc(bytes.length),out=this.x.core_alloc(8);new Uint8Array(this.mem(),at,bytes.length).set(bytes);this.x.core_text_box(at,bytes.length,x,baseline,out);const b=new Int16Array(this.mem(),out,4),box=b[2]?{x:b[0],y:b[1],w:b[2],h:b[3]}:null;this.x.core_free(at);this.x.core_free(out);return box;}
   textWidth(text){const bytes=new TextEncoder().encode(text),at=this.x.core_alloc(bytes.length);new Uint8Array(this.mem(),at,bytes.length).set(bytes);const w=this.x.core_text_width(at,bytes.length);this.x.core_free(at);return w;}
   // The watch's own state in the margins' corner (NO LINK, BAT 18; '' for none).
+  // The battery for the fuel line along the top edge (as the watch tells the
+  // renderer): percent, charging, and whether the phone is in reach.
+  power(percent=100,{charging=false,linked=true}={}){this.x.core_power(percent,(charging?1:0)|(linked?0:2));}
   status(text){const bytes=new TextEncoder().encode(text||''),at=this.x.core_alloc(bytes.length||1);new Uint8Array(this.mem(),at,bytes.length).set(bytes);this.x.core_status(at,bytes.length);this.x.core_free(at);}
   classAt(slot,x,y){return this.x.core_class(slot,x,y);}
   zoneAt(slot,minute,x,y){return this.x.core_zone(slot,minute,x,y);}

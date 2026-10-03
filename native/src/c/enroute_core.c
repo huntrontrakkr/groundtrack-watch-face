@@ -625,6 +625,24 @@ static uint8_t on_ink(const EnrScene *s,uint8_t ink){
 // The watch's state for the margins' corner (enr_status).
 static char s_status[8];
 void enr_status(const char *text){int n=0;for(;text&&text[n]&&n<7;n++)s_status[n]=text[n];s_status[n]=0;}
+// The watch's battery (percent) and its state (ENR_CHARGING, ENR_NO_LINK).
+static uint8_t s_power[2]={100,0};
+void enr_power(int percent,int state){s_power[0]=(uint8_t)(percent<0?0:percent>100?100:percent);s_power[1]=(uint8_t)state;}
+// The fuel line: along the top edge a gauge of the battery, filled over
+// a dotted track in the route's ink (the mark's in reserve, at 20% and
+// under; the lettering's while charging), ticked at the quarters as a
+// fuel gauge is; broken
+// into dashes while the phone is out of reach, as a position is drawn
+// without a fix.
+static __attribute__((noinline)) void draw_fuel(Ctx *c){
+  const EnrScene *s=c->s;const int f=s_power[1],e=s_power[0]*W/100;
+  const uint8_t fill=s->zoned[f&ENR_CHARGING?ENR_INK:s_power[0]<=20?ENR_MARK:ENR_ROUTE][0];
+  for(int x=0;x<W;x++){
+    const bool on=x<e&&!((f&ENR_NO_LINK)&&x%6>3);
+    if(on||!(x&1))plot(c,x,0,on?fill:s->zoned[ENR_GRID][0]);
+    if(on||(x%(W/4)==0&&x))plot(c,x,1+!on,fill);
+  }
+}
 static void draw_flag(Ctx *c){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
   const int mx=js_round(m->mx),my=js_round(m->my);
@@ -1074,6 +1092,7 @@ static void draw_moving(Ctx *c,int part){
   // The minute flag over everything: it is the time.
   if(flag&&!part)draw_flag(c);
   if(!world&&s->counter&&(!part||part==PART_READOUT))draw_counter(c);
+  if(!part)draw_fuel(c);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint64_t *mask,const uint64_t *nmask,const Night *from){
   minute=minute<0?0:minute>59?59:minute;

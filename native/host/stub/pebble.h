@@ -104,6 +104,8 @@ void battery_state_service_unsubscribe(void);
 typedef void (*ConnectionHandler)(bool connected);
 typedef struct {ConnectionHandler pebble_app_connection_handler,pebkit_connection_handler;} ConnectionHandlers;
 bool connection_service_peek_pebble_app_connection(void);
+void vibes_double_pulse(void);
+bool quiet_time_is_active(void);
 void connection_service_subscribe(ConnectionHandlers handlers);
 void connection_service_unsubscribe(void);
 void app_focus_service_unsubscribe(void);

@@ -63,7 +63,7 @@ function randomCase(){
 
 const face=c=>c.projection==='fuller'?'fuller':'enroute';
 // The watch's heap: what 128 KB leaves after each app and the system's share.
-const HEAPS={enroute:62100,fuller:61550};
+const HEAPS={enroute:61900,fuller:61390};
 // What a finished chart may keep: the heap less what drawing a minute
 // whole takes (about 11 KB, and 12 KB on a Fuller sheet; drawn over the
 // last, 3.6 KB more) and some to spare.

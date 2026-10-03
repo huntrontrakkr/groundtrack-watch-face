@@ -42,7 +42,7 @@ let TLES=sets(TLE_FILE);
 // glyphs; modelled as the watch's is (native/host/heap_model.h), a block
 // taking the first stretch that holds it, so a heap left in pieces by a
 // build fails here as it does there. The tests run in 2 KB less.
-const HEAPS={enroute:62100+1687-2000,fuller:61550+1687-2000};
+const HEAPS={enroute:61900+1687-2000,fuller:61390+1687-2000};
 // What the app holds for its life: the lettering's glyphs (1,679 bytes, in a
 // block of the heap's).
 const GLYPHS=1688;
@@ -66,6 +66,11 @@ class Watch{
     this.requests.push(...b.requests);this.state=b.state;return b;
   }
   async close(){this.p.stdin.end();await this.done;assert.equal(this.status,0,this.err.slice(0,3000));assert.equal(this.err,'');return this.lines.find(l=>'held' in l).held;}
+}
+// The frame the core draws, with the watch's battery and link as given.
+async function expectedWith(face,c,t,{percent=100,charging=false,linked=true}={}){
+  const r=await renderer();r.core.power(percent,{charging,linked});r.core.status(linked?'':'NO LINK');
+  try{return await expected(face,c,t);}finally{r.core.power(100);r.core.status('');}
 }
 // The phone: the bundle, its clock the watch's, its messages kept in order.
 function phone(face,stored){
@@ -101,7 +106,7 @@ async function answer(w,ph,rounds=4){
 // A phone's storage for a case: its settings, home, events and (kept as
 // fetched an hour before) the fixture's elements.
 function storage(c,t){
-  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',
+  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',vibe:c.vibe?'1':'0',
     home:c.home?JSON.stringify({lat:c.home.lat,lon:c.home.lon}):JSON.stringify({none:true}),events:JSON.stringify((c.events||[]).map(([minutes,title])=>({epoch:t+minutes*60000,title,label:nameCode(title)})))};
   // (Events come from a calendar's link: read a moment ago, as the phone keeps it.)
   if((c.events||[]).length){s.calendar='https://calendar.example/private/basic.ics';s['calendar-fetched']=String(t);}
@@ -258,8 +263,8 @@ test('a phone with nothing to give is asked less and less, and its word stands',
   const {w:v,ph:p2}=await fresh('enroute',{body:'sun',zone:'UTC'},t);
   const linked=v.state.hash;
   await v.cmd('link 0');assert.notEqual(v.state.hash,linked,'NO LINK in the corner');
-  await v.cmd('battery 15');await v.cmd('link 1');const low=v.state.hash;assert.notEqual(low,linked,'BAT 15 in the corner');
-  await v.cmd('battery 80');assert.equal(v.state.hash,linked);
+  await v.cmd('battery 15');await v.cmd('link 1');const low=v.state.hash;assert.notEqual(low,linked,'the fuel line low');
+  await v.cmd('battery 100');assert.equal(v.state.hash,linked);
   await v.close();void p2;
 });
 
@@ -313,4 +318,24 @@ test('the whole catalog draws: every satellite listed, on each face that can sho
       await w.close();
     }
   }
+});
+
+test('the fuel line shows the battery and the link on every face, and the watch can vibrate when the phone goes',{skip:!cc&&'no C compiler',timeout:900000},async()=>{
+  const t=Date.parse('2026-09-30T13:07:00Z');
+  for(const [face,c] of [['enroute',{body:'sun',zone:'UTC',plate:'enroute'}],['enroute',{body:'sat:25544',zone:'UTC',plate:'console',tape:'slide'}],['fuller',{body:'sat:25544',zone:'UTC',plate:'survey'}]]){
+    const {w}=await fresh(face,{...c,vibe:true},t),file=join(dir,'frame.bin');
+    // Each state drawn as the core draws it: full, low, charging, out of reach.
+    for(const [cmds,state] of [[[],{}],[['battery 15'],{percent:15}],[['charging 1'],{percent:15,charging:true}],[['charging 0','battery 60','link 0'],{percent:60,linked:false}],[['link 1','battery 100'],{}]]){
+      for(const cmd of cmds)await w.cmd(cmd);
+      await w.cmd(`frame ${file}`);
+      const got=readFileSync(file),want=await expectedWith(face,c,w.state.t*1000,state);let differ=0;for(let i=0;i<got.length;i++)if(got[i]!==want[i])differ++;
+      assert.equal(differ,0,`${face} ${c.plate} ${JSON.stringify(state)}: ${differ} pixels differ from the core`);
+    }
+    // One double pulse for the link dropped, none in quiet time.
+    assert.equal(w.state.vibes,1);
+    await w.cmd('quiet 1');await w.cmd('link 0');await w.cmd('link 1');assert.equal(w.state.vibes,1);
+    await w.close();
+  }
+  // Not asked for: no vibration.
+  const {w}=await fresh('enroute',{body:'sun',zone:'UTC'},t);await w.cmd('link 0');assert.equal(w.state.vibes,0);await w.close();
 });

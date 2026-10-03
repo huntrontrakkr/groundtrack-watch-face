@@ -88,7 +88,7 @@ test('every hour builds within the watch\'s memory',{skip:!cc&&'no C compiler'},
 // what its 128 KB leaves after the app itself and the system's share. What
 // the finished chart keeps leaves room to draw a minute whole (about 11 KB,
 // and 12 KB on a Fuller sheet; drawn over the last, 3.6 KB more).
-const HEAPS={enroute:62100,fuller:61550},KEPT={enroute:47000,fuller:47000};
+const HEAPS={enroute:61900,fuller:61390},KEPT={enroute:47000,fuller:47000};
 test('each face builds its hours in less than the watch\'s heap, modelled as the watch\'s is',{skip:!cc&&'no C compiler'},()=>{
   const day=Date.parse('2026-09-30T00:00:00Z'),at=h=>new Date(day+h*3600e3).toISOString();
   const cases={

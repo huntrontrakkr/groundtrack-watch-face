@@ -250,6 +250,8 @@ try{
   await page.check('input[name=hourFigures][value="1"]');
   await page.check('input[name=readout][value=callout]');await page.check('input[name=hourFigures][value="0"]');await page.check('input[name=numerals][value=accent]');await page.check('input[name=figures][value=orbitron]');await page.check('input[name=corner][value=point]');
   await page.check('input[name=margin][value=body]');await page.uncheck('input[name=clock24]');
+  // Vibrate when the phone goes out of reach (off until asked for).
+  assert.ok(!await page.locator('input[name=vibe]').isChecked());await page.check('input[name=vibe]');
   // The calendar is off until it has a link; something that is no link is
   // refused.
   assert.equal(await page.inputValue('input[name=calendar]'),'');
@@ -295,7 +297,8 @@ try{
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0]));
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1]));
+  assert.equal(stored.vibe,'1');
   assert.equal(stored.hourFigures,'0');
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
   // The calendar's link is read at once (as https), and its timed event,

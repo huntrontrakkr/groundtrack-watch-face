@@ -98,6 +98,7 @@ int core_layout(int32_t *out,int max){
 }
 void core_measure(int slot,int minute,int part,int16_t *out){const EnrScene *s=core_scene(slot);if(s)enr_measure(s,minute,part,out);else out[0]=out[1]=out[2]=out[3]=0;}
 void core_text_box(const char *text,int n,int x,int baseline,int16_t *out){enr_text_box(text,n,x,baseline,out);}
+void core_power(int percent,int state){enr_power(percent,state);}
 void core_status(const char *text,int n){char t[8];int k=0;for(;k<n&&k<7;k++)t[k]=text[k];t[k]=0;enr_status(t);}
 int core_text_width(const char *text,int n){return enr_text_width(text,n);}
 int core_class(int slot,int x,int y){const EnrScene *s=core_scene(slot);return s?enr_class(s,x,y):-1;}

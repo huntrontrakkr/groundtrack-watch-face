@@ -29,7 +29,7 @@ void settings_load(WatchSettings *s){
   const WatchSettings defaults={11,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0};
 #endif
   const int n=persist_read_data(SETTINGS_KEY,s,sizeof *s);
-  if(n==(int)sizeof *s&&s->version==10){s->version=11;s->spare=0;}
+  if(n==(int)sizeof *s&&s->version==10){s->version=11;s->vibe=0;}
   else if(n!=(int)sizeof *s||s->version!=11)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
