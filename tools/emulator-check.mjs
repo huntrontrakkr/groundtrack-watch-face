@@ -11,7 +11,7 @@
 // (native/pkjs/main.js; defaults even, utc, day, fixed, 1), EVENTS_STORED its
 // events as it keeps them.
 //
-// The settings must be the phone's (native/pkjs/main.js: sun, enroute and
+// The settings must be the phone's (native/pkjs/main.js: sun, console and
 // the flag by default, in the phone's own time zone); home is the zone's
 // preset. The emulator must be running the app with its scene received.
 // PEBBLE names the pebble command (default: tools/emulator.sh). TLE_FILE
@@ -33,7 +33,7 @@ import {registerNominal} from '../src/nominal.js';
 if(process.env.NOMINAL)registerNominal();
 if(process.env.TLE_FILE){const lines=readFileSync(process.env.TLE_FILE,'utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','celestrak');}
 
-const [outArg='test-results/emulator',body='sun',plate='enroute',flagArg='flag',zone=Intl.DateTimeFormat().resolvedOptions().timeZone]=process.argv.slice(2);
+const [outArg='test-results/emulator',body='sun',plate='console',flagArg='flag',zone=Intl.DateTimeFormat().resolvedOptions().timeZone]=process.argv.slice(2);
 const out=resolve(outArg);mkdirSync(out,{recursive:true});
 const pebble=process.env.PEBBLE||fileURLToPath(new URL('emulator.sh',import.meta.url)),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const shotFile=join(out,`${body.replace(/\W/g,'-')}-${plate}-watch.png`);
