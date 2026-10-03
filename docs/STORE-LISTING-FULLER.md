@@ -13,10 +13,14 @@ Every release publishes to both store listings and verifies the public download 
 
 ## Description
 
-The Earth unfolded as Buckminster Fuller unfolded it, rolled along the route. The icosahedron rolls across the watch face face by face under the Sun, the Moon or any satellite (68 are listed, from the Space Station and Starlink to GPS and the weather satellites, and any other can be found at CelesTrak), printing each face as it touches down, so the route never meets a cut: a satellite's hour unrolls into a band of faces, the Sun's and the Moon's day into a strip across the whole net.
+Groundtrack Fuller draws where the Sun, the Moon or a satellite is over the Earth, and where it goes next, on Buckminster Fuller's unfolded globe with the time set along the route.
 
-The hour is set along the route as on an aeronautical chart: a compass rose turned to true north, the next hour's reporting point, minute graduations and the hour's figures. The tracking stations that can hear the satellite this hour are marked with their circles, and home has its own.
+One face. The icosahedron rolls across the screen under the route, printing each face as it touches down, so the route never meets a cut: a satellite's hour unrolls into a band of faces, the Sun's or Moon's day into a strip across the net. The hour is set as on an aeronautical chart: a compass rose, the next hour's reporting point and a mark for each minute. Tracking stations in reach are ringed, and so is home.
 
-Contour relief, the continental shelf and the coastline come from public-domain elevation data, pre-projected onto every face of the icosahedron and stored on the watch, and the calculated Sun brings the night across the net. Thirty-two plates: paper and ships' charts, a medieval portolan, airbrushed and engraved relief, star atlases, mission-control glass, cockpit terrain, synthetic-vision and HUD displays, a 1930s night airmail, and the Earth from orbit at night or in infrared. The hour figure can carry the minutes; satellites can show estimated sunlight or Earth shadow. Events mark the route.
+Follow one of 68 satellites, from space stations and Starlink to GPS and weather, or find any other at CelesTrak. The Sun and Moon can be marked beside it.
 
-Orbits come from CelesTrak through the phone, a few days ahead, so the face keeps going without it. Requires Pebble Time 2. Not for navigation. Source code is on GitHub.
+Relief, the continental shelf and coastlines come from public-domain elevation data on the watch; the calculated Sun brings night across the net. Thirty-two plates, from paper charts and a portolan to mission-control glass, cockpit HUDs and the Earth at night. A fuel line along the top edge shows battery and phone link; the watch can buzz when the link drops.
+
+Its companion, Groundtrack, draws the same routes on a flat map, as two faces: Enroute, an hour chart, and the Plotboard, mission control's world band. The two share their satellites, plates and options but are separate watchfaces with their own settings, and can be installed side by side.
+
+The phone sends the Sun and Moon weeks ahead and orbits from CelesTrak days ahead, so the face runs without it. Requires Pebble Time 2. Not for navigation. Source code is on GitHub.

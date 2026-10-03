@@ -13,20 +13,14 @@ Every release publishes to both store listings and verifies the public download 
 
 ## Description
 
-Two faces in one, for the Sun, the Moon and any satellite.
+Groundtrack draws where the Sun, the Moon or a satellite is over the Earth, and where it goes next, on a flat chart with the time set along the route.
 
-Enroute is an hour chart: the ground track between this hour's compass rose and the next reporting point, marked each minute. For the Sun, Moon and slower, higher satellites.
+Two faces in one. Enroute is an hour chart: the ground track from this hour's compass rose to the next reporting point, marked each minute, for the Sun, the Moon and the slower, higher satellites. The Plotboard is mission control's wall: a world band with tracking stations and the time on a ruler, sliding tape or clock, showing a fast satellite's hour or a slow one's whole day.
 
-The Plotboard is mission control's wall: a world band with tracking stations, time on a ruler, sliding tape or clock. It shows a fast satellite's hour or a slow one's whole day.
+Follow one of 68 satellites, from space stations and Starlink to GPS and weather, or find any other at CelesTrak. The Sun and Moon can be marked beside it.
 
-Follow one of 68 satellites (space stations, Starlink, navigation, weather, Earth observation, telescopes) or find any other at CelesTrak by name or number. The Sun and Moon can be marked beside it.
+Relief, the continental shelf and coastlines come from public-domain elevation data on the watch; the calculated Sun brings night across the map. A home station gives sunrise and sunset or the satellite's next pass. Thirty-two plates, from paper charts and a portolan to mission-control glass, cockpit HUDs and the Earth at night. A fuel line along the top edge shows battery and phone link; the watch can buzz when the link drops.
 
-Contour relief, the continental shelf and coastlines come from public-domain elevation data stored on the watch. The calculated Sun brings night across the map.
+Its companion, Groundtrack Fuller, draws the same routes on Buckminster Fuller's unfolded globe, rolled along the track so the route never meets a cut. The two share their satellites, plates and options but are separate watchfaces with their own settings, and can be installed side by side.
 
-A home station gives the day's sunrise and sunset, or the satellite's next pass overhead. The margins carry the local date, Zulu time and the day of the year.
-
-Thirty-two plates: paper and ships' charts, a portolan, airbrushed and engraved relief, star atlases, mission-control glass, cockpit terrain, synthetic vision and HUDs, a 1930s night airmail, and the Earth from orbit at night or in infrared. Four sets of figures. The hour figure can carry the minutes; satellites can show sunlight or Earth shadow.
-
-The watch builds its charts and repaints what moves each minute. The phone sends the Sun and Moon weeks ahead and satellite orbits days ahead, so it keeps going without the phone.
-
-Requires Pebble Time 2. Satellite orbits come from CelesTrak through the phone. Not for navigation. Source code is on GitHub.
+The phone sends the Sun and Moon weeks ahead and orbits from CelesTrak days ahead, so the face runs without it. Requires Pebble Time 2. Not for navigation. Source code is on GitHub.
