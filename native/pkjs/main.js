@@ -118,6 +118,9 @@ function pump(){
 var FIGURES=FIGURE_SETS.map(function(f){return f[0];});
 // The margins' corner: the day of the year (the world band: the height), the
 // body's ground point, the Moon's light.
+// The plate a new watch starts on: Console, mission control's lit lines on
+// dark glass.
+var DEFAULT_PLATE='console';
 var CORNERS=['day','point','light'];
 var READOUTS=['off','flag','callout','counter'],NUMERALS=['colon','plain','even','mono','accent'],TAPES=['fixed','tape','slide','clock','route'],TRANSFERS=['off','vernier','comb','chevrons'];
 function readout(){var r=setting('readout',null);return READOUTS.indexOf(r)>=0?r:setting('flag','1')==='1'?'flag':'off';}
@@ -132,7 +135,7 @@ function daily(body){var c=chart(body);return c==='day'||c==='worldday';}
 function bare(){return setting('hourFigures','1')==='0';}
 function also(){return setting('also','').split(',').filter(function(k){return k==='sun'||k==='moon';});}
 function watchSettings(){
-  var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate','enroute'));
+  var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate',DEFAULT_PLATE));
   var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null,numerals=NUMERALS.indexOf(setting('numerals','even'));
   // (A bare hour chart has the time in full beside the body.)
   var bytes=[body==='sun'?0:body==='moon'?1:2,plate<0?0:plate,bare()&&chart(body)==='hour'?2:READOUTS.indexOf(readout()),setting('clock24','1')==='0'?0:1,h?1:0];
@@ -406,7 +409,7 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',

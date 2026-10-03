@@ -50,12 +50,13 @@ const GALLERIES={
 // the instruments' more than the novelties, each in its colours next to
 // another's, and each in the type that suits it: Futura (Jost) on the paper
 // charts, B612 in the cockpit, Eurostile (Michroma) at mission control,
-// Orbitron on the Earth from orbit.
+// Orbitron on the Earth from orbit. Each opens on Console, the default.
 const REELS={
   enroute:[
+    {body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'console',figures:'michroma',readout:'flag'},
     {body:'sun',epoch:at('2026-09-30T03:30:00Z'),plate:'enroute',figures:'jost',readout:'flag',also:['moon']},
     {body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'engraved',figures:'jost',readout:'callout',numerals:'colon',also:['sun']},
-    {body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'infrared',figures:'orbitron',readout:'flag'},
+    {body:'sat:43001',epoch:at('2026-10-02T16:30:00Z'),plate:'infrared',figures:'orbitron',readout:'flag'},
     {body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'staratlas',figures:'jost',readout:'flag'},
     {body:'sun',epoch:at('2026-09-30T17:20:00Z'),plate:'airbrush',figures:'jost',readout:'counter'},
     {body:'sat:25544',epoch:at('2026-09-30T18:33:00Z'),plate:'blueprint',figures:'michroma',face:'plotboard',tape:'route',readout:'flag',also:['sun','moon']},
@@ -67,6 +68,7 @@ const REELS={
     {body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'survey',figures:'jost',face:'plotboard',tape:'clock',readout:'flag'}
   ],
   fuller:[
+    {body:'sat:25544',epoch:at('2026-09-30T09:10:00Z'),plate:'console',figures:'michroma',readout:'flag',also:['sun']},
     {body:'sun',epoch:at('2026-09-30T17:24:00Z'),plate:'engraved',figures:'jost',readout:'flag'},
     {body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',figures:'michroma',readout:'counter',numerals:'colon',corner:'light',legend:true,also:['moon']},
     {body:'sat:48274',epoch:at('2026-09-30T11:00:00Z'),plate:'airbrush',figures:'jost',readout:'flag'},
@@ -75,7 +77,6 @@ const REELS={
     {body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'synthetic',figures:'b612',readout:'flag'},
     {body:'sat:43013',epoch:at('2026-09-30T17:42:00Z'),plate:'planetary',figures:'orbitron',readout:'flag'},
     {body:'moon',epoch:at('2026-09-30T05:44:00Z'),plate:'voldenuit',figures:'jost',readout:'flag',also:['sun']},
-    {body:'sat:25544',epoch:at('2026-09-30T09:10:00Z'),plate:'hypsometric',figures:'jost',readout:'flag',also:['sun']},
     {body:'sat:48274',epoch:at('2026-09-30T06:40:00Z'),plate:'globus',figures:'michroma',readout:'flag'},
     {body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'survey',figures:'jost',readout:'flag'},
     {body:'sat:25544',epoch:at('2026-09-30T15:05:00Z'),plate:'infrared',figures:'orbitron',readout:'flag'}
