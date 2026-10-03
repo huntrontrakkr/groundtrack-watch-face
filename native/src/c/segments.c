@@ -1,5 +1,11 @@
 // See segments.h; each step mirrors src/segments.js.
 #include "segments.h"
+bool sat_eclipsed(double altitude,double solar_dot){
+  // Earth's umbra narrows by about 0.00461 km per km behind it.
+  // Testing the cone needs no inverse trig or extra stored ephemeris.
+  const double radius=6371+altitude,shadow=6371+radius*solar_dot*0.00461;
+  return solar_dot<0&&shadow>0&&radius*radius*(1-solar_dot*solar_dot)<shadow*shadow;
+}
 #include "fmath.h"
 #include <math.h>
 #include <string.h>

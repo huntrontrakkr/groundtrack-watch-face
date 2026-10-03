@@ -12,6 +12,7 @@ native/host/harness-float
 native/host/harness-exact
 native/host/map_test
 native/host/segments_test
+native/host/settings_check
 native/host/fmath_test
 native/host/build_check
 native/host/build_check-*

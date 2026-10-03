@@ -12,7 +12,7 @@ import {registerNominal} from '../src/nominal.js';
 import {nameCode} from '../src/events.js';
 
 export const SETTINGS={plate:Object.keys(PLATES),figures:FIGURE_SETS.map(f=>f[0]),clock24:[true,false],readout:['off','flag','callout'],numerals:['even','accent','mono','plain','colon'],
-  corner:['day','point','light'],margin:['utc','body'],tape:['fixed','tape','slide','clock','route'],transfer:['off','vernier','comb','chevrons'],span:['day','hour'],bare:[false,true],legend:[false,true],home:['set','none'],events:['none','one']};
+  corner:['day','point','light'],margin:['utc','body'],tape:['fixed','tape','slide','clock','route'],transfer:['off','vernier','comb','chevrons'],span:['day','hour'],bare:[false,true],legend:[false,true],ticker:[false,true],home:['set','none'],events:['none','one']};
 // (The Sun, the Moon and the satellites the fixture has elements for: of
 // each kind of orbit, fast, slow and a day long.)
 export const BODIES=['sun','moon',...[25544,48274,20580,49260,43013,36585,42738].map(bodyId)];
@@ -31,11 +31,11 @@ export async function audit({faces=FACES,bodies=BODIES,tle,epoch,zone='Europe/Be
     const world=face==='plotboard';
     const frame=s=>{
       const r=new CoreRenderer(core);
-      r.render({body,epoch,timeZone:zone,clock24:s.clock24,plate:s.plate,readout:s.readout==='off'?false:s.readout==='callout'?true:'flag',numerals:s.numerals,zone:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,bare:s.bare,legend:s.legend,
+      r.render({body,epoch,timeZone:zone,clock24:s.clock24,plate:s.plate,readout:s.readout==='off'?false:s.readout==='callout'?true:'flag',numerals:s.numerals,zone:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,bare:s.bare,legend:s.legend,ticker:s.ticker,
         events:s.events==='one'?[{epoch:epoch+11*60000,label:nameCode('Dinner')}]:[],home:s.home==='set'?home:null,projection:face==='fuller'?'fuller':'chart',face:face==='fuller'?undefined:face});
       return Buffer.from(r.last.frame).toString('latin1');
     };
-    const base={plate:'enroute',figures:'michroma',clock24:true,readout:'flag',numerals:'even',corner:'day',margin:'utc',tape:'fixed',transfer:'off',span:'day',bare:false,legend:false,home:'set',events:'none'};
+    const base={plate:'enroute',figures:'michroma',clock24:true,readout:'flag',numerals:'even',corner:'day',margin:'utc',tape:'fixed',transfer:'off',span:'day',bare:false,legend:false,ticker:false,home:'set',events:'none'};
     const contexts=[];for(const readout of SETTINGS.readout)for(const tape of world?SETTINGS.tape:['fixed'])for(const span of viewOf(body)==='day'&&!world?SETTINGS.span:['day'])contexts.push({readout,tape,span});
     const result={};
     for(const [key,values] of Object.entries(SETTINGS)){

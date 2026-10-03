@@ -144,6 +144,9 @@
       <label class="row"><input type="radio" name="readout" value="callout"><span class="name">The time in full<span class="note">Hung from a leader beside the body</span></span></label>
     </div>
     <p class="note field" id="readout-fixed"></p>
+    <div class="group"><h3>A fixed minute counter</h3>
+      <label class="row"><input type="checkbox" name="ticker"><span class="name">Minute ticker<span class="note">Large minutes and an hour progress scale in a fixed panel, on every view</span></span></label>
+    </div>
     <div class="group" id="transfer-group"><h3>The scale's minutes, brought down to the route</h3>
       <label class="row"><input type="radio" name="transfer" value="off"><span class="name">None</span></label>
       <label class="row"><input type="radio" name="transfer" value="vernier"><span class="name">Vernier<span class="note">The route's own minutes ticked under the scale's</span></span></label>
@@ -176,7 +179,7 @@
     <div class="group"><h3>The bottom right corner</h3>
       <label class="row"><input type="radio" name="corner" value="day"><span class="name" id="corner-day">Day of the year<span class="note">DAY 270</span></span></label>
       <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
-      <label class="row" id="corner-light"><input type="radio" name="corner" value="light"><span class="name">The Moon's light<span class="note">87% WAX</span></span></label>
+      <label class="row" id="corner-light"><input type="radio" name="corner" value="light"><span class="name" id="corner-light-name">The Moon's light<span class="note">87% WAX</span></span></label>
       <p class="note field">The corner also says when the phone is out of reach (NO LINK), the battery is low (BAT 18) or a satellite's orbit data is old (EL OLD).</p>
     </div>
   </details>
@@ -233,7 +236,7 @@
   var s={},info={};
   ['body','face','plate','figures','readout','numerals','corner','margin','span','tape','transfer','hourFigures'].forEach(function(k){s[k]=config.settings[k];});
   if(s.hourFigures!=='0')s.hourFigures='1';
-  s.legend=config.settings.legend==='1';
+  s.legend=config.settings.legend==='1';s.ticker=config.settings.ticker==='1';
   s.clock24=config.settings.clock24!=='0';
   s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
   config.bodies.forEach(function(b){info[b[0]]={name:b[1],note:b[2],view:b[3],period:b[4],group:b[5],plot:b[6]};});
@@ -324,7 +327,7 @@
     hide('tape-group',!r.tape);show('tape',s.tape);
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
-    hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;
+    hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;form.elements.ticker.checked=s.ticker;
     hide('bare-group',!r.bare);show('hourFigures',s.hourFigures);
     hide('readout-group',!r.readout.length);show('readout',r.readoutShown,r.readout);
     document.getElementById('readout-title').textContent=world?'The minute, marked on the panel':'The minute, marked on the route';
@@ -336,6 +339,8 @@
     show('corner',s.corner==='light'&&!r.light?'day':s.corner,r.light?null:['day','point']);
     document.getElementById('corner-day').firstChild.nodeValue=world&&sat?'The satellite\'s height':'Day of the year';
     document.getElementById('corner-day').lastChild.textContent=world&&sat?'ISS 411 KM':'DAY 270';
+    document.getElementById('corner-light-name').firstChild.nodeValue=sat?'Estimated sunlight':'The Moon\'s light';
+    document.getElementById('corner-light-name').lastChild.textContent=sat?'SUNLIT or ECLIPSE: Earth\'s full shadow':'87% WAX';
     // Each section's settings in a line, read with the section closed.
     document.getElementById('plate-note').textContent=named(config.plates,s.plate)[2];
     document.getElementById('figures-note').textContent=named(config.figureSets||[],s.figures)[2];
@@ -349,6 +354,7 @@
     var t=e.target;
     if(t.name==='clock24')s.clock24=t.checked;
     else if(t.name==='legend')s.legend=t.checked;
+    else if(t.name==='ticker')s.ticker=t.checked;
     else if(t.name==='also'){if(t.checked&&s.also.indexOf(t.value)<0)s.also.push(t.value);if(!t.checked)s.also=s.also.filter(function(k){return k!==t.value;});}
     else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;
     render();
@@ -547,7 +553,7 @@
   function inputNow(){
     var now=Date.now()+skew,minute=Number(GT.clockParts(now,PV.zone).m),start=Math.floor(now/60000)*60000-minute*60000;
     return {minute:minute,text:GT.chartInput({body:s.body,start:start,plate:s.plate,readout:s.readout==='off'?false:s.readout,numerals:s.numerals,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,
-      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend})};
+      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,ticker:s.ticker})};
   }
   // A satellite's elements for the preview, asked of CelesTrak once.
   function need(n){
@@ -615,7 +621,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,hourFigures:s.hourFigures,legend:s.legend?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,hourFigures:s.hourFigures,legend:s.legend?'1':'0',ticker:s.ticker?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

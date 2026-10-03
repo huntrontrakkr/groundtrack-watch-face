@@ -28,17 +28,17 @@ const GALLERIES={
     ['moon',{body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'airbrush',readout:true,numerals:'colon'}],
     ['qzss',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'console',readout:'flag'}],
     ['clock',{body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'odyssey',tape:'clock',readout:'flag'}],
-    ['gps',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'hypsometric',readout:'flag',events:[ev('2026-09-28T15:40:00Z','Launch')]}],
-    ['tape',{body:'sat:49260',epoch:at('2026-10-01T09:33:00Z'),plate:'amber',tape:'slide',readout:'flag'}],
-    ['day',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'enroute',face:'plotboard',tape:'route',readout:'flag',also:['sun','moon']}]
+    ['survey',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'survey',readout:'off',ticker:true,events:[ev('2026-09-28T15:40:00Z','Launch')]}],
+    ['operations',{body:'sat:49260',epoch:at('2026-10-01T09:33:00Z'),plate:'operations',tape:'slide',readout:'off',ticker:true,corner:'light'}],
+    ['trackingboard',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'trackingboard',face:'plotboard',tape:'route',readout:'off',ticker:true,also:['sun','moon']}]
   ],
   fuller:[
-    ['iss',{body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'crt',readout:'flag',legend:true,also:['moon']}],
+    ['operations',{body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',readout:'off',ticker:true,corner:'light',legend:true,also:['moon']}],
     ['sun',{body:'sun',epoch:at('2026-09-30T17:24:00Z'),plate:'odyssey',readout:true}],
     ['moon',{body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'airbrush',readout:true,numerals:'colon'}],
-    ['qzss',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'dotmatrix',readout:true}],
+    ['trackingboard',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'trackingboard',readout:true,ticker:true}],
     ['noaa',{body:'sat:43013',epoch:at('2026-09-30T17:42:00Z'),plate:'blueprint',readout:'flag'}],
-    ['gps',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'sectional',readout:'flag'}]
+    ['survey',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'survey',readout:'off',ticker:true}]
   ]
 };
 for(const [face,list] of Object.entries(GALLERIES)){

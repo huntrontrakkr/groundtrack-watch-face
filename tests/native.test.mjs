@@ -54,6 +54,17 @@ const HOURS=[
   ['sat:42738','2026-09-27T05:00:00Z','sectional','America/New_York',{projection:'fuller',span:'hour'}]
 ];
 const label=([body,iso,plate,zone,more])=>`${body} ${iso} ${plate} ${JSON.stringify(more)}`;
+// The new plates, and the fixed ticker on each kind of chart, including a
+// map whose columns wrap under it and a day sheet with a moving callout.
+for(const plate of ['trackingboard','survey','operations'])HOURS.push(
+  ['sun','2026-09-27T08:00:00Z',plate,'America/New_York',{ticker:true}],
+  ['moon','2026-09-19T09:00:00Z',plate,'America/New_York',{ticker:true,readout:'callout'}],
+  ['sat:42738','2026-09-27T05:00:00Z',plate,'America/New_York',{ticker:true}],
+  ['sat:25544','2026-09-30T13:00:00Z',plate,'America/New_York',{ticker:true,tape:'slide',corner:'light',events:[ev('2026-09-30T13:12:00Z','Launch')]}],
+  ['sat:25544','2026-09-30T13:00:00Z',plate,'Asia/Kathmandu',{ticker:true,tape:'clock'}],
+  ['sat:25544','2026-09-30T13:00:00Z',plate,'America/New_York',{ticker:true,projection:'fuller',flag:true,corner:'light'}],
+  ['sun','2026-09-27T08:00:00Z',plate,'America/New_York',{ticker:true,projection:'fuller'}]
+);
 
 test('every hour builds within the watch\'s memory',{skip:!cc&&'no C compiler'},()=>{
   for(const h of HOURS){

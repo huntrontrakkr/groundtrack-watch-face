@@ -98,7 +98,26 @@ export const PLATES={
     water:inks(['#000000','#AA5500','#000000']),land:inks(['#555555','#FFAA00','#000000']),coast:inks(['#AAAAAA','#FFFFAA','#555555']),
     contour:inks(['#AAAAAA','#FFFF55','#0000AA']),shelf:inks(['#000055','#AA5500','#000000']),grid:inks(['#555555','#AA5500','#555555']),
     route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#AAAAAA']),mark:inks(['#FF0000','#FF0000','#FF0000']),
-    space:hex('#000000'),spaceInk:hex('#FFFFFF')}
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')},
+  // Space-age studies, inspired by GSOC's 1970 tracking board, Soviet
+  // survey sheets and European mission control. Interpretations, not replicas.
+  // A wash mixes three pixels of a second ink with one of the ground ink;
+  // the minute renderer makes it, without adding runs to the chart.
+  trackingboard:{name:'Tracking Board',note:'GSOC, 1970: rust land, blue-gray sea, red counters',night:'zones',terminator:hex('#FFFFAA'),wash:[hex('#AAAAAA'),null],
+    water:inks(['#55AAAA','#555555','#000055']),land:inks(['#AA5500','#AA5500','#550000']),coast:inks(['#FFAA55','#AA5500','#AA5500']),
+    contour:inks(['#AA5500','#AA5500','#550000']),shelf:inks(['#AAAAAA','#555555','#000055']),grid:inks(['#AAAAAA','#AAAAAA','#555555']),
+    route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#FF5555','#FF5555','#FF5555']),
+    space:hex('#000000'),spaceInk:hex('#FF5555')},
+  survey:{name:'Survey Sheet',note:'Soviet survey chart, 1980s: pale paper and purple tracking ink',night:'screen',dots:true,wash:[hex('#FFFFFF'),hex('#FFFFFF')],
+    water:inks(['#AAFFFF','#AAFFFF','#AAFFFF']),land:inks(['#AAFFAA','#AAFFAA','#AAFFAA']),coast:inks(['#0055AA','#0055AA','#0055AA']),
+    contour:inks(['#AA5500','#AA5500','#AA5500']),shelf:inks(['#55AAAA','#55AAAA','#55AAAA']),grid:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),
+    route:inks(['#550055','#550055','#550055']),ink:inks(['#000000','#000000','#000000']),mark:inks(['#AA0000','#AA0000','#AA0000']),
+    screen:hex('#AAAAAA'),space:hex('#FFFFFF'),spaceInk:hex('#000000')},
+  operations:{name:'Operations',note:'European mission control: cyan geography, amber counters',night:'zones',terminator:hex('#55AAAA'),
+    water:inks(['#000000','#000000','#000000']),land:inks(['#000055','#000055','#000000']),coast:inks(['#55FFFF','#55AAAA','#005555']),
+    contour:inks(['#005555','#005555','#005555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#005555','#005555','#005555']),
+    route:inks(['#FFFF55','#FFFF55','#FFFF55']),ink:inks(['#AAFFFF','#AAFFFF','#AAFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000000'),spaceInk:hex('#FFAA55')}
 };
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;

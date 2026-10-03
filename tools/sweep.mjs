@@ -58,7 +58,7 @@ function randomCase(){
   return {body,start:t,plate:pick(Object.keys(PLATES)),zone,home,projection:fuller?'fuller':'chart',readout:pick(['flag','callout',false]),numerals:pick(['colon','plain','even','mono','accent']),margin:pick(['utc','body']),
     span:pick(['day','hour']),tape:pick(['fixed','tape','slide','clock','route']),transfer:pick(['off','vernier','comb','chevrons']),figures:pick(FIGURE_SETS)[0],corner:pick(['day','point','light']),clock24:chance(.5),events,
     // (Groundtrack's face, and the Sun and Moon marked beside the body.)
-    face:pick(['enroute','plotboard']),also:pick([[],[],['sun'],['moon'],['sun','moon']]),bare:chance(.2),legend:chance(.5)};
+    face:pick(['enroute','plotboard']),also:pick([[],[],['sun'],['moon'],['sun','moon']]),bare:chance(.2),legend:chance(.5),ticker:chance(.5)};
 }
 
 const face=c=>c.projection==='fuller'?'fuller':'enroute';

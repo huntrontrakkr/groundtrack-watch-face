@@ -72,3 +72,19 @@ release.public_app(face);release.public_app(face)
 assert all(url==release.API+'/api/v1/apps/id/abc' for url, _ in requests)
 assert requests[0][1]['params']!=requests[1][1]['params'], 'A cached response must not verify a later write'`);
 });
+
+test('publishing requires every selected listing before any upload',()=>{
+  python(`
+faces=list(release.FACES.values()); calls=[]
+release.check=lambda version, selected, tag: calls.append(('checked',len(selected),tag))
+release.publish=lambda version, face: calls.append(('published',face.key))
+for configured in [0,1]:
+    for i,face in enumerate(faces): face.store_id='listing' if i<configured else ''
+    try: release.publish_faces('1.2.3',faces)
+    except RuntimeError as error: assert 'every listing' in str(error)
+    else: raise AssertionError('A release skipped an unconfigured face')
+    assert not calls, 'Uploaded part of a release before detecting missing configuration'
+for face in faces: face.store_id='listing'
+release.publish_faces('1.2.3',faces)
+assert calls==[('checked',2,'v1.2.3'),('published','enroute'),('published','fuller')]`);
+});

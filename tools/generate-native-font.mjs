@@ -48,7 +48,11 @@ const EnrGlyph *enr_font_glyphs=GLYPHS;
 const EnrRun *enr_font_runs=RUNS;
 #endif
 
-int enr_font_index(char ch){if(ch)for(int k=0;ENR_FONT_CHARS[k];k++)if(ENR_FONT_CHARS[k]==ch)return k;return -1;}
+int enr_font_index(char ch){
+  if(ch>='0'&&ch<='9')return ch-'0';
+  if(ch>='A'&&ch<='Z')return ch-'A'+10;
+  return ch==' '?36:ch==0x7f?37:ch=='-'?38:ch=='%'?39:-1;
+}
 `);
 writeFileSync('native/resources/font.bin',Uint8Array.from(bin));
 console.log(`${chars.length} glyphs, ${runs.length} runs; native/resources/font.bin: ${bin.length} bytes`);

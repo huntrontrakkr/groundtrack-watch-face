@@ -30,6 +30,18 @@ test('segments survive their bytes',()=>{
 });
 
 let cc=true;try{execFileSync('make',['-s','-C','native/host','segments_test'],{stdio:'pipe'});}catch{cc=false;}
+test('the sunlight estimate uses satellite height, and Earth shadow rather than ground night',{skip:!cc&&'no C compiler'},()=>{
+  const cases=[[410,1,false],[410,-1,true],[410,-.2,false],[410,-.8,true],[35786,-.98,false],[35786,-.999,true]];
+  // Independent apparent-disc geometry: the Sun is fully behind Earth's
+  // disc, away from the narrow boundary where a spherical cone is approximate.
+  for(const altitude of [410,20200,35786])for(let angle=0;angle<=90;angle+=.5){
+    const separation=angle*Math.PI/180,earth=Math.asin(6371/(6371+altitude)),solar=.00465;
+    if(Math.abs(earth-solar-separation)<.001)continue;
+    cases.push([altitude,-Math.cos(separation),separation+solar<earth]);
+  }
+  const got=execFileSync('native/host/segments_test',{input:cases.map(([h,d])=>`shadow ${h} ${d}`).join('\n')+'\n'}).toString().trim().split('\n');
+  assert.deepEqual(got,cases.map(([, ,dark])=>dark?'1':'0'));
+});
 test('the watch evaluates segments to the same bits',{skip:!cc&&'no C compiler'},()=>{
   const bits=v=>{const d=new DataView(new ArrayBuffer(8));d.setFloat64(0,v);return d.getBigUint64(0).toString(16).padStart(16,'0');};
   const hex=b=>Buffer.from(b).toString('hex');

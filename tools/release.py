@@ -38,8 +38,7 @@ class Face:
         self.uuid = json.loads((ROOT / project / "package.json").read_text())["pebble"]["uuid"].lower()
         self.name = "groundtrack-" + key + ".pbw"
         self.listing = ROOT / listing
-        # The listing's id on apps.repebble.com. There are no listings yet:
-        # create them in the developer dashboard, then set these.
+        # Each existing listing's id on apps.repebble.com.
         self.store_env = store_env
         self.store_id = os.environ.get(store_env, "")
 
@@ -275,6 +274,17 @@ def publish(version, face):
             f.write(f"Published **{face.title} {version}** to [Pebble]({store}).\n\nPublic download SHA-256: `{digest}`.\n")
 
 
+def publish_faces(version, faces):
+    # Validate the entire selection before uploading either face. A release
+    # must never silently succeed with only one (or neither) store listing.
+    missing = [face.store_env for face in faces if not face.store_id]
+    if missing:
+        raise RuntimeError("Store publishing requires every listing: set " + ", ".join(missing) + ".")
+    check(version, faces, "v" + version)
+    for face in faces:
+        publish(version, face)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["package", "check", "create", "publish"])
@@ -291,11 +301,7 @@ def main():
         for face in faces:
             create(version, face)
     else:
-        for face in faces:
-            if face.store_id:
-                publish(version, face)
-            else:
-                print(f"{face.title}: no store listing ({face.store_env} unset); not published.")
+        publish_faces(version, faces)
 
 
 if __name__ == "__main__":

@@ -101,7 +101,7 @@ async function answer(w,ph,rounds=4){
 // A phone's storage for a case: its settings, home, events and (kept as
 // fetched an hour before) the fixture's elements.
 function storage(c,t){
-  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',
+  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',ticker:c.ticker?'1':'0',
     home:c.home?JSON.stringify({lat:c.home.lat,lon:c.home.lon}):JSON.stringify({none:true}),events:JSON.stringify((c.events||[]).map(([minutes,title])=>({epoch:t+minutes*60000,title,label:nameCode(title)})))};
   // (Events come from a calendar's link: read a moment ago, as the phone keeps it.)
   if((c.events||[]).length){s.calendar='https://calendar.example/private/basic.ics';s['calendar-fetched']=String(t);}
@@ -123,7 +123,7 @@ const what=(face,c,t)=>`${face} ${JSON.stringify(c)} at ${new Date(t).toISOStrin
 async function expected(face,c,t){
   const r=await renderer();
   r.render({body:c.body,epoch:t,timeZone:c.zone,clock24:c.clock24!==false,plate:c.plate||'enroute',readout:c.readout==='off'?false:c.readout||'flag',numerals:c.numerals||'even',zone:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',
-    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart',face:c.face,also:c.also||[],bare:!!c.bare,legend:!!c.legend});
+    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart',face:c.face,also:c.also||[],bare:!!c.bare,legend:!!c.legend,ticker:!!c.ticker});
   return Buffer.from(r.last.frame);
 }
 async function same(face,c,w,label){
@@ -141,6 +141,10 @@ const NY={lat:40.71,lon:-74.01},KTM={lat:27.7,lon:85.32},MCM={lat:-77.85,lon:166
 // after midnight UTC and just before; with home and without, events, and
 // the settings' corners.
 const NEW_ALL=[
+  ['enroute',{body:'sun',zone:'Asia/Kathmandu',plate:'survey',ticker:true},'2026-09-30T13:59:20Z'],
+  ['enroute',{body:'sat:25544',zone:'UTC',plate:'trackingboard',ticker:true,tape:'slide',corner:'light',events:[[10,'Launch']]},'2026-09-30T13:09:00Z'],
+  ['fuller',{body:'sat:25544',zone:'America/New_York',plate:'operations',ticker:true,corner:'light',home:NY},'2026-09-30T13:59:20Z'],
+  ['fuller',{body:'sun',zone:'UTC',plate:'survey',ticker:true},'2026-09-30T17:24:00Z'],
   ['enroute',{body:'sun',zone:'UTC'},'2026-09-30T00:10:20Z'],['enroute',{body:'sun',zone:'America/New_York',home:NY,readout:'callout',numerals:'colon',clock24:false},'2026-09-30T23:58:30Z'],
   ['enroute',{body:'moon',zone:'Asia/Kolkata',home:KTM,plate:'airbrush',corner:'light'},'2026-09-30T01:12:00Z'],['enroute',{body:'moon',zone:'Asia/Kathmandu',home:KTM,plate:'crt',corner:'point',margin:'body'},'2026-10-01T00:03:10Z'],
   ['enroute',{body:'sun',zone:'Pacific/Kiritimati',plate:'odyssey',events:[[5,'Run'],[40,'Standup'],[-200,'Old']]},'2026-09-30T10:20:00Z'],['enroute',{body:'sun',zone:'Pacific/Chatham',home:MCM,plate:'hypsometric'},'2026-09-30T11:16:00Z'],

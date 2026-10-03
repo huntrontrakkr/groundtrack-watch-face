@@ -134,6 +134,9 @@ typedef struct {
   // comb, 3 chevrons.
   uint8_t transfer;
   int8_t forward;
+  // Paper/board inks mixed with a second ground ink, in tints[0..1].
+  // These two switches occupy the old padding before hour_start.
+  bool wash,ticker;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;
   // Pebble GColor8 values: 0b11rrggbb.
@@ -215,7 +218,7 @@ typedef struct {
   // point, for the minute renderer's fast night.
   int32_t (*row_q)[2],night_q[34];
   // Whether a class's colour differs between night's zones (enr_ready).
-  uint8_t zone_matters[256];
+  uint8_t zone_matters[256/8];
 } EnrScene;
 
 // Frees what a scene holds (not the scene itself).
@@ -237,7 +240,7 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
 // a minute's moving parts fall, as a box (x, y, w, h; w 0 for nothing
 // drawn): the body, the minute flag, the time callout, the sliding tape's
 // hour figure and next hour's figure, and the tape's index.
-enum {ENR_MEASURE_BODY,ENR_MEASURE_FLAG,ENR_MEASURE_CALLOUT,ENR_MEASURE_TAPE_HOUR,ENR_MEASURE_TAPE_NEXT,ENR_MEASURE_INDEX};
+enum {ENR_MEASURE_BODY,ENR_MEASURE_FLAG,ENR_MEASURE_CALLOUT,ENR_MEASURE_TAPE_HOUR,ENR_MEASURE_TAPE_NEXT,ENR_MEASURE_INDEX,ENR_MEASURE_TICKER};
 void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
 // The watch's own state, shown in the margins' corner in place of its
 // text until cleared: "NO LINK", "BAT 18" (at most 7 characters; "" for

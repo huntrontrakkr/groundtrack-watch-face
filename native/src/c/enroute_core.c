@@ -63,9 +63,13 @@ static int32_t q30(enr_real v){return (int32_t)(v*(enr_real)Q30);}
 #define NIGHT_ROWS 3
 typedef struct Night {
   const EnrMinute *m;
-  int32_t p[ENR_W],u2,lo[BLOCKS],hi[BLOCKS];
-  int32_t sun[ENR_TILES][3];int held[NIGHT_ROWS];int32_t (*h)[ENR_W];   // h: NIGHT_ROWS rows, a Fuller sheet's only
-  uint8_t have[NIGHT_ROWS][ENR_W/8];                                      // which of a held row's heights are computed
+  // A draw is cylindrical or Fuller: these tables are never used together.
+  // Keep h outside the union so cylindrical draws can still free its NULL.
+  union {
+    struct {int32_t p[ENR_W],u2,lo[BLOCKS],hi[BLOCKS];};
+    struct {int32_t sun[ENR_TILES][3];int held[NIGHT_ROWS];uint8_t have[NIGHT_ROWS][ENR_W/8];};
+  };
+  int32_t (*h)[ENR_W];   // NIGHT_ROWS rows, a Fuller sheet's only
 } Night;
 // Lettering and leaders go through one list of pixels, drawn one at a
 // time. The longest is a satellite's pass line: 24 characters of at most 24
@@ -262,6 +266,7 @@ static uint8_t base_color(const EnrScene *s,int ground,int z){
 // the dots, the plain ground.
 static const uint16_t LATTICE_DOT[4]={0x0660,0x0672,0x0777,0x0020};  // rows of the cell, 4 bits each: tint 0, 1, 2+, water
 static uint8_t ground_color(const EnrScene *s,int ground,int z,int x,int y){
+  if(s->wash&&ground<2&&s->tints[ground]&&((x+y)&3)&&!z)return s->tints[ground];
   if(!s->lattice)return base_color(s,ground,z);
   if(ground==G_SPACE)return s->space;
   const int k=ground==G_WATER||ground>=G_DEPTH0?3:ground==G_LAND?0:ground-G_TINT0>2?2:ground-G_TINT0;
@@ -379,23 +384,15 @@ static uint8_t base_pixel(const Ctx *c,int x,int y,uint8_t cls,int known,bool an
   const bool dir=ground!=G_SPACE;
   const int z=known==2?zone(c,x,y):!zones||!dir?0:known==1?2:0;
   uint8_t col;
-  if(layer<=L_WATERLINE&&known!=2){
-    col=layer==L_CONTOUR?s->zoned[ENR_CONTOUR][z]:layer==L_COAST?s->zoned[ENR_COAST][z]:layer==L_SHELF?s->zoned[ENR_SHELF][z]:layer==L_WATERLINE?s->waterline:ground_color(s,ground,z,x,y);
-    if((s->flags&ENR_SCAN)&&z&&y%(z==2?2:4)==1)col=s->space;
-    // No terminator here; at night, the dots of an outline plate.
-    if(terminator&&dir&&(s->flags&ENR_NIGHT_DOTS)&&z==2&&x%4==0&&y%4==((x>>2)&1)*2)col=s->night_dots;
-    // The dot screen: none by day, the full 25% by night.
-    if(!zones&&dir&&known==1&&BAYER[(y&3)*4+(x&3)]<4)col=s->screen;
-  }
-  else if(layer<=L_WATERLINE){
+  if(layer<=L_WATERLINE){
     col=layer==L_CONTOUR?s->zoned[ENR_CONTOUR][z]:layer==L_COAST?s->zoned[ENR_COAST][z]:layer==L_SHELF?s->zoned[ENR_SHELF][z]:layer==L_WATERLINE?s->waterline:ground_color(s,ground,z,x,y);
     if((s->flags&ENR_SCAN)&&z&&y%(z==2?2:4)==1)col=s->space;
     if(terminator&&dir){
-      if(((x+y)>>1)%3!=2&&crosses(c,x,y,SUNRISE_SINE,s->night_q[0]))col=s->terminator;
-      else if((x+y)%3==0&&crosses(c,x,y,CIVIL_TWILIGHT_SINE,s->night_q[1]))col=s->terminator;
+      if(known==2&&((x+y)>>1)%3!=2&&crosses(c,x,y,SUNRISE_SINE,s->night_q[0]))col=s->terminator;
+      else if(known==2&&(x+y)%3==0&&crosses(c,x,y,CIVIL_TWILIGHT_SINE,s->night_q[1]))col=s->terminator;
       else if((s->flags&ENR_NIGHT_DOTS)&&z==2&&x%4==0&&y%4==((x>>2)&1)*2)col=s->night_dots;
     }
-    if(!zones&&dir&&screen_dot(c,x,y))col=s->screen;
+    if(!zones&&dir&&(known==2?screen_dot(c,x,y):known==1&&BAYER[(y&3)*4+(x&3)]<4))col=s->screen;
   }
   else if(layer==L_CLEARED||layer==L_EARLY_CLEARED||layer==L_LATE_CLEARED)col=base_color(s,ground,z);
   else if(layer==L_GRID||layer==L_NET_GRID)col=s->zoned[ENR_GRID][z];
@@ -468,7 +465,7 @@ static __attribute__((noinline)) int draw_base(Ctx *c,const uint64_t *mask,const
         const uint8_t cls=here[x];
         if((cls&15)==G_SPACE)continue;
         int matters=0;
-        if(zones){if(s->zone_matters[cls]||((s->flags&ENR_SCAN)&&(y&1))||((s->flags&ENR_NIGHT_DOTS)&&x%4==0&&y%4==((x>>2)&1)*2))matters|=3;}
+        if(zones){if((s->zone_matters[cls>>3]>>(cls&7)&1)||((s->flags&ENR_SCAN)&&(y&1))||((s->flags&ENR_NIGHT_DOTS)&&x%4==0&&y%4==((x>>2)&1)*2))matters|=3;}
         else if((cls>>4)<=L_WATERLINE)matters|=1;
         if(terminator)matters|=12;
         if(!((night_key(&old,x,y)^night_key(c,x,y))&matters))continue;
@@ -894,6 +891,19 @@ static void draw_panel_clock(Ctx *c){
 // the body like a circuit trace and breaks for lettering.
 // Where the callout goes this minute: its glyphs, the figure's top left,
 // and its leader (in scratch, the pixels clear of lettering: *shown).
+// The hour and Fuller day use the same choice of side and leader.
+static __attribute__((noinline)) int callout_side(const EnrScene *s,int bx,int by,int sy,int fw,int *shown){
+  int best=0,score[2];
+  for(int k=0;k<2;k++){
+    const int side=k?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;f=f>4?f:4;
+    int open;const int len=leader(s,bx,by,sx,sy,side>0?f+fw:f-1,scratch,&open);
+    const bool fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
+    score[k]=(fits?0:1000)+(len-open)*10+(side==(bx<W/2?1:-1)?0:1);
+  }
+  if(score[1]<score[0])best=1;
+  const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;f=f>4?f:4;
+  leader(s,bx,by,sx,sy,side>0?f+fw:f-1,scratch,shown);return f;
+}
 static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
   if(!s->fig_bits)return false;
@@ -908,16 +918,7 @@ static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
     const double mid=(net-head-fs)/2,low=f_floor(mid);
     const int reach=room?by-(head+(int)(mid-low>=0.5?low+1:low)+fs+3):26,sy=up?by-reach:by+reach;
     const int fw=time_figure(s,m,2,1,g,n,&fh);
-    int best=0,score[2];
-    for(int k=0;k<2;k++){
-      const int side=k?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;f=f>4?f:4;
-      int open;const int len=leader(s,bx,by,sx,sy,side>0?f+fw:f-1,line,&open);
-      const bool fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
-      score[k]=(fits?0:1000)+(len-open)*10+(side==(bx<W/2?1:-1)?0:1);
-    }
-    if(score[1]<score[0])best=1;
-    const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;*fx=f>4?f:4;
-    leader(s,bx,by,sx,sy,side>0?*fx+fw:*fx-1,line,shown);*fy=up?sy-3-fh:sy+3;
+    *fx=callout_side(s,bx,by,sy,fw,shown);*fy=up?sy-3-fh:sy+3;
   }else if(VIEW_IS_DAY(s->view)){
     const bool big=time_figure(s,m,2,1,g,n,&fh)<=s->callout_left-6;
     const int fw=time_figure(s,m,big?2:1,big?1:0,g,n,&fh);
@@ -930,16 +931,7 @@ static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
     *shown=0;for(int i=0;i<k;i++)if(open_at(s,line[i]))line[(*shown)++]=line[i];
   }else{
     const int fw=time_figure(s,m,1,0,g,n,&fh),sy=by+26;
-    int best=0,score[2];
-    for(int k=0;k<2;k++){
-      const int side=k?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;f=f>4?f:4;
-      int open;const int len=leader(s,bx,by,sx,sy,side>0?f+fw:f-1,line,&open);
-      const bool fits=side>0?sx+2+fw<=W-4:sx-2-fw>=4;
-      score[k]=(fits?0:1000)+(len-open)*10+(side==(bx<W/2?1:-1)?0:1);
-    }
-    if(score[1]<score[0])best=1;
-    const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<W-4-fw?f:W-4-fw;*fx=f>4?f:4;
-    leader(s,bx,by,sx,sy,side>0?*fx+fw:*fx-1,line,shown);*fy=sy+3;
+    *fx=callout_side(s,bx,by,sy,fw,shown);*fy=sy+3;
   }
   return true;
 }
@@ -951,6 +943,25 @@ static void draw_callout(Ctx *c){
 }
 // A box: x, y, w, h (w 0 for none).
 typedef struct {int x,y,w,h;} Box;
+#define TICK_X 132
+#define TICK_Y 180
+#define TICK_W 62
+#define TICK_H 36
+static int slide_offset(const EnrScene *s,const EnrMinute *m);
+// Fixed minutes, drawn with the existing lettering at triple size. No
+// bitmap or extra per-minute storage; the 60-pixel meter is one pixel/minute.
+static void draw_ticker(Ctx *c){
+  if(!c->s->ticker)return;
+  const int x0=TICK_X+slide_offset(c->s,c->m);const uint8_t ink=c->s->space_ink;
+  for(int y=TICK_Y;y<TICK_Y+TICK_H;y++)for(int x=x0;x<x0+TICK_W;x++)plot(c,x,y,c->s->space);
+  const int n=enr_text_pixels(c->m->minute,2,0,8,scratch);
+  for(int i=0;i<n;i++)for(int dy=0;dy<3;dy++)for(int dx=0;dx<3;dx++)plot(c,x0+10+3*scratch[i].x+dx,TICK_Y+3+3*scratch[i].y+dy,ink);
+  const int minute=(int)(c->m-c->s->minutes);
+  for(int k=0;k<60;k++){
+    if(k<minute)plot(c,x0+1+k,TICK_Y+30,ink);
+    if(k%5==0||k==59)for(int y=32;y<(k%15==0||k==59?35:33);y++)plot(c,x0+1+k,TICK_Y+y,ink);
+  }
+}
 // The bounds of glyphs' pixels as drawn (an outlined figure's outline), at
 // (fx, fy), within x0..x1 (the tape's edges).
 static Box glyph_bounds(const EnrScene *s,const Glyph *g,int n,int fx,int fy,int x0,int x1){
@@ -972,6 +983,7 @@ static Box glyph_bounds(const EnrScene *s,const Glyph *g,int n,int fx,int fy,int
 // figures (both solid, as the browser counts them).
 static int minute_boxes(Ctx *c,Box *out){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;int n=0;
+  if(s->ticker)out[n++]=(Box){TICK_X+slide_offset(s,m),TICK_Y,TICK_W,TICK_H};
   if(VIEW_IS_DAY(s->view)||(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_CALLOUT))){
     Glyph g[8];int k,fx,fy,shown;if(callout_place(c,g,&k,&fx,&fy,&shown))out[n++]=glyph_bounds(s,g,k,fx,fy,-W,2*W);
   }else if(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_MINUTE_FLAG)){
@@ -1018,7 +1030,7 @@ static void draw_events(Ctx *c){
 // its flag (or the tape's index and minutes), what was drawn over them, then
 // the margins' Zulu time, pass line and height. PART_ALL draws them all; a
 // single part is drawn alone, to measure where it goes.
-enum {PART_ALL,PART_SUN,PART_MOON,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PARTS};
+enum {PART_ALL,PART_SUN,PART_MOON,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PART_TICKER,PARTS};
 // The sliding band: how far its columns are turned at a minute (the body's
 // column comes under the index, W/2), and the rows turned (the band and
 // the route, between the tape's panel and the bottom margin). What stands
@@ -1063,6 +1075,7 @@ static void draw_moving(Ctx *c,int part){
   if(world&&(s->flags&ENR_SLIDING_WORLD)&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
   // The minute flag over everything: it is the time.
   if(flag&&!part)draw_flag(c);
+  if(!part||part==PART_TICKER)draw_ticker(c);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint64_t *mask,const uint64_t *nmask,const Night *from){
   minute=minute<0?0:minute>59?59:minute;
@@ -1101,6 +1114,7 @@ void enr_ready(EnrScene *s){
   // (A row with no ground is one run of space, or two.)
   for(int y=0;y<H;y++){const uint8_t *p=row_runs_of(s,y);for(int x=0;x<W;x+=p[0],p+=2)if(p[0]>ENR_RUN_MAX||!p[0]||(p[1]&15)!=G_SPACE){s->ground_rows[y>>3]|=(uint8_t)(1<<(y&7));break;}}
   // Which classes change colour with the zone (base_pixel's choices).
+  memset(s->zone_matters,0,sizeof s->zone_matters);
   for(int cls=0;cls<256;cls++){
     const int g=cls&15,l=cls>>4;const uint8_t *z=NULL,*z2=NULL;
     if(l==L_CONTOUR)z=s->zoned[ENR_CONTOUR];else if(l==L_COAST)z=s->zoned[ENR_COAST];else if(l==L_SHELF)z=s->zoned[ENR_SHELF];
@@ -1111,7 +1125,7 @@ void enr_ready(EnrScene *s){
     else if(l==L_GRID||l==L_NET_GRID)z=s->zoned[ENR_GRID];else if(l==L_ROUTE)z=s->zoned[ENR_ROUTE];
     else if(l==L_INK||l==L_EARLY_INK)z=s->zoned[ENR_INK];else if(l==L_MARK)z=s->zoned[ENR_MARK];
     else if(l==L_LATE_INK){z=s->zoned[ENR_INK];z2=s->zoned[ENR_MARK];}
-    s->zone_matters[cls]=(uint8_t)((z&&(z[0]!=z[1]||z[0]!=z[2]))||(z2&&(z2[0]!=z2[1]||z2[0]!=z2[2])));
+    if((z&&(z[0]!=z[1]||z[0]!=z[2]))||(z2&&(z2[0]!=z2[1]||z2[0]!=z2[2])))s->zone_matters[cls>>3]|=(uint8_t)(1<<(cls&7));
   }
   if(ROLLED(s)){
     // Along a row's run on one tile the height is a convex mix of the
@@ -1228,6 +1242,7 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
   case ENR_MEASURE_TAPE_HOUR:if(world&&(scene->flags&ENR_SLIDING_TAPE))sliding_figures(&c,1);break;
   case ENR_MEASURE_TAPE_NEXT:if(world&&(scene->flags&ENR_SLIDING_TAPE))sliding_figures(&c,2);break;
   case ENR_MEASURE_INDEX:if(world){if(scene->clock)draw_panel_clock(&c);else if(scene->flags&ENR_SLIDING_TAPE)draw_sliding_tape(&c);else draw_index(&c);}break;
+  case ENR_MEASURE_TICKER:if(scene->ticker){touch(&c,TICK_X,TICK_Y);touch(&c,TICK_X+TICK_W-1,TICK_Y+TICK_H-1);}break;
   }
   if(c.box[2]>=c.box[0]){out[0]=(int16_t)c.box[0];out[1]=(int16_t)c.box[1];out[2]=(int16_t)(c.box[2]-c.box[0]+1);out[3]=(int16_t)(c.box[3]-c.box[1]+1);}
   // The body is drawn on the band before it is turned.

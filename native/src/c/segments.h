@@ -44,3 +44,6 @@ bool sat_segment_decode(const uint8_t *bytes,SatSegment *seg);
 // Latitude, longitude (wrapped to -180..180) and altitude at a time in whole
 // Unix seconds within the segment.
 void sat_segment_position(const SatSegment *seg,int64_t seconds,double *lat,double *lon,double *altitude);
+// Full Earth shadow, estimated with a spherical Earth and the Sun at 1 AU.
+// solar_dot: radial unit direction dotted with the Sun's direction.
+bool sat_eclipsed(double altitude,double solar_dot);

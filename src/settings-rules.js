@@ -40,7 +40,7 @@ export const VIEW_CODES={hour:0,world:1,day:2,worldday:3};
 //             tapes: the route's own ruler needs none, the clock has no
 //             scale; nor does a whole day's route, marked in hours, take any)
 //   span      QZSS's choice of the day or the hour
-//   light     the Moon's light in the corner (the Moon's charts only)
+//   light     the Moon's light or a satellite's estimated sunlight in the corner
 export function settingsFor(face,body,view,{span='day',readout='flag',tape='fixed',plot='hour',bare=false}={}){
   const chart=chartOf(face,body,view,span,plot),world=chart==='world'||chart==='worldday',alone=bare&&chart==='hour';
   const shown=alone?'callout':world&&readout==='callout'?'flag':readout;
@@ -49,7 +49,7 @@ export function settingsFor(face,body,view,{span='day',readout='flag',tape='fixe
     readoutShown:shown,bare:chart==='hour',legend:face==='fuller',
     numerals:chart==='day'||(chart==='hour'&&shown==='callout')||(world&&tape==='clock'),
     tape:world,transfer:chart==='world'&&tape!=='clock'&&tape!=='route',
-    span:view==='day'&&face!=='plotboard',light:body==='moon'};
+    span:view==='day'&&face!=='plotboard',light:body==='moon'||body.indexOf('sat:')===0};
 }
 
 // Groundtrack is two faces in one app: Enroute (the hour chart, and the

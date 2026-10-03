@@ -10,6 +10,9 @@ int main(void){
   static char line[4096];
   while(fgets(line,sizeof line,stdin)){
     char hex[2*SEG_BYTES+2];long long seconds;
+    if(!strncmp(line,"shadow ",7)){
+      double altitude,dot;if(sscanf(line+7,"%lf %lf",&altitude,&dot)==2)printf("%d\n",sat_eclipsed(altitude,dot));continue;
+    }
     if(!strncmp(line,"sat ",4)){
       if(sscanf(line+4,"%1100s %lld",hex,&seconds)!=2)continue;
       uint8_t b[SAT_SEGMENT_BYTES];for(int i=0;i<SAT_SEGMENT_BYTES;i++){unsigned v;sscanf(hex+2*i,"%2x",&v);b[i]=(uint8_t)v;}

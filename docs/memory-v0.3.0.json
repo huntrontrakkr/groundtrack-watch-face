@@ -1,0 +1,164 @@
+{
+  "baseline": "v0.2.0 (85888d7)",
+  "target": "v0.3.0",
+  "method": "Cortex-M3 ABI sizes from Pebble SDK GCC 4.9; build heap model on the host (larger pointers), including allocator overhead. No electrical power claim.",
+  "structures": {
+    "before": {
+      "scene": 2616,
+      "minute": 104,
+      "night": 1388,
+      "work": 2240,
+      "scratch": 3072,
+      "classCache": 3200
+    },
+    "after": {
+      "scene": 2392,
+      "minute": 104,
+      "night": 916,
+      "work": 2240,
+      "scratch": 3072,
+      "classCache": 3200
+    }
+  },
+  "saving": {
+    "scene": 224,
+    "drawScratch": 944
+  },
+  "binary": {
+    "before": {
+      "groundtrack": 64508,
+      "fuller": 65016
+    },
+    "after": {
+      "groundtrack": 64868,
+      "fuller": 65040
+    },
+    "cap": 65535,
+    "budget": 65100
+  },
+  "legacyFrames": {
+    "checked": 5040,
+    "differ": 0
+  },
+  "heaps": [
+    {
+      "body": "sun",
+      "view": "0",
+      "fuller": false,
+      "before": {
+        "built": true,
+        "peak": 44600,
+        "kept": 28680,
+        "runs": 9540
+      },
+      "after": {
+        "built": true,
+        "peak": 44608,
+        "kept": 28456,
+        "runs": 9540
+      }
+    },
+    {
+      "body": "moon",
+      "view": "0",
+      "fuller": false,
+      "before": {
+        "built": true,
+        "peak": 44600,
+        "kept": 29648,
+        "runs": 8686
+      },
+      "after": {
+        "built": true,
+        "peak": 44608,
+        "kept": 29424,
+        "runs": 8686
+      }
+    },
+    {
+      "body": "sat:25544",
+      "view": "1",
+      "fuller": false,
+      "before": {
+        "built": true,
+        "peak": 50320,
+        "kept": 32992,
+        "runs": 12272
+      },
+      "after": {
+        "built": true,
+        "peak": 50328,
+        "kept": 32768,
+        "runs": 12272
+      }
+    },
+    {
+      "body": "sat:25544",
+      "view": "1",
+      "fuller": false,
+      "before": {
+        "built": true,
+        "peak": 50320,
+        "kept": 31184,
+        "runs": 8510
+      },
+      "after": {
+        "built": true,
+        "peak": 50328,
+        "kept": 30960,
+        "runs": 8510
+      }
+    },
+    {
+      "body": "sat:42738",
+      "view": "2",
+      "fuller": false,
+      "before": {
+        "built": true,
+        "peak": 47856,
+        "kept": 32064,
+        "runs": 10214
+      },
+      "after": {
+        "built": true,
+        "peak": 47864,
+        "kept": 31840,
+        "runs": 10214
+      }
+    },
+    {
+      "body": "sat:25544",
+      "view": "0",
+      "fuller": true,
+      "before": {
+        "built": true,
+        "peak": 52792,
+        "kept": 32024,
+        "runs": 11892
+      },
+      "after": {
+        "built": true,
+        "peak": 52800,
+        "kept": 31800,
+        "runs": 11892
+      }
+    },
+    {
+      "body": "sun",
+      "view": "2",
+      "fuller": true,
+      "before": {
+        "built": true,
+        "peak": 52792,
+        "kept": 31080,
+        "runs": 9572
+      },
+      "after": {
+        "built": true,
+        "peak": 52800,
+        "kept": 30856,
+        "runs": 9572
+      }
+    }
+  ]
+}

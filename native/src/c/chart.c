@@ -626,16 +626,19 @@ static Box figure_bounds(const FigureRun *r){
 }
 static bool overlaps(const Box *taken,int n,Box b){for(int i=0;i<n;i++)if(taken[i].x<b.x+b.w&&b.x<taken[i].x+taken[i].w&&taken[i].y<b.y+b.h&&b.y<taken[i].y+taken[i].h)return true;return false;}
 
-static const char *const HEXAGON[5]={"..###..",".#...#.","#.....#",".#...#.","..###.."};
-static const char *const TRIANGLE[7]={"....#....","...#.#...","...#.#...","..#...#..","..#...#..",".#.....#.","#########"};
-static const char *const AIRPORT[11]={".....#.....",".....#.....","....###....","...#...#...","..#.....#..","###.....###","..#.....#..","...#...#...","....###....",".....#.....",".....#....."};
-static void symbol(Canvas *cv,const char *const *rows,int count,int cx,int cy){
+// The symbols keep every pixel as row bits, without strings or pointers.
+typedef struct {uint8_t width,height;uint16_t row[11];} Symbol;
+static const Symbol HEXAGON={7,5,{0x01c,0x022,0x041,0x022,0x01c}};
+static const Symbol TRIANGLE={9,7,{0x010,0x028,0x028,0x044,0x044,0x082,0x1ff}};
+static const Symbol AIRPORT={11,11,{0x020,0x020,0x070,0x088,0x104,0x707,0x104,0x088,0x070,0x020,0x020}};
+static void symbol(Canvas *cv,const Symbol *shape,int cx,int cy){
+  const int len=shape->width,count=shape->height;
   for(int dy=0;dy<count;dy++){
-    const char *row=rows[dy];const int len=(int)strlen(row);
-    int first=-1,last=-1;for(int k=0;k<len;k++)if(row[k]=='#'){if(first<0)first=k;last=k;}
+    const uint16_t row=shape->row[dy];
+    int first=-1,last=-1;for(int k=0;k<len;k++)if(row>>k&1){if(first<0)first=k;last=k;}
     for(int dx=0;dx<len;dx++){
       const int x=cx-(len>>1)+dx,y=cy-(count>>1)+dy;
-      if(row[dx]=='#')plot(cv,x,y,L_INK);
+      if(row>>dx&1)plot(cv,x,y,L_INK);
       else if(first<dx&&dx<last)clear(cv,x,y);
     }
   }
@@ -643,8 +646,8 @@ static void symbol(Canvas *cv,const char *const *rows,int count,int cx,int cy){
 
 // The widest the margins' corner is: its centre-placed Zulu time keeps clear.
 #define CORNER_WIDEST "00N 000E"
-static const char *const WEEKDAYS[7]={"SUN","MON","TUE","WED","THU","FRI","SAT"};
-static const char *const MONTHS[12]={"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
+static const char WEEKDAYS[7][4]={"SUN","MON","TUE","WED","THU","FRI","SAT"};
+static const char MONTHS[12][4]={"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
 // Integer to decimal, zero-padded to `width`.
 static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char)('0'+v%10);v/=10;}while(v);while(n<width)d[n++]='0';while(n)*p++=d[--n];*p=0;return p;}
 
@@ -1373,7 +1376,7 @@ static bool finish_draw(ChartBuild *b){
   for(int k=0;k<3;k++)for(int d=-k;d<=k;d++){const int r=R+4-k;ROSE(c0x+js_round(f_sin(north)*r+f_cos(north)*d),c0y-js_round(f_cos(north)*r-f_sin(north)*d));}
   #undef ROSE
   }
-  if(!day){symbol(&cv,HEXAGON,5,c0x,c0y);plot(&cv,c0x,c0y,L_INK);symbol(&cv,TRIANGLE,7,c1x,c1y-1);}
+  if(!day){symbol(&cv,&HEXAGON,c0x,c0y);plot(&cv,c0x,c0y,L_INK);symbol(&cv,&TRIANGLE,c1x,c1y-1);}
   // The body is the minute's; all after it lies over it.
   cv.stage=3;
   char hour[4],next[4];
@@ -1474,7 +1477,7 @@ static bool finish_draw(ChartBuild *b){
   // Events are compulsory reporting points: a filled triangle on the route
   // at the event's minute, its name over it (the minute's: see
   // enroute_core.c), clear of the lettering, the network and the figures.
-  static const char *const FIX[7]={"....#....","...###...","...###...","..#####..","..#####..",".#######.","#########"};
+  static const Symbol FIX={9,7,{0x010,0x038,0x038,0x07c,0x07c,0x0fe,0x1ff}};
   int nevents=0;EventNote *const events=notes->events;
   for(int e=0;e<in->event_count&&e<16;e++){
     const int64_t t=in->events[e].t-in->start;int i=1;
@@ -1483,8 +1486,7 @@ static bool finish_draw(ChartBuild *b){
     const double f=(double)(t-T_OF(b,i-1))/((T_OF(b,i)-T_OF(b,i-1))?(double)(T_OF(b,i)-T_OF(b,i-1)):1);
     const int x=(int)js_round(track[i-1].a+(track[i].a-track[i-1].a)*f),y=(int)js_round(track[i-1].b+(track[i].b-track[i-1].b)*f);
     if(x<5||x>W-6||y<top+8||y>bottom-4)continue;
-    for(int dy=0;dy<7;dy++){int first=-1,last=-1;for(int k=0;k<9;k++)if(FIX[dy][k]=='#'){if(first<0)first=k;last=k;}
-      for(int dx=0;dx<9;dx++){if(FIX[dy][dx]=='#')plot(&cv,x+dx-4,y+dy-4,L_INK);else if(first<dx&&dx<last)clear(&cv,x+dx-4,y+dy-4);}}
+    symbol(&cv,&FIX,x,y-1);
     const char *name=in->events[e].name;const int lw=text_width(name);int lx=x-lw/2;lx=lx<W-4-lw?lx:W-4-lw;lx=lx>4?lx:4;
     const Box bx=bounds_of(scratch,text_pixels(name,lx,y-7,scratch));
     bool clear_=bx.y>=(in->home?14:2);
@@ -1500,14 +1502,14 @@ static bool finish_draw(ChartBuild *b){
   // Home, over the route and figures, on its own knockout.
   if(home_mark){
     for(int dy=-6;dy<=6;dy++)for(int dx=-6;dx<=6;dx++)if(dx*dx+dy*dy<=36)clear(&cv,hx+dx,hy+dy);
-    for(int dy=0;dy<11;dy++)for(int dx=0;dx<11;dx++)if(AIRPORT[dy][dx]=='#')plot(&cv,hx+dx-5,hy+dy-5,L_MARK);
+    for(int dy=0;dy<11;dy++)for(int dx=0;dx<11;dx++)if(AIRPORT.row[dy]>>dx&1)plot(&cv,hx+dx-5,hy+dy-5,L_MARK);
     letter(&cv,home_code,home_code_n,L_MARK,1);
     // Its mark's pixels, in order: the symbol's and, over the ground, the
     // code's, where no knockout has cleared them.
     #define MARK_AT(px,py,code) do{const int X=(px),Y=(py);if(X>=0&&Y>=0&&X<W&&Y<H&&layer_at(classes,X,Y)==L_LATE_INK&&mark_n<128){\
       bool over_space_code=false;for(int i=0;i<home_code_n;i++)if(home_code[i].x==X&&home_code[i].y==Y&&ground_at(&cv,X,Y)==G_SPACE)over_space_code=true;\
       if(!over_space_code&&(!(code)||ground_at(&cv,X,Y)!=G_SPACE))marks[mark_n++]=(Y)*W+(X);}}while(0)
-    for(int dy=0;dy<11;dy++)for(int dx=0;dx<11;dx++)if(AIRPORT[dy][dx]=='#')MARK_AT(hx+dx-5,hy+dy-5,false);
+    for(int dy=0;dy<11;dy++)for(int dx=0;dx<11;dx++)if(AIRPORT.row[dy]>>dx&1)MARK_AT(hx+dx-5,hy+dy-5,false);
     for(int i=0;i<home_code_n;i++)MARK_AT(home_code[i].x,home_code[i].y,true);
     #undef MARK_AT
     // Sorted, each once.
@@ -1599,11 +1601,12 @@ static bool finish_draw(ChartBuild *b){
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
   out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|((in->readout==1||(world&&in->readout==2))?16:0)|(in->readout==2&&!world?32:0)|(world&&(in->tape==1||in->tape==2)?64:0)|(world&&in->tape==2?128:0));
   out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;out->clock=world&&in->tape==3;
+  out->wash=(pal->flags&PLATE_WASH)!=0;out->ticker=in->ticker;
   out->transfer=(uint8_t)(daily||!world||in->tape>2?0:in->transfer);
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
   out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
-  for(int k=0;k<5;k++)out->tints[k]=k<pal->tint_count?pal->tints[k]:0;
+  memcpy(out->tints,pal->tints,sizeof out->tints);
   for(int k=0;k<2;k++)out->depths[k]=k<pal->depth_count?pal->depths[k]:0;
   if(!rolled){
   for(int y=0;y<H;y++){const double lat=glat(cam,y+.5)*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
@@ -1719,6 +1722,10 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
       // The ground point, to the degree: 23N 045E.
       const double wl=wrap(lon);
       p=put_int(p,(int)js_round(fabs(lat)),2);*p++=lat<0?'S':'N';*p++=' ';p=put_int(p,(int)js_round(fabs(wl)),3);*p++=wl<0?'W':'E';
+    }
+    else if(in->corner==2&&in->body>=2){
+      const double dot=f_cos(lat*RAD)*(e->sun[0]*f_cos(lon*RAD)+e->sun[1]*f_sin(lon*RAD))+e->sun[2]*f_sin(lat*RAD);
+      const bool dark=sat_eclipsed(altitude,dot);memcpy(p,dark?"ECLIPSE":"SUNLIT",dark?7:6);
     }
     else if(world&&in->body>=2){p=put_int(p,(int)js_round(altitude),1);memcpy(p," KM",3);}
     else if(in->corner==2&&in->body==1){p=put_int(p,(int)js_round(fraction*100),1);memcpy(p,waxing?"% WAX":"% WAN",5);}

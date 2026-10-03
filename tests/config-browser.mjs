@@ -66,8 +66,8 @@ try{
   await page.waitForFunction(()=>window.previewDrawn,null,{timeout:20000});
   mkdirSync('test-results',{recursive:true});await page.screenshot({path:'test-results/native-settings-closed.png',fullPage:true});
   await page.evaluate(()=>document.querySelectorAll('details').forEach(d=>{d.open=true;}));
-  // The current settings, the twelve plates and the zone's preset home.
-  assert.equal(await page.locator('input[name=plate]').count(),12);
+  // The current settings, the fifteen plates and the zone's preset home.
+  assert.equal(await page.locator('input[name=plate]').count(),15);
   // The preview: the face sketched in the settings, and as the watch's
   // reflective screen shows its colours; it follows the settings.
   const pixels=id=>page.evaluate(id=>{const c=document.getElementById(id);return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);},id);
@@ -86,6 +86,14 @@ try{
   for(let i=0;i<200*228;i++){const c=frame[i];if(colours[4*i]!==((c>>4)&3)*85||colours[4*i+1]!==((c>>2)&3)*85||colours[4*i+2]!==(c&3)*85)differ++;}
   assert.equal(differ,0,'the preview is the core\'s own frame');}
   assert.equal(colours.length,200*228*4);
+  assert.ok(await page.locator('input[name=ticker]').isVisible());
+  assert.ok(!await page.locator('input[name=ticker]').isChecked());
+  await page.check('input[name=ticker]');
+  await page.waitForFunction(()=>window.previewDrawn?.input.includes('\nticker 1\n'));
+  assert.notDeepEqual(await pixels('preview'),colours,'the ticker is visible in the watch preview');
+  await page.uncheck('input[name=ticker]');
+  await page.waitForFunction(()=>window.previewDrawn?.input.includes('\nticker 0\n'));
+  assert.deepEqual(await pixels('preview'),colours,'disabling the ticker restores the original chart');
   assert.ok(new Set(colours.filter((v,i)=>i%4===0)).size>2,'the preview is drawn');
   assert.notDeepEqual(colours,screen,'the screen shows the colours muted');
   await page.check('input[name=plate][value=console]');
@@ -115,6 +123,9 @@ try{
   assert.ok(await page.locator('input[name=face][value=enroute]').isDisabled());
   assert.equal(await page.locator('#face-why').textContent(),'International Space Station is on the Plotboard. Too fast for Enroute: round the Earth in 93 minutes, more of the world in an hour than its chart can hold.');
   assert.equal(await page.locator('#chart-title').textContent(),'Plotboard');
+  assert.ok(await page.locator('input[name=ticker]').isVisible());
+  assert.ok(await page.locator('#corner-light').isVisible());
+  assert.match(await page.locator('#corner-light-name').textContent(),/Estimated sunlight/);
   assert.match(await page.locator('#chart-note').textContent(),/^World band\. /);
   // The phone has no elements for it yet: the page asks CelesTrak, once,
   // and previews it.
@@ -262,6 +273,7 @@ try{
   // The phone's own fix, rounded to 0.01°.
   await page.click('#locate');
   assert.deepEqual([await page.inputValue('input[name=lat]'),await page.inputValue('input[name=lon]')],['48.86','2.35']);
+  await page.check('input[name=ticker]');
   await page.click('#save');
   for(let i=0;i<50&&!closes.length;i++)await page.waitForTimeout(50);
   assert.equal(errors.length,0,errors.join('\n'));
@@ -281,8 +293,8 @@ try{
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0]));
-  assert.equal(stored.hourFigures,'0');
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1]));
+  assert.equal(stored.hourFigures,'0');assert.equal(stored.ticker,'1');
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
   // The calendar's link is read at once (as https), and its timed event,
   // named by the phone, goes to the watch; the all-day one does not.

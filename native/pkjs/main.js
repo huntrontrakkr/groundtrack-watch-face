@@ -144,7 +144,7 @@ function watchSettings(){
   var transfer=TRANSFERS.indexOf(setting('transfer','off'));
   var figures=FIGURES.indexOf(setting('figures','michroma')),corner=CORNERS.indexOf(setting('corner','day'));
   bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?FIGURES.indexOf('michroma'):figures,corner<0?0:corner,
-    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,setting('legend','0')==='1'?1:0);
+    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,setting('legend','0')==='1'?1:0,setting('ticker','0')==='1'?1:0);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -403,7 +403,7 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),ticker:setting('ticker','0'),calendar:setting('calendar',''),plate:setting('plate','enroute'),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
@@ -445,6 +445,7 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(known(chosen.body))localStorage.setItem('body',chosen.body);
   if(chosen.face==='enroute'||chosen.face==='plotboard')localStorage.setItem('face',chosen.face);
   if(chosen.legend==='1'||chosen.legend==='0')localStorage.setItem('legend',chosen.legend);
+  if(chosen.ticker==='1'||chosen.ticker==='0')localStorage.setItem('ticker',chosen.ticker);
   if(chosen.hourFigures==='1'||chosen.hourFigures==='0')localStorage.setItem('hourFigures',chosen.hourFigures);
   if(Array.isArray(chosen.also))localStorage.setItem('also',chosen.also.filter(function(k){return k==='sun'||k==='moon';}).join(','));
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);

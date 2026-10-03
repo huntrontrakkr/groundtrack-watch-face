@@ -22,6 +22,9 @@ fmath_test: fmath_test.c ../src/c/fmath.c ../src/c/fmath.h
 segments_test: segments_test.c ../src/c/segments.c ../src/c/segments.h ../src/c/fmath.c
 	$(CC) $(CFLAGS) -o $@ segments_test.c ../src/c/segments.c ../src/c/fmath.c -lm
 
+settings_check: settings_check.c ../src/c/watch_data.c ../src/c/watch_data.h stub/pebble.h
+	$(CC) $(CFLAGS) -Istub -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ settings_check.c ../src/c/watch_data.c -lm
+
 # Host check of the map pack decoder.
 map_test: map_test.c ../src/c/map_pack.c ../src/c/map_pack.h
 	$(CC) $(CFLAGS) -o $@ map_test.c ../src/c/map_pack.c
@@ -68,5 +71,5 @@ watch_sim-%: watch_sim.c heap_model.h ../src/c/main.c ../src/c/watch_data.c $(fi
 	$(CC) $(SIMFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ watch_sim.c ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c -lm
 
 clean:
-	rm -f harness harness-exact harness-float map_test segments_test fmath_test build_check build_check-* san-* watch_sim-* *.o
+	rm -f harness harness-exact harness-float map_test segments_test fmath_test settings_check build_check build_check-* san-* watch_sim-* *.o
 .PHONY: arm shim-check clean

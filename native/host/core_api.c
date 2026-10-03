@@ -56,6 +56,7 @@ int core_build(const char *text,size_t length,int slot){
     else if(!strcmp(key,"flag"))in.flag=atoi(value);else if(!strcmp(key,"readout"))in.readout=atoi(value);
     else if(!strcmp(key,"numerals"))in.numerals=atoi(value);else if(!strcmp(key,"zonebody"))in.zone_body=atoi(value);
     else if(!strcmp(key,"tape"))in.tape=atoi(value);
+    else if(!strcmp(key,"ticker"))in.ticker=atoi(value);
     else if(!strcmp(key,"transfer"))in.transfer=atoi(value);else if(!strcmp(key,"also"))in.also=atoi(value);else if(!strcmp(key,"bare"))in.bare=atoi(value);else if(!strcmp(key,"legend"))in.legend=atoi(value);else if(!strcmp(key,"figures"))in.figures=atoi(value);else if(!strcmp(key,"corner"))in.corner=atoi(value);else if(!strcmp(key,"wday"))in.weekday=atoi(value);
     else if(!strcmp(key,"event")&&in.event_count<16){char name[8]={0};long long t=0;sscanf(value,"%lld %7s",&t,name);in.events[in.event_count].t=t;snprintf(in.events[in.event_count].name,6,"%s",name);in.event_count++;}
     else if(!strcmp(key,"clock24"))in.clock24=atoi(value);
@@ -90,7 +91,7 @@ int core_layout(int32_t *out,int max){
     offsetof(EnrScene,event_count),offsetof(EnrScene,events),(int32_t)sizeof(s_scene[0]->events[0]),
     offsetof(EnrScene,minutes),offsetof(EnrMinute,mx),offsetof(EnrMinute,my),offsetof(EnrMinute,zulu),offsetof(EnrMinute,minute),offsetof(EnrMinute,top),offsetof(EnrMinute,index),offsetof(EnrMinute,corner),
     offsetof(EnrScene,track_count),offsetof(EnrScene,track_t0),offsetof(EnrScene,track_step),offsetof(EnrScene,track),
-    (int32_t)sizeof(enr_real),offsetof(EnrFuller,tile_count),offsetof(EnrFuller,tile_face)};
+    (int32_t)sizeof(enr_real),offsetof(EnrFuller,tile_count),offsetof(EnrFuller,tile_face),offsetof(EnrScene,ticker)};
   const int n=(int)(sizeof v/sizeof v[0]);
   for(int i=0;i<n&&i<max;i++)out[i]=v[i];
   return n;

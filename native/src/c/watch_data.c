@@ -24,11 +24,13 @@ void settings_load(WatchSettings *s){
   // the phone sends one.
   // The Sun on Groundtrack, the ISS on Fuller.
 #if defined(FACE_FULLER)
-  const WatchSettings defaults={10,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0};
+  const WatchSettings defaults={11,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0,0};
 #else
-  const WatchSettings defaults={10,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0};
+  const WatchSettings defaults={11,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0};
 #endif
-  if(persist_read_data(SETTINGS_KEY,s,sizeof *s)!=(int)sizeof *s||s->version!=10)*s=defaults;
+  const int n=persist_read_data(SETTINGS_KEY,s,sizeof *s);
+  if(n==(int)sizeof *s&&s->version==10){s->version=11;s->ticker=0;}
+  else if(n!=(int)sizeof *s||s->version!=11)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
@@ -180,7 +182,7 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
   const struct tm *lt=localtime(&now);
   memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.also=s->also;in.bare=s->bare;in.legend=s->legend;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
+  in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.also=s->also;in.bare=s->bare;in.legend=s->legend;in.ticker=s->ticker;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
   in.local_hour=lt->tm_hour;
   in.weekday=lt->tm_wday;in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;

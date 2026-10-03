@@ -27,7 +27,7 @@ const hexDouble=v=>{if(v===Infinity)return 'INFINITY';if(v===-Infinity)return '-
 const hexFloat=v=>{const f=new DataView(new ArrayBuffer(4));f.setFloat32(0,v);return `0x${f.getUint32(0).toString(16).padStart(8,'0')}u`;};
 const g8=c=>c?0xC0|(c[0]/85)<<4|(c[1]/85)<<2|c[2]/85:0;
 
-const keys=['enroute','sectional','console','hypsometric','red','crt','sunlight','blueprint','amber','airbrush','dotmatrix','odyssey'];
+const keys=['enroute','sectional','console','hypsometric','red','crt','sunlight','blueprint','amber','airbrush','dotmatrix','odyssey','trackingboard','survey','operations'];
 if(keys.join()!==Object.keys(PLATES).join())throw new Error('Plate order changed: update native/src/c/chart.h');
 const inks=['water','land','coast','contour','shelf','grid','route','ink','mark'];
 const plates=keys.map(k=>{
@@ -38,15 +38,16 @@ const plates=keys.map(k=>{
 });
 // The tables resource.
 const table=[],u8=v=>table.push(v&255),u16=v=>{u8(v);u8(v>>8);},bin=(n,f)=>{const d=new DataView(new ArrayBuffer(n));f(d);table.push(...new Uint8Array(d.buffer));};
-const FLAG={ZONES:1,SCAN:2,TERMINATOR:4,NIGHT_DOTS:8,MONO:16,DOTS:32,WATERLINE:64,SHADE:128,LATTICE:256,HAL:512};
+const FLAG={ZONES:1,SCAN:2,TERMINATOR:4,NIGHT_DOTS:8,MONO:16,DOTS:32,WATERLINE:64,SHADE:128,LATTICE:256,HAL:512,WASH:1024};
 u16(keys.length);u16(network.stations.length);
 for(let c=0;c<256;c++)bin(4,d=>d.setFloat32(0,reliefMeters(c),true));
 for(const k of keys){
   const p=PLATES[k],tints=p.tints||[],depths=p.depths||[];
-  u16((p.night==='zones'?FLAG.ZONES:0)|(p.scan?FLAG.SCAN:0)|(p.terminator?FLAG.TERMINATOR:0)|(p.nightDots?FLAG.NIGHT_DOTS:0)|(p.mono?FLAG.MONO:0)|(p.dots?FLAG.DOTS:0)|(p.waterline?FLAG.WATERLINE:0)|(p.shade?FLAG.SHADE:0)|(p.lattice?FLAG.LATTICE:0)|(p.hal?FLAG.HAL:0));
+  u16((p.night==='zones'?FLAG.ZONES:0)|(p.scan?FLAG.SCAN:0)|(p.terminator?FLAG.TERMINATOR:0)|(p.nightDots?FLAG.NIGHT_DOTS:0)|(p.mono?FLAG.MONO:0)|(p.dots?FLAG.DOTS:0)|(p.waterline?FLAG.WATERLINE:0)|(p.shade?FLAG.SHADE:0)|(p.lattice?FLAG.LATTICE:0)|(p.hal?FLAG.HAL:0)|(p.wash?FLAG.WASH:0));
   for(const i of inks)for(const c of p[i])u8(g8(c));
   for(const c of [p.space,p.spaceInk,p.screen,p.waterline,p.terminator,p.nightDots])u8(g8(c));
-  u8(tints.length);for(let i=0;i<5;i++)u8(g8(tints[i]?.[1]));for(let i=0;i<5;i++)bin(8,d=>d.setFloat64(0,tints[i]?.[0]??0,true));
+  if(p.wash&&tints.length)throw new Error('A wash uses the two otherwise unused tint inks');
+  u8(tints.length);for(let i=0;i<5;i++)u8(g8(p.wash?.[i]??tints[i]?.[1]));for(let i=0;i<5;i++)bin(8,d=>d.setFloat64(0,tints[i]?.[0]??0,true));
   u8(depths.length);for(let i=0;i<2;i++)u8(g8(depths[i]?.[1]));for(let i=0;i<2;i++)bin(8,d=>d.setFloat64(0,depths[i]?.[0]??0,true));
 }
 for(const s of network.stations){for(let i=0;i<4;i++)u8(i<s.code.length?s.code.charCodeAt(i):0);bin(16,d=>{d.setFloat64(0,s.lat,true);d.setFloat64(8,s.lon,true);});}
