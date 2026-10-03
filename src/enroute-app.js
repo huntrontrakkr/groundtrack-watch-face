@@ -17,7 +17,7 @@ const NOTES={
   moon:'The ground directly beneath the Moon. It also runs west, a little more slowly than the Sun.',
   iss:'An archived orbit from 5 June 2019. The station laps most of the world in an hour, so the whole world is the chart.'
 };
-const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',figures:'michroma',corner:'day',zone:'utc',span:'day',ticker:false};
+const state={body:'sun',observation:'day',epoch:DEMOS.sun,timeZone:'America/New_York',clock24:true,plate:'enroute',readout:false,projection:'chart',home:HOMES['America/New_York'],events:STUDY_EVENTS,tape:'fixed',transfer:'off',numerals:'even',figures:'michroma',corner:'day',zone:'utc',span:'day'};
 let main,studyEpoch=state.epoch;
 const proofs={};
 function paint(canvas,buf){
@@ -47,7 +47,7 @@ function render(){
   if(!list.children.length){const li=document.createElement('li');li.textContent='No events this day.';list.append(li);}
   $('home-select').value=state.home?(Object.keys(HOMES).find(k=>HOMES[k]===state.home)||'here'):'none';
   $('enroute-figures').value=state.figures;$('enroute-numerals').value=state.numerals;$('enroute-margin-zone').value=state.zone;
-  $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-ticker').checked=state.ticker;$('enroute-readout').value=state.readout===true?'callout':state.readout||'off';
+  $('enroute-zone').value=state.timeZone;$('enroute-24').checked=state.clock24;$('enroute-readout').value=state.readout===true?'callout':state.readout||'off';
   const sat=catalogEntry(state.body),elements=elementsFor(state.body);
   $('enroute-date').textContent=new Date(state.epoch).toISOString().slice(0,10);$('body-note').textContent=sat?sat.note:NOTES[state.body];
   const lat=r.marker.lat,lon=((r.marker.lon+540)%360)-180,place=`${Math.abs(lat).toFixed(1)}°${lat<0?'S':'N'} ${Math.abs(lon).toFixed(1)}°${lon<0?'W':'E'}`;
@@ -154,7 +154,6 @@ try{
   $('enroute-corner').value=state.corner;
   $('enroute-corner').addEventListener('change',()=>{state.corner=$('enroute-corner').value;render();});
   $('enroute-margin-zone').addEventListener('change',()=>{state.zone=$('enroute-margin-zone').value;render();});
-  $('enroute-ticker').addEventListener('change',()=>{state.ticker=$('enroute-ticker').checked;render();});
-  $('enroute-readout').addEventListener('change',()=>{const v=$('enroute-readout').value;state.readout=v==='callout'?true:v==='flag'?'flag':false;render();});
+  $('enroute-readout').addEventListener('change',()=>{const v=$('enroute-readout').value;state.readout=v==='callout'?true:v==='flag'||v==='counter'?v:false;render();});
   render();window.groundtrackEnroute={ready:true,state,main,render,track,demos:DEMOS,observations:OBSERVATIONS,events:STUDY_EVENTS};
 }catch(error){$('enroute-caption').textContent=`The chart could not load: ${error.message}. Please reload.`;console.error(error);}

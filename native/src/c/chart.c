@@ -1186,7 +1186,7 @@ static bool finish_draw(ChartBuild *b){
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   const int count=b->count,h0=b->h0,h1=b->h1;const Cam *const cam=&b->cam;const bool world=FACE_WORLD&&(!FACE_HOUR||cam->world);
   const int top=cam->top,bottom=cam->bottom;
-  Draw *draw=NULL;Px *scratch=NULL;EnrScene *out=NULL;EnrPoint *points=NULL;int16_t zulu_x=0,zulu_baseline=0;
+  Draw *draw=NULL;Px *scratch=NULL;EnrScene *out=NULL;EnrPoint *points=NULL;int16_t zulu_x=0,zulu_baseline=0;uint8_t counter=0;
   int16_t tape_lo=0,tape_hi=0;
   // The drawing's lists, and the plane, nothing drawn. (The lists first:
   // the larger block, into the stretch the ground has left; the plane's
@@ -1449,7 +1449,22 @@ static bool finish_draw(ChartBuild *b){
     // The hour figures: this hour solid over its rose, the next outlined
     // (unless the chart is asked for bare of them: the route alone, the
     // time beside the body).
-    const int size=strlen(hour)>1||strlen(next)>1?72:80,hw=run_width(hour,size),nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
+    // As the counter readout, this hour's figure is the time, its minutes
+    // beside it as the time's figures are set (the minute renderer draws it,
+    // from the callout's figure sets): the widest minutes are given room,
+    // in 72 and 40 px figures, or 40 and 28 where those will not fit.
+    int size=strlen(hour)>1||strlen(next)>1?72:80,extra=0;
+    if(in->readout==3){
+      for(int try=0;try<2&&!extra;try++){
+        size=try?40:72;const int small=try?28:40,mono=in->numerals==ENR_MONO,even=in->numerals==ENR_EVEN,ms=even?size:small;
+        int widest=0;for(int d=0;d<10;d++)if(figure(ms,(char)('0'+d))->width>widest)widest=figure(ms,(char)('0'+d))->width;
+        const int cs=figure(small,'0')->height/7;
+        extra=gap_for(size)+(mono?3+26:in->numerals==ENR_COLON?1+(cs>3?cs:3)+gap_for(size)+1+2*widest+gap_for(small):3+2*widest+gap_for(ms));
+        if(run_width(hour,size)+extra>W-8&&!try)extra=0;
+      }
+      counter=(uint8_t)(size==72?2:1);
+    }
+    const int hw=run_width(hour,size)+extra,nw=run_width(next,size),fh=figure(size,'0')->height,gy=c0y-26-fh;
     Figures fig;if(!load_figures(src,size,hour,next,&fig,room,room_size))FAIL;
     int hx0=PLACE(c0x,hw),hy0=gy,nx0=PLACE(c1x,nw),ny0=gy;
     if(FACE_CHART&cam->slow){
@@ -1464,7 +1479,11 @@ static bool finish_draw(ChartBuild *b){
       STAND(c0x,c0y,hw,hx0,hy0);STAND(c1x,c1y,nw,nx0,ny0);
       #undef STAND
     }
-    FigureRun run;figure_run(hour,size,hx0,hy0,&run);figure_bind(&run,&fig,size);letter_figure(&cv,&run,0,L_INK);figs[nfigs++]=figure_bounds(&run);
+    // (The time, wider than the hour alone, can reach the next hour's
+    // figure: that one then stands on the other side of the route.)
+    if(counter&&hx0<nx0+nw&&nx0<hx0+hw&&hy0<ny0+fh&&ny0<hy0+fh){ny0=ny0<c1y?c1y+26:c1y-26-fh;ny0=ny0<4?4:ny0>H-18-fh?H-18-fh:ny0;}
+    FigureRun run;figure_run(hour,size,hx0,hy0,&run);figure_bind(&run,&fig,size);
+    if(counter)figs[nfigs++]=(Box){hx0,hy0,hw,fh};else{letter_figure(&cv,&run,0,L_INK);figs[nfigs++]=figure_bounds(&run);}
     figure_run(next,size,nx0,ny0,&run);figure_bind(&run,&fig,size);letter_figure(&cv,&run,2,L_INK);figs[nfigs++]=figure_bounds(&run);
 
   }
@@ -1599,9 +1618,9 @@ static bool finish_draw(ChartBuild *b){
   }else{release(b->plane.band[PLANE_BANDS-1]);b->plane.band[PLANE_BANDS-1]=NULL;}
   }
   out->track=points;out->track_count=(uint16_t)count;out->track_t0=b->t0;out->track_step=(int16_t)b->step;points=NULL;
-  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|((in->readout==1||(world&&in->readout==2))?16:0)|(in->readout==2&&!world?32:0)|(world&&(in->tape==1||in->tape==2)?64:0)|(world&&in->tape==2?128:0));
+  out->flags=(uint8_t)((pal->flags&PLATE_ZONES?1:0)|(pal->flags&PLATE_SCAN?2:0)|(pal->flags&PLATE_TERMINATOR?4:0)|(pal->flags&PLATE_NIGHT_DOTS?8:0)|((in->readout==1||(world&&in->readout>=2))?16:0)|(in->readout==2&&!world?32:0)|(world&&(in->tape==1||in->tape==2)?64:0)|(world&&in->tape==2?128:0));
   out->lattice=(pal->flags&PLATE_LATTICE)!=0;out->hal=(pal->flags&PLATE_HAL)!=0;out->clock=world&&in->tape==3;
-  out->wash=(pal->flags&PLATE_WASH)!=0;out->ticker=in->ticker;
+  out->wash=(pal->flags&PLATE_WASH)!=0;out->counter=counter;
   out->transfer=(uint8_t)(daily||!world||in->tape>2?0:in->transfer);
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
   memcpy(out->zoned,pal->zoned,sizeof out->zoned);
@@ -1652,7 +1671,7 @@ static bool finish_draw(ChartBuild *b){
     if(in->numerals==ENR_EVEN&&in->clock24&&!hour[1]){out->hour_text[0]='0';out->hour_text[1]=hour[0];}else memcpy(out->hour_text,hour,strlen(hour));
     out->avoid_count=(uint8_t)avoid_n;
     for(int k=0;k<avoid_n;k++){out->avoid[k][0]=(int16_t)avoid[k].x;out->avoid[k][1]=(int16_t)avoid[k].y;out->avoid[k][2]=(int16_t)avoid[k].w;out->avoid[k][3]=(int16_t)avoid[k].h;}
-    if((day||in->readout==2)&&!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
+    if((day||in->readout==2||counter)&&!chart_callout_figures(out,src->figures,src->figure_source,alloc))FAIL;
   }
   out->mark_count=(uint8_t)mark_n;for(int k=0;k<mark_n;k++){out->marks[k][0]=(uint8_t)(marks[k]%W);out->marks[k][1]=(uint8_t)(marks[k]/W);}
   if(home_mark){out->home_box[0]=(int16_t)home_box.x;out->home_box[1]=(int16_t)home_box.y;out->home_box[2]=(int16_t)home_box.w;out->home_box[3]=(int16_t)home_box.h;}
@@ -1768,7 +1787,7 @@ EnrScene *chart_finish(ChartBuild *b){
 bool chart_callout_figures(EnrScene *s,MapReadFn read,void *source,void *(*alloc)(size_t)){
   // The set's 20, 28 and 40 px figures, which lie together in figures.bin;
   // for the panel clock, its 28, 40 and 72.
-  const int at=s->clock?1:0;
+  const int at=s->clock||s->counter==2?1:0;
   const FigureGlyph *last=&s_glyphs[(at+3)*10-1];
   const unsigned from=s_glyphs[at*10].first,to=last->first+(unsigned)last->height*((last->width+7)/8);
   s->fig_bits=alloc(to-from);

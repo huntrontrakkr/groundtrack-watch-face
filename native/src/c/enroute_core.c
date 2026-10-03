@@ -943,24 +943,14 @@ static void draw_callout(Ctx *c){
 }
 // A box: x, y, w, h (w 0 for none).
 typedef struct {int x,y,w,h;} Box;
-#define TICK_X 132
-#define TICK_Y 180
-#define TICK_W 62
-#define TICK_H 36
-static int slide_offset(const EnrScene *s,const EnrMinute *m);
-// Fixed minutes, drawn with the existing lettering at triple size. No
-// bitmap or extra per-minute storage; the 60-pixel meter is one pixel/minute.
-static void draw_ticker(Ctx *c){
-  if(!c->s->ticker)return;
-  const int x0=TICK_X+slide_offset(c->s,c->m);const uint8_t ink=c->s->space_ink;
-  for(int y=TICK_Y;y<TICK_Y+TICK_H;y++)for(int x=x0;x<x0+TICK_W;x++)plot(c,x,y,c->s->space);
-  const int n=enr_text_pixels(c->m->minute,2,0,8,scratch);
-  for(int i=0;i<n;i++)for(int dy=0;dy<3;dy++)for(int dx=0;dx<3;dx++)plot(c,x0+10+3*scratch[i].x+dx,TICK_Y+3+3*scratch[i].y+dy,ink);
-  const int minute=(int)(c->m-c->s->minutes);
-  for(int k=0;k<60;k++){
-    if(k<minute)plot(c,x0+1+k,TICK_Y+30,ink);
-    if(k%5==0||k==59)for(int y=32;y<(k%15==0||k==59?35:33);y++)plot(c,x0+1+k,TICK_Y+y,ink);
-  }
+// The counter readout: this hour's figure as the time, hour and minutes
+// composed as the callout's and the panel clock's are, at the place the
+// builder left for it, knocked out of the map like the figure it replaces.
+static void draw_counter(Ctx *c){
+  const EnrScene *s=c->s;if(!s->counter||!s->fig_bits)return;
+  Glyph g[8];int n,fh;const int big=s->counter==2?2:1;
+  time_figure(s,c->m,big,big-1,g,&n,&fh);
+  set_time(c,g,n,s->fig_box[0][0],s->fig_box[0][1]);
 }
 // The bounds of glyphs' pixels as drawn (an outlined figure's outline), at
 // (fx, fy), within x0..x1 (the tape's edges).
@@ -983,7 +973,6 @@ static Box glyph_bounds(const EnrScene *s,const Glyph *g,int n,int fx,int fy,int
 // figures (both solid, as the browser counts them).
 static int minute_boxes(Ctx *c,Box *out){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;int n=0;
-  if(s->ticker)out[n++]=(Box){TICK_X+slide_offset(s,m),TICK_Y,TICK_W,TICK_H};
   if(VIEW_IS_DAY(s->view)||(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_CALLOUT))){
     Glyph g[8];int k,fx,fy,shown;if(callout_place(c,g,&k,&fx,&fy,&shown))out[n++]=glyph_bounds(s,g,k,fx,fy,-W,2*W);
   }else if(VIEW_IS_HOUR(s->view)&&(s->flags&ENR_MINUTE_FLAG)){
@@ -1030,7 +1019,7 @@ static void draw_events(Ctx *c){
 // its flag (or the tape's index and minutes), what was drawn over them, then
 // the margins' Zulu time, pass line and height. PART_ALL draws them all; a
 // single part is drawn alone, to measure where it goes.
-enum {PART_ALL,PART_SUN,PART_MOON,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PART_TICKER,PARTS};
+enum {PART_ALL,PART_SUN,PART_MOON,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PARTS};
 // The sliding band: how far its columns are turned at a minute (the body's
 // column comes under the index, W/2), and the rows turned (the band and
 // the route, between the tape's panel and the bottom margin). What stands
@@ -1075,7 +1064,7 @@ static void draw_moving(Ctx *c,int part){
   if(world&&(s->flags&ENR_SLIDING_WORLD)&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
   // The minute flag over everything: it is the time.
   if(flag&&!part)draw_flag(c);
-  if(!part||part==PART_TICKER)draw_ticker(c);
+  if(!world&&s->counter&&(!part||part==PART_READOUT))draw_counter(c);
 }
 static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride,const uint64_t *mask,const uint64_t *nmask,const Night *from){
   minute=minute<0?0:minute>59?59:minute;
@@ -1242,7 +1231,7 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]){
   case ENR_MEASURE_TAPE_HOUR:if(world&&(scene->flags&ENR_SLIDING_TAPE))sliding_figures(&c,1);break;
   case ENR_MEASURE_TAPE_NEXT:if(world&&(scene->flags&ENR_SLIDING_TAPE))sliding_figures(&c,2);break;
   case ENR_MEASURE_INDEX:if(world){if(scene->clock)draw_panel_clock(&c);else if(scene->flags&ENR_SLIDING_TAPE)draw_sliding_tape(&c);else draw_index(&c);}break;
-  case ENR_MEASURE_TICKER:if(scene->ticker){touch(&c,TICK_X,TICK_Y);touch(&c,TICK_X+TICK_W-1,TICK_Y+TICK_H-1);}break;
+  case ENR_MEASURE_COUNTER:s_figures_only=true;if(!world)draw_counter(&c);s_figures_only=false;break;
   }
   if(c.box[2]>=c.box[0]){out[0]=(int16_t)c.box[0];out[1]=(int16_t)c.box[1];out[2]=(int16_t)(c.box[2]-c.box[0]+1);out[3]=(int16_t)(c.box[3]-c.box[1]+1);}
   // The body is drawn on the band before it is turned.

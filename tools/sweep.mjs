@@ -55,10 +55,10 @@ function randomCase(){
   const home=chance(.75)?(([lat,lon])=>({code:'HOM',name:'Home',lat,lon}))(chance(.5)?pick(HOMES):[Math.round((rand()*180-90)*100)/100,Math.round((rand()*360-180)*100)/100]):null;
   const events=[];
   if(chance(.4))for(let n=Math.floor(rand()*20);n>0;n--)events.push({epoch:t+Math.floor(rand()*150-45)*60e3,label:nameCode(pick(TITLES))});
-  return {body,start:t,plate:pick(Object.keys(PLATES)),zone,home,projection:fuller?'fuller':'chart',readout:pick(['flag','callout',false]),numerals:pick(['colon','plain','even','mono','accent']),margin:pick(['utc','body']),
+  return {body,start:t,plate:pick(Object.keys(PLATES)),zone,home,projection:fuller?'fuller':'chart',readout:pick(['flag','callout','counter',false]),numerals:pick(['colon','plain','even','mono','accent']),margin:pick(['utc','body']),
     span:pick(['day','hour']),tape:pick(['fixed','tape','slide','clock','route']),transfer:pick(['off','vernier','comb','chevrons']),figures:pick(FIGURE_SETS)[0],corner:pick(['day','point','light']),clock24:chance(.5),events,
     // (Groundtrack's face, and the Sun and Moon marked beside the body.)
-    face:pick(['enroute','plotboard']),also:pick([[],[],['sun'],['moon'],['sun','moon']]),bare:chance(.2),legend:chance(.5),ticker:chance(.5)};
+    face:pick(['enroute','plotboard']),also:pick([[],[],['sun'],['moon'],['sun','moon']]),bare:chance(.2),legend:chance(.5)};
 }
 
 const face=c=>c.projection==='fuller'?'fuller':'enroute';

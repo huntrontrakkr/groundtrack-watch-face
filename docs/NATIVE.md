@@ -175,11 +175,11 @@ Without the SDK, the host harnesses in `native/host/` (`make -C native/host harn
 5. **Energy on a watch.** The emulator's instruction counts guide the work; current is measured only on a watch, as `docs/ENERGY.md` sets out. No battery claim is made until then.
 
 
-### 0.3.0: space-age plates and fixed minutes
+### 0.3.0 and 0.3.1: space-age plates, and the hour figure as the time
 
 Tracking Board, Survey Sheet and Operations append to the plate table, preserving all existing plate indices. Their 300 extra resource bytes add no palette allocation: a chart still reads one 100-byte plate. The pale paper/board inks are mixed by the minute renderer using otherwise unused tint slots; no dithering bitmap or extra class runs are stored.
 
-The optional ticker uses the existing Departure Mono glyphs at triple size and the existing pixel scratch list. Its 60-pixel meter advances once each minute. Its panel remains fixed when the world slides, and incremental redraws restore its previous columns. Both the settings page and the study render it with the same core. The persisted settings record remains 36 bytes; version 10 is migrated to 11 with the old preferences retained and the former padding byte (now the ticker) cleared. Older 25–30-byte phone packets leave the ticker off.
+The counter readout makes this hour's figure the time: the minute renderer composes hour and minutes as the panel clock and the callout do (`time_figure`), in the numeral style chosen, at the place the builder reserved for the widest minutes (72 and 40 px figures, or 40 and 28 where four figures would not fit the chart), knocked out of the map like the figure it replaces; the next hour's figure stands on the other side of the route where the time would reach it. The world band and the day charts keep their own time, and a bare hour chart its callout.
 
 The sunlight corner estimates full Earth occultation of the Sun from the satellite's height and direction. The 6,371-km spherical Earth has an umbra narrowing by 0.00461 km/km, treating the Sun as at one astronomical unit. SUNLIT includes partial sunlight. Earth's oblateness, atmosphere and varying solar distance are omitted; this is an estimated lighting state at minute resolution, not a forecast of visibility from home. Stale elements and watch status still take priority. The geometry follows the [spacecraft eclipse explanation in NASA/JPL's SPICE documentation](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/gf.html).
 

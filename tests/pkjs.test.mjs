@@ -140,7 +140,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
     // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0]},{Events:[0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0]},{Events:[0]}]));
     // The browser's other options, as set: a time callout in Departure Mono,
     // the 12-hour clock, the nautical zone; QZSS on the hour chart.
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
@@ -211,13 +211,14 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
     // How the tape's minutes fall on the route: the settings' 25th byte.
     for(const [transfer,code] of [['vernier',1],['comb',2],['chevrons',3],['wavy',0]]){
       const p=phone(bundle,now,{timeZone:'UTC',transfer});p.listeners.ready({});await p.quiet();
-      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,31);assert.equal(set[24],code);
+      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,30);assert.equal(set[24],code);
     }
-    // The ticker is independent of the route readout and applies to every
-    // view. Old phone settings and invalid values leave it disabled.
-    for(const [ticker,value] of [[undefined,0],['0',0],['1',1],['yes',0]]){
-      const p=phone(bundle,now,{timeZone:'UTC',body:'sat:25544',tape:'slide',readout:'off',ticker});p.listeners.ready({});await p.quiet();
-      assert.equal(p.messages.find(m=>m.Settings).Settings[30],value);
+    // The minute readout (byte 2): none, the flag, the time in full, or the
+    // counter (this hour's figure as the time); one the phone doesn't know
+    // is the flag.
+    for(const [readout,value] of [['off',0],['flag',1],['callout',2],['counter',3],['big',1]]){
+      const p=phone(bundle,now,{timeZone:'UTC',body:'sun',readout});p.listeners.ready({});await p.quiet();
+      assert.equal(p.messages.find(m=>m.Settings).Settings[2],value,readout);
     }
     // The margins' corner: the last byte, the day of the year for one the
     // phone doesn't know.
@@ -367,7 +368,7 @@ test('Groundtrack\'s two faces, the Sun and Moon beside the body, and satellites
       [{body:'sat:60133',face:'plotboard'},3<<1],[{body:'sat:60133',span:'hour'},2<<1],[{body:'sat:40296'},0],[{body:'sat:40296',face:'plotboard'},1<<1],[{body:'sat:54755',face:'plotboard'},1<<1],[{body:'sat:54755',face:'nonsense'},1<<1],[{body:'sat:40296',face:'nonsense'},0]])
       assert.equal((await settings(stored))[17],view,JSON.stringify(stored));
     // The Sun and Moon beside the body: the settings' last byte.
-    for(const [also,bits] of [['sun',1],['moon',2],['sun,moon',3],['mars',0]])assert.deepEqual(Array.from(await settings({body:'sat:25544',also})).slice(27),[bits,0,0,0],also);
+    for(const [also,bits] of [['sun',1],['moon',2],['sun,moon',3],['mars',0]])assert.deepEqual(Array.from(await settings({body:'sat:25544',also})).slice(27),[bits,0,0],also);
     // The hour chart bare of its hour figures (byte 28): the time in full
     // beside the body then, whatever the readout was; other charts keep theirs.
     for(const [stored,readout,bare] of [[{body:'sun',readout:'off',hourFigures:'0'},2,1],[{body:'sun',readout:'off'},0,0],[{body:'sun',face:'plotboard',readout:'off',hourFigures:'0'},0,1],[{body:'sat:25544',readout:'flag',hourFigures:'0'},1,1]]){

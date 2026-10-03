@@ -86,14 +86,15 @@ try{
   for(let i=0;i<200*228;i++){const c=frame[i];if(colours[4*i]!==((c>>4)&3)*85||colours[4*i+1]!==((c>>2)&3)*85||colours[4*i+2]!==(c&3)*85)differ++;}
   assert.equal(differ,0,'the preview is the core\'s own frame');}
   assert.equal(colours.length,200*228*4);
-  assert.ok(await page.locator('input[name=ticker]').isVisible());
-  assert.ok(!await page.locator('input[name=ticker]').isChecked());
-  await page.check('input[name=ticker]');
-  await page.waitForFunction(()=>window.previewDrawn?.input.includes('\nticker 1\n'));
-  assert.notDeepEqual(await pixels('preview'),colours,'the ticker is visible in the watch preview');
-  await page.uncheck('input[name=ticker]');
-  await page.waitForFunction(()=>window.previewDrawn?.input.includes('\nticker 0\n'));
-  assert.deepEqual(await pixels('preview'),colours,'disabling the ticker restores the original chart');
+  // The counter readout: this hour's figure as the time.
+  assert.ok(await page.locator('input[name=readout][value=counter]').isVisible());
+  await page.check('input[name=readout][value=counter]');
+  await page.waitForFunction(()=>window.previewDrawn?.input.includes('\nreadout 3\n'));
+  assert.notDeepEqual(await pixels('preview'),colours,'the counter is visible in the watch preview');
+  assert.ok(await page.locator('input[name=numerals]').first().isVisible(),'the counter takes the time\'s figures');
+  await page.check('input[name=readout][value=flag]');
+  await page.waitForFunction(()=>window.previewDrawn?.input.includes('\nreadout 0\n')||window.previewDrawn?.input.includes('\nflag 1\n'));
+  assert.deepEqual(await pixels('preview'),colours,'the flag again restores the original chart');
   assert.ok(new Set(colours.filter((v,i)=>i%4===0)).size>2,'the preview is drawn');
   assert.notDeepEqual(colours,screen,'the screen shows the colours muted');
   await page.check('input[name=plate][value=console]');
@@ -123,7 +124,7 @@ try{
   assert.ok(await page.locator('input[name=face][value=enroute]').isDisabled());
   assert.equal(await page.locator('#face-why').textContent(),'International Space Station is on the Plotboard. Too fast for Enroute: round the Earth in 93 minutes, more of the world in an hour than its chart can hold.');
   assert.equal(await page.locator('#chart-title').textContent(),'Plotboard');
-  assert.ok(await page.locator('input[name=ticker]').isVisible());
+  assert.ok(await page.locator('input[name=readout][value=counter]').isHidden(),'the world band offers no counter');
   assert.ok(await page.locator('#corner-light').isVisible());
   assert.match(await page.locator('#corner-light-name').textContent(),/Estimated sunlight/);
   assert.match(await page.locator('#chart-note').textContent(),/^World band\. /);
@@ -273,7 +274,6 @@ try{
   // The phone's own fix, rounded to 0.01°.
   await page.click('#locate');
   assert.deepEqual([await page.inputValue('input[name=lat]'),await page.inputValue('input[name=lon]')],['48.86','2.35']);
-  await page.check('input[name=ticker]');
   await page.click('#save');
   for(let i=0;i<50&&!closes.length;i++)await page.waitForTimeout(50);
   assert.equal(errors.length,0,errors.join('\n'));
@@ -293,8 +293,8 @@ try{
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1]));
-  assert.equal(stored.hourFigures,'0');assert.equal(stored.ticker,'1');
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0]));
+  assert.equal(stored.hourFigures,'0');
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
   // The calendar's link is read at once (as https), and its timed event,
   // named by the phone, goes to the watch; the all-day one does not.
@@ -328,7 +328,7 @@ try{
   assert.equal(await page2.locator('#chart-title').textContent(),'Sheet');
   assert.equal(await page2.locator('input[name=body]:checked').getAttribute('value'),'sat:25544');
   const shown=n=>page2.locator(`input[name=${n}]`).evaluateAll(e=>e.filter(x=>x.offsetParent!==null).map(x=>x.value));
-  assert.deepEqual([await shown('readout'),(await shown('tape')).length,(await shown('numerals')).length>0],[['off','flag','callout'],0,false]);
+  assert.deepEqual([await shown('readout'),(await shown('tape')).length,(await shown('numerals')).length>0],[['off','flag','counter','callout'],0,false]);
   await page2.check('input[name=body][value=sun]');
   assert.deepEqual([await shown('readout'),(await shown('numerals')).length],[[],5]);
   assert.match(await page2.locator('#chart-note').textContent(),/^Whole-day sheet/);

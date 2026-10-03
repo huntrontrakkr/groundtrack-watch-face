@@ -136,7 +136,9 @@ typedef struct {
   int8_t forward;
   // Paper/board inks mixed with a second ground ink, in tints[0..1].
   // These two switches occupy the old padding before hour_start.
-  bool wash,ticker;
+  // The hour figure as the time, its minutes beside it (the hour chart's
+  // counter readout): 0 none, 1 in the 40 and 28 px figures, 2 in 72 and 40.
+  bool wash;uint8_t counter;
   // The hour the scene draws, in Unix seconds.
   int32_t hour_start;
   // Pebble GColor8 values: 0b11rrggbb.
@@ -240,7 +242,7 @@ int enr_render_update(const EnrScene *scene,int from,int minute,uint8_t *frame,i
 // a minute's moving parts fall, as a box (x, y, w, h; w 0 for nothing
 // drawn): the body, the minute flag, the time callout, the sliding tape's
 // hour figure and next hour's figure, and the tape's index.
-enum {ENR_MEASURE_BODY,ENR_MEASURE_FLAG,ENR_MEASURE_CALLOUT,ENR_MEASURE_TAPE_HOUR,ENR_MEASURE_TAPE_NEXT,ENR_MEASURE_INDEX,ENR_MEASURE_TICKER};
+enum {ENR_MEASURE_BODY,ENR_MEASURE_FLAG,ENR_MEASURE_CALLOUT,ENR_MEASURE_TAPE_HOUR,ENR_MEASURE_TAPE_NEXT,ENR_MEASURE_INDEX,ENR_MEASURE_COUNTER};
 void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
 // The watch's own state, shown in the margins' corner in place of its
 // text until cleared: "NO LINK", "BAT 18" (at most 7 characters; "" for

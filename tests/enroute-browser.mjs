@@ -54,16 +54,16 @@ try{
   await page.locator('#enroute-readout').selectOption('callout');assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout));
   await page.locator('#enroute-readout').selectOption('flag');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout.kind),'flag');
   await page.locator('#enroute-readout').selectOption('off');assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
-  // Fixed minutes are independent of the route's readout and remain available
-  // when changing projections. Disabling them restores the same pixels.
-  const withoutTicker=await page.evaluate(()=>Array.from(groundtrackEnroute.main.last.frame));
-  await page.locator('#enroute-ticker').check();
-  assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.ticker.minute),'54');
+  // The counter readout: this hour's figure as the time, on the chart and
+  // the Fuller sheet alike; off again, the same pixels.
+  const withoutCounter=await page.evaluate(()=>Array.from(groundtrackEnroute.main.last.frame));
+  await page.locator('#enroute-readout').selectOption('counter');
+  assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout.kind),'counter');
+  // (The Sun's Fuller sheet is its day, which carries the time in full.)
+  await page.locator('[data-projection="fuller"]').click();assert.ok(['counter','callout'].includes(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout.kind)));
+  await page.locator('[data-projection="chart"]').click();await page.locator('#enroute-readout').selectOption('off');
   assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.figure.readout),null);
-  await page.locator('[data-projection="fuller"]').click();assert.ok(await page.evaluate(()=>groundtrackEnroute.main.last.ticker));
-  await page.locator('[data-projection="chart"]').click();await page.locator('#enroute-ticker').uncheck();
-  assert.equal(await page.evaluate(()=>groundtrackEnroute.main.last.ticker),null);
-  assert.deepEqual(await page.evaluate(()=>Array.from(groundtrackEnroute.main.last.frame)),withoutTicker);
+  assert.deepEqual(await page.evaluate(()=>Array.from(groundtrackEnroute.main.last.frame)),withoutCounter);
   // 24-hour figures are the default; the callout sets four figures, and the
   // margin can give the nautical zone under the body.
   assert.equal(await page.locator('#enroute-24').isChecked(),true);

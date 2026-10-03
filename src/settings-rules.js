@@ -25,7 +25,9 @@ export function chartOf(face,body,view,span,plot){
 // The chart as the watch is told it (its view).
 export const VIEW_CODES={hour:0,world:1,day:2,worldday:3};
 // What the chart's settings are, given the others:
-//   readout   the minute readouts offered (none on a day chart, whose time
+//   readout   the minute readouts offered: none, the minute flag, the
+//             counter (this hour's figure as the time, its minutes beside
+//             it) or the time in full beside the body (none on a day chart, whose time
 //             callout is always drawn; on the world band the flag alone, and
 //             only under a ruler, fixed or the route's: its panel carries
 //             the time, and a callout chosen there is the flag)
@@ -43,11 +45,11 @@ export const VIEW_CODES={hour:0,world:1,day:2,worldday:3};
 //   light     the Moon's light or a satellite's estimated sunlight in the corner
 export function settingsFor(face,body,view,{span='day',readout='flag',tape='fixed',plot='hour',bare=false}={}){
   const chart=chartOf(face,body,view,span,plot),world=chart==='world'||chart==='worldday',alone=bare&&chart==='hour';
-  const shown=alone?'callout':world&&readout==='callout'?'flag':readout;
+  const shown=alone?'callout':world&&(readout==='callout'||readout==='counter')?'flag':readout;
   return {chart,
-    readout:chart==='day'||alone||(world&&tape!=='fixed'&&tape!=='route')?[]:world?['off','flag']:['off','flag','callout'],
+    readout:chart==='day'||alone||(world&&tape!=='fixed'&&tape!=='route')?[]:world?['off','flag']:['off','flag','counter','callout'],
     readoutShown:shown,bare:chart==='hour',legend:face==='fuller',
-    numerals:chart==='day'||(chart==='hour'&&shown==='callout')||(world&&tape==='clock'),
+    numerals:chart==='day'||(chart==='hour'&&(shown==='callout'||shown==='counter'))||(world&&tape==='clock'),
     tape:world,transfer:chart==='world'&&tape!=='clock'&&tape!=='route',
     span:view==='day'&&face!=='plotboard',light:body==='moon'||body.indexOf('sat:')===0};
 }

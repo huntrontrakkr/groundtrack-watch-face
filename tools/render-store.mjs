@@ -28,17 +28,17 @@ const GALLERIES={
     ['moon',{body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'airbrush',readout:true,numerals:'colon'}],
     ['qzss',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'console',readout:'flag'}],
     ['clock',{body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'odyssey',tape:'clock',readout:'flag'}],
-    ['survey',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'survey',readout:'off',ticker:true,events:[ev('2026-09-28T15:40:00Z','Launch')]}],
-    ['operations',{body:'sat:49260',epoch:at('2026-10-01T09:33:00Z'),plate:'operations',tape:'slide',readout:'off',ticker:true,corner:'light'}],
-    ['trackingboard',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'trackingboard',face:'plotboard',tape:'route',readout:'off',ticker:true,also:['sun','moon']}]
+    ['survey',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'survey',readout:'counter',events:[ev('2026-09-28T15:40:00Z','Launch')]}],
+    ['operations',{body:'sat:49260',epoch:at('2026-10-01T09:33:00Z'),plate:'operations',tape:'slide',readout:'flag',corner:'light'}],
+    ['trackingboard',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'trackingboard',face:'plotboard',tape:'route',readout:'off',also:['sun','moon']}]
   ],
   fuller:[
-    ['operations',{body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',readout:'off',ticker:true,corner:'light',legend:true,also:['moon']}],
+    ['operations',{body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',readout:'counter',numerals:'colon',corner:'light',legend:true,also:['moon']}],
     ['sun',{body:'sun',epoch:at('2026-09-30T17:24:00Z'),plate:'odyssey',readout:true}],
     ['moon',{body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'airbrush',readout:true,numerals:'colon'}],
-    ['trackingboard',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'trackingboard',readout:true,ticker:true}],
+    ['trackingboard',{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'trackingboard',readout:true}],
     ['noaa',{body:'sat:43013',epoch:at('2026-09-30T17:42:00Z'),plate:'blueprint',readout:'flag'}],
-    ['survey',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'survey',readout:'off',ticker:true}]
+    ['survey',{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'survey',readout:'counter',numerals:'even'}]
   ]
 };
 for(const [face,list] of Object.entries(GALLERIES)){

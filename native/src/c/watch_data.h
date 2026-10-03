@@ -39,8 +39,8 @@ typedef struct {
   uint8_t bare;
   // A Fuller sheet's scale bar, in its open space.
   uint8_t legend;
-  // Large fixed minutes on every view (uses the former final padding byte).
-  uint8_t ticker;
+  // (The record's last byte, once a setting; kept zero.)
+  uint8_t spare;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);

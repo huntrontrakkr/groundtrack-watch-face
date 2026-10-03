@@ -11,7 +11,7 @@ import {settingsFor} from '../src/settings-rules.js';
 import {viewOf,plotOf} from '../src/satellites.js';
 import {execFileSync} from 'node:child_process';
 
-test('an upgrade preserves settings and does not interpret old padding as a ticker',()=>{
+test('an upgrade preserves settings and leaves the record\'s spare byte alone',()=>{
   execFileSync('make',['-s','-C','native/host','settings_check'],{stdio:'pipe'});
   execFileSync('native/host/settings_check',[],{stdio:'pipe'});
 });
@@ -42,5 +42,5 @@ test('every setting offered changes the face, and none that changes it is withhe
       else assert.equal(c.distinct,expected,`${at}: ${c.distinct} of its values draw differently, the page offers ${expected}`);
     }
   }
-  assert.deepEqual(Object.keys(SETTINGS).sort(),['bare','clock24','corner','events','figures','home','legend','margin','numerals','plate','readout','span','tape','ticker','transfer']);
+  assert.deepEqual(Object.keys(SETTINGS).sort(),['bare','clock24','corner','events','figures','home','legend','margin','numerals','plate','readout','span','tape','transfer']);
 });

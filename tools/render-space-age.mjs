@@ -1,4 +1,4 @@
-// The release's three plates, with the fixed ticker, drawn by the watch's
+// The release's three plates, with the counter readout, drawn by the watch's
 // core. Exact 200x228 frames enlarged 2x, with labels outside the frames.
 // node tools/render-space-age.mjs
 import {readFileSync,writeFileSync} from 'node:fs';
@@ -25,7 +25,7 @@ const rows=[
 rows.forEach((state,row)=>plates.forEach((plate,col)=>{
   const x=gap+col*(W+gap),y=gap+label+row*(H+label+gap);
   text(PLATES[plate].name.toUpperCase(),x,y-18);text(state.name+' / MINUTE 24',x,y-5);
-  const out=new CoreRenderer(core).render({...state,timeZone:'UTC',clock24:true,plate,readout:false,ticker:true,corner:'light',figures:plate==='survey'?'b612':'michroma',home:null});
+  const out=new CoreRenderer(core).render({...state,timeZone:'UTC',clock24:true,plate,readout:'counter',corner:'light',figures:plate==='survey'?'b612':'michroma',home:null});
   for(let dy=0;dy<H;dy++)sheet.set(out.buf.subarray(dy*W*3,(dy+1)*W*3),((y+dy)*width+x)*3);
 }));
 const file='docs/screenshots/space-age-v0.3.0.png';

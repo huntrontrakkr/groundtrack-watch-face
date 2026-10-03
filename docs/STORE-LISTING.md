@@ -25,7 +25,7 @@ Contour relief, the continental shelf and coastlines come from public-domain ele
 
 A home station gives the day's sunrise and sunset, or the satellite's next pass overhead. The margins carry the local date, Zulu time and the day of the year.
 
-Fifteen plates, from paper charts and airbrushed relief to blueprint blue, a dot-matrix wall, green or amber screens and 2001's HAL. Four sets of figures. New Tracking Board, Soviet Survey Sheet and Operations styles. An optional large minute ticker stays fixed on every view; satellites can show estimated sunlight or Earth shadow.
+Fifteen plates, from paper charts and airbrushed relief to blueprint blue, a dot-matrix wall, green or amber screens and 2001's HAL. Four sets of figures. New Tracking Board, Soviet Survey Sheet and Operations styles. The hour figure can carry the minutes; satellites can show sunlight or Earth shadow.
 
 The watch builds its charts and repaints what moves each minute. The phone sends the Sun and Moon weeks ahead and satellite orbits days ahead, so it keeps going without the phone.
 
