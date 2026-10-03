@@ -1,8 +1,11 @@
 # Host harness and a watch-side size check for the native core.
+# (Every core build also depends on the generated tables: their counts are
+# compiled in, so a new plate must rebuild them.)
+GEN=../src/c/generated/chart_data.h
 CORE=core_api.c ../src/c/enroute_core.c ../src/c/departure_font.c ../src/c/chart.c ../src/c/fuller.c ../src/c/map_pack.c ../src/c/segments.c ../src/c/passes.c
 CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 
-harness: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/chart.h
+harness: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/chart.h $(GEN)
 	$(CC) $(CFLAGS) -std=gnu11 -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The watch's chart builder's memory, as a watch's heap would see it.
@@ -30,11 +33,11 @@ map_test: map_test.c ../src/c/map_pack.c ../src/c/map_pack.h
 	$(CC) $(CFLAGS) -o $@ map_test.c ../src/c/map_pack.c
 
 # The same deciding night by the double sums alone (no fixed-point filter).
-harness-exact: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
+harness-exact: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h $(GEN)
 	$(CC) $(CFLAGS) -std=gnu11 -DENR_EXACT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The same with single-precision night arithmetic, as the watch would run it.
-harness-float: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h
+harness-float: harness.c $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/departure_font.h $(GEN)
 	$(CC) $(CFLAGS) -std=gnu11 -DENR_FLOAT -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
 
 # The core compiled for the watch's Cortex-M4 (single-precision FPU), with
@@ -57,9 +60,9 @@ shim-check: ../src/c/main.c
 # (Shifts of negative numbers are the fixed-point code's own, and defined
 # by the compilers used.)
 SANFLAGS=-std=gnu11 -O1 -g -fsanitize=address,undefined -fno-sanitize=shift-base -fno-sanitize-recover=undefined -fno-omit-frame-pointer -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
-san-harness-%: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/chart.h
+san-harness-%: harness.c core_api.h $(CORE) ../src/c/fmath.c ../src/c/enroute_core.h ../src/c/chart.h $(GEN)
 	$(CC) $(SANFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ harness.c $(CORE) ../src/c/fmath.c -lm
-san-build_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h
+san-build_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h $(GEN)
 	$(CC) $(SANFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 
 # The watch app itself on the host (watch_sim.c: main.c and watch_data.c
@@ -67,7 +70,7 @@ san-build_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.
 # each app: watch_sim-enroute, watch_sim-fuller. tests/watch.test.mjs plays
 # the phone to it.
 SIMFLAGS=$(SANFLAGS) -Wno-unused-function -Istub -I../src/c -DPBL_SDK_3 -Dmain=watch_main -Dtime=sim_time -Dmalloc=sim_malloc -Dfree=sim_free -Drealloc=sim_realloc -DNO_STACK
-watch_sim-%: watch_sim.c heap_model.h ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c stub/pebble.h ../src/c/watch_data.h ../src/c/chart.h
+watch_sim-%: watch_sim.c heap_model.h ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c stub/pebble.h ../src/c/watch_data.h ../src/c/chart.h $(GEN)
 	$(CC) $(SIMFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ watch_sim.c ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c -lm
 
 clean:
