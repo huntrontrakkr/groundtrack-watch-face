@@ -28,6 +28,14 @@ def build(ctx):
         ctx.env.append_value('CFLAGS', ['-ffp-contract=off', '-flto', '-D' + FACE])
         # (The app's header is referenced by nothing: -u keeps it through the link.)
         ctx.env.append_value('LINKFLAGS', ['-flto', '-Os', '-ffp-contract=off', '-Wl,-u,__pbl_app_info'])
+        # Smaller still, for the polar charts' room: fewer functions inlined,
+        # and loops left as written (about 2.4 KB; tools/energy measures
+        # what it costs the watch's work).
+        size = ['-fno-inline-functions-called-once', '-fno-early-inlining', '-fno-partial-inlining',
+                '-fno-tree-tail-merge', '-fno-tree-pre', '-fno-reorder-blocks', '-fno-move-loop-invariants',
+                '-fno-tree-dominator-opts', '-fno-tree-loop-im', '-fno-tree-scev-cprop']
+        ctx.env.append_value('CFLAGS', size)
+        ctx.env.append_value('LINKFLAGS', size)
         import os
         ctx.env.append_value('CFLAGS', os.environ.get('GT_FLAGS','').split())
         ctx.env.append_value('LINKFLAGS', os.environ.get('GT_FLAGS','').split())

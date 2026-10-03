@@ -9,7 +9,11 @@
 
 #define MAP_TILE 32
 #define MAP_LEVELS 10
-#define MAP_MIPS 3
+// The world's three resolutions, then each polar cap's (the north's, the
+// south's): CAP degrees of the polar plane each way from the pole
+// (tools/generate-map-pack.mjs capOf()).
+#define MAP_MIPS 9
+#define MAP_CAP 72
 #define MAP_CONTEXTS (2*MAP_LEVELS*MAP_LEVELS)
 
 // Reads length bytes at offset from the pack; returns the bytes read.

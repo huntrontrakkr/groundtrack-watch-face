@@ -10,8 +10,13 @@
 #include "fuller.h"
 #include <math.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 
+// The polar charts (place()): the hour chart's, not a Fuller sheet's.
+#ifndef POLAR
+#define POLAR FACE_CHART
+#endif
 #define W CHART_W
 #define H CHART_H
 // Math.PI: this literal rounds to the same double.
@@ -37,7 +42,11 @@ const char *chart_failure(void){static char text[24];char *p=text;memcpy(p,"char
 #define WORLD_SOUTH (-60)
 // wide: a whole-orbit or whole-day view (fewer contours, a one-ink plate's
 // waterlines left out); on a rolling Fuller sheet every satellite's.
-typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world,day,wide;double nx,ny;int top,bottom;} Cam;
+// pole: a polar chart's (1 north, -1 south; see place()), its plane turned
+// by rc, rs (turn()); km its degrees of plane to a degree of the Earth at
+// the middle, and cc, sc the cosine and sine of the middle's angle from
+// the pole (local()).
+typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world,day,wide;double nx,ny;int top,bottom;int pole;double rc,rs,km,cc,sc,p[6];} Cam;
 // The rolling Fuller sheet being built, if it is one: projection goes
 // through it (roll.js project()).
 static const FullerCam *s_roll;
@@ -45,9 +54,44 @@ static double sx(const Cam *c,double lon){return c->x0+(lon-c->lonMid)*c->k*c->s
 static double sy(const Cam *c,double lat){return c->y0-(lat-c->lat0)*c->scale;}
 static double glat(const Cam *c,double y){return c->lat0+(c->y0-y)/c->scale;}
 static double glon(const Cam *c,double x){return c->lonMid+(x-c->x0)/(c->k*c->scale);}
+// A place's direction: x, y and z.
+static void dir3(double lat,double lon,double d[3]){const double c=f_cos(lat*RAD);d[0]=c*f_cos(lon*RAD);d[1]=c*f_sin(lon*RAD);d[2]=f_sin(lat*RAD);}
+static double dot3(const double *a,const double *b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+// A polar chart's plane (tools/generate-map-pack.mjs capOf()), turned so
+// that north is up at the chart's middle: a place's latitude and longitude
+// become its distances right and up on it, which the chart is drawn by as
+// a flat chart is by longitude and latitude (sx(), sy()). Near a pole the
+// flat chart's meridians close up; this one has none to. (On the plane,
+// unturned, a direction d is at 2 (d.y, -pole d.x) / (1 + pole d.z)
+// radians; the turned axes are cam->p's rows.)
+static void place(const Cam *c,double *lat,double *lon){
+  if(!POLAR||!c->pole)return;
+  double d[3];dir3(*lat,*lon,d);const double q=1+c->pole*d[2];
+  *lon=dot3(c->p,d)/q;*lat=dot3(c->p+3,d)/q;
+}
+// The plane turned: its right (rc, rs), and the axes for place().
+static void turn(Cam *c,double rc,double rs){
+  const double k=2/RAD,p[6]={-c->pole*rs*k,rc*k,0,-c->pole*rc*k,-rs*k,0};
+  c->rc=rc;c->rs=rs;memcpy(c->p,p,sizeof p);
+}
+// A direction on the Earth (the Sun's, a satellite's): x, y and z; on a
+// polar chart, along its middle's direction, east and north there, the
+// frame its night is drawn in (the minute renderer's rows and columns are
+// then the chart's own, in degrees from the middle: a few tenths of a
+// degree out at the corners).
+static void local(const Cam *c,double lat,double lon,double v[3]){
+  dir3(lat,lon,v);
+  if(POLAR&&c->pole){
+    // (East is the plane's right; the middle's direction and north there
+    // are along the plane's up, b, and z: the middle is c from the pole.)
+    const double a=dot3(c->p,v)*RAD/2,b=-c->pole*dot3(c->p+3,v)*RAD/2,z=c->pole*v[2];
+    v[0]=c->sc*b+c->cc*z;v[1]=a;v[2]=c->pole*(c->sc*z-c->cc*b);
+  }
+}
 // project(): the copy of a longitude nearest the middle of the view.
 static void project(const Cam *c,double lat,double lon,double *x,double *y){
   if(FACE_ROLL&&(!FACE_CHART||s_roll)){fuller_project(s_roll,lat,lon,x,y);return;}
+  place(c,&lat,&lon);
   static const double turns[3]={-360,0,360};double best=0;bool have=false;
   for(int t=0;t<3;t++){const double q=sx(c,lon+turns[t]);if(!have||fabs(q-c->x0)<fabs(best-c->x0)){best=q;have=true;}}
   *x=best;*y=sy(c,lat);
@@ -56,15 +100,17 @@ static bool in_band(const Cam *c,double y){return y>=c->top&&y<=c->bottom;}
 
 // enroute-render.js destination(): the point at an angular distance and
 // bearing, with sines and cosines of the start and bearing given.
+// (The arcsine as an arctangent: the hour chart's app has no room for both.)
 static void destination(double lat,double lon,double sp,double cp,double sd,double cd,double sb,double cb,double *qlat,double *qlon){
-  const double q=f_asin(sp*cd+cp*sd*cb);
-  *qlat=q/RAD;*qlon=lon+f_atan2(sb*sd*cp,cd-sp*f_sin(q))/RAD;
+  const double z=sp*cd+cp*sd*cb;
+  *qlat=f_atan2(z,f_sqrt(1-z*z))/RAD;*qlon=lon+f_atan2(sb*sd*cp,cd-sp*z)/RAD;
 }
 // home.js reach(): the ground range, in degrees, within which a satellite
 // at altitude stands 10 degrees above the horizon; and a network station's
 // acquisition circle (ACQUISITION: 5 degrees, a 410 km orbit).
 #define EARTH 6371
-static double reach(double altitude,double mask){const double m=mask*RAD;return (f_acos(EARTH*f_cos(m)/(EARTH+altitude))-m)/RAD;}
+// (The arccosine as an arctangent: the app has no room for one of its own.)
+static double reach(double altitude,double mask){const double m=mask*RAD,x=EARTH*f_cos(m)/(EARTH+altitude);return (f_atan2(f_sqrt(1-x*x),x)-m)/RAD;}
 // (Home's circle at the satellite's height, to two degrees: an oval orbit
 // changes height every minute, and each circle of its own is kept.)
 #define REACH(altitude) (js_round(reach(altitude,10)/2)*2)
@@ -122,27 +168,57 @@ static bool body_place(const ChartSources *src,int body,int64_t t,double *lat,do
 #define MAP_ROWS 4                       // cell rows kept
 #define MAP_COLS 402                     // cells across (under 400 by the mip rule, and a neighbour)
 #define MAP_ACROSS 15                    // tiles across
+#define CAP_TILES 12                     // a polar cap's tiles kept, at most
 typedef struct {
   MapPack pack;int mip;const MapMip *q;double cell;      // the mip read and its cell size in degrees
   int c0,ncols;                          // the chart's first cell column (the mip's), and how many
   int ty,tx0,ntiles;                     // the strip open: its tile row, first tile column, tiles
   int row_j[MAP_ROWS],newest,next;       // the rows kept (-1 none) and the newest's
-  uint8_t rows[MAP_ROWS][MAP_COLS];
-  MapTileStream tiles[MAP_ACROSS];
   bool failed;
+  // A polar cap's tiles, decoded whole as its pixels ask for them (a polar
+  // chart's rows cross the cap's at any angle), kept tiles of them (as many
+  // as a row crosses, and some), through the first decoder; a polar chart's
+  // Tiles end there (POLAR_TILES).
+  uint8_t *cache;int16_t key[CAP_TILES];uint8_t evict,kept;
+  MapTileStream tiles[MAP_ACROSS];
+  uint8_t rows[MAP_ROWS][MAP_COLS];
 } Tiles;
+#define POLAR_TILES (offsetof(Tiles,tiles)+sizeof(MapTileStream))
 // The mip for a chart's scale (pixels a degree): the coarsest whose cells
 // are at most a pixel wide, else the finest the pack has.
-static void tiles_choose(Tiles *t,double px_per_degree){
+// (The world's mips, or on a polar chart its cap's three.)
+static void tiles_choose(Tiles *t,const Cam *cam){
+  const double px_per_degree=cam->scale;const int first=POLAR&&cam->pole?cam->pole>0?3:6:0;
   int best=-1;double bd=0,finest=1e9;int fine=0;
-  for(int m=0;m<t->pack.mips;m++){
+  for(int m=first;m<first+3;m++){
     const double d=map_cell_degrees(t->pack.mip[m].resolution);
     if(d<finest){finest=d;fine=m;}
     if(d*px_per_degree<=1.0&&d>bd){bd=d;best=m;}
   }
   t->mip=best>=0?best:fine;t->q=&t->pack.mip[t->mip];t->cell=map_cell_degrees(t->q->resolution);
   for(int k=0;k<MAP_ROWS;k++)t->row_j[k]=-1;
-  t->newest=-1;t->next=0;t->ty=-1;
+  t->newest=-1;t->next=0;t->ty=-1;memset(t->key,255,sizeof t->key);
+}
+// Whether a polar chart's corners are past its cap's edge.
+static __attribute__((noinline)) bool past_cap(const Cam *c){
+  if(!POLAR||!c->pole)return false;
+  _Pragma("GCC unroll 0")
+  for(int k=0;k<4;k++){
+    const double lo=glon(c,k&1?W:0),la=glat(c,k&2?H:0);
+    if(fabs(lo*c->rc-la*c->rs)>MAP_CAP-1||fabs(lo*c->rs+la*c->rc)>MAP_CAP-1)return true;
+  }
+  return false;
+}
+// A cell of a polar cap (land << 4 | level), through the cache.
+static int cap_cell(Tiles *t,int i,int j){
+  const unsigned n=t->q->width;if((unsigned)i>=n||(unsigned)j>=n)return 0;
+  const int key=j/MAP_TILE*t->q->cols+i/MAP_TILE;int k=0;
+  while(k<t->kept&&t->key[k]!=key)k++;
+  if(k==t->kept){
+    k=t->evict;t->evict=(uint8_t)((k+1)%t->kept);t->key[k]=(int16_t)key;
+    if(!map_tile(&t->pack,t->mip,i/MAP_TILE,j/MAP_TILE,t->cache+k*MAP_TILE*MAP_TILE,t->tiles))t->failed=true;
+  }
+  return t->cache[(k*MAP_TILE+j%MAP_TILE)*MAP_TILE+i%MAP_TILE];
 }
 // The map's place under a longitude or latitude: the cell centre before the
 // point and the fraction past it (Q8), for bilinear reading. Columns are
@@ -423,9 +499,10 @@ static bool ground_row_done(Ground *g);
 static int ground_rows_end(Ground *g);
 // Up to `budget` pixel rows of the ground: 1 while rows remain, 0 when the
 // ground is done, -1 if the map fails.
+static int32_t cap_at(Tiles *t,int32_t qi,int32_t qj,int32_t *height);
 static int ground_step(Ground *g,Tiles *t,int budget){
   const Cam *cam=g->cam;
-  if(g->land_rows==0){
+  if(!(POLAR&&cam->pole)&&g->land_rows==0){
     if(!tiles_columns(t,cam))return -1;
     for(int x=0;x<W;x++){g->col[0][x]=place_lon(t,glon(cam,x+.25));g->col[1][x]=place_lon(t,glon(cam,x+.5));g->col[2][x]=place_lon(t,glon(cam,x+.75));}
   }
@@ -435,23 +512,42 @@ static int ground_step(Ground *g,Tiles *t,int budget){
     // at its centre. Space (off the world band) has no land; its height,
     // sampled all the same, is smoothed into the band's edge.
     const bool band=y>=cam->top&&y<=cam->bottom;
+    int32_t *e0=g->row;uint8_t *land=g->land[y%LAND_RING];memset(land,0,W/8+1);memset(g->space[y%LAND_RING],0,W/8+1);
+    if(POLAR&&cam->pole){
+      // A polar chart's pixels read off the cap: the cap's cells (Q16) at
+      // the row's left edge, and a pixel's steps right (ai, -ci) and down
+      // (ci, ai).
+      const double u=65536/(cam->scale*t->cell),lo=glon(cam,0),la=glat(cam,y),X=lo*cam->rc-la*cam->rs,Y=lo*cam->rs+la*cam->rc;
+      const int32_t ai=(int32_t)(cam->rc*u),ci=(int32_t)(cam->rs*u),i0=(int32_t)(((X+MAP_CAP)/t->cell-.5)*65536),j0=(int32_t)(((MAP_CAP-Y)/t->cell-.5)*65536);
+      // (Land and height at the pixel's middle: the cap's cells are a pixel
+      // or more.)
+      for(int x=0;x<W;x++)if(cap_at(t,i0+x*ai+((ai+ci)>>1),j0-x*ci+((ai-ci)>>1),&e0[x])>=128)land[x>>3]|=(uint8_t)(1<<(x&7));
+    }else{
     const Place ra=place_lat(t,glat(cam,y+.25)),rm=place_lat(t,glat(cam,y+.5)),rb=place_lat(t,glat(cam,y+.75));
     // The cell rows under this pixel row, in order down the map.
     const uint8_t *ra0=map_row(t,ra.i),*ra1=map_row(t,ra.i+1),*rm0=map_row(t,rm.i),*rm1=map_row(t,rm.i+1),*rb0=map_row(t,rb.i),*rb1=map_row(t,rb.i+1);
     const int16_t *heights=t->pack.height;
-    int32_t *e0=g->row;uint8_t *land=g->land[y%LAND_RING];memset(land,0,W/8+1);memset(g->space[y%LAND_RING],0,W/8+1);
     for(int x=0;x<W;x++){
       if(band){
         const int32_t c=land_at(ra0,ra1,g->col[0][x],ra.f)+land_at(ra0,ra1,g->col[2][x],ra.f)+land_at(rb0,rb1,g->col[0][x],rb.f)+land_at(rb0,rb1,g->col[2][x],rb.f);
         if(c>=512)land[x>>3]|=(uint8_t)(1<<(x&7));
       }
       e0[x]=height_at(heights,rm0,rm1,g->col[1][x],rm.f);
-    }
+    }}
     if(t->failed)return -1;
     row_distances(g,y);
     if(!ground_row_done(g))return -1;
   }
   return ground_rows_end(g);
+}
+// Land (0..256) and, if asked, height bilinear at a place on a polar cap,
+// in its cells (Q16), as land_at() and height_at() on the world.
+static int32_t cap_at(Tiles *t,int32_t qi,int32_t qj,int32_t *height){
+  const int i=qi>>16,j=qj>>16;
+  const uint8_t r0[2]={(uint8_t)cap_cell(t,i,j),(uint8_t)cap_cell(t,i+1,j)},r1[2]={(uint8_t)cap_cell(t,i,j+1),(uint8_t)cap_cell(t,i+1,j+1)};
+  const Place px={0,qi>>8&255};const int32_t fy=qj>>8&255;
+  if(height)*height=height_at(t->pack.height,r0,r1,px,fy);
+  return land_at(r0,r1,px,fy);
 }
 // A pixel row sampled (its land bits and space bits in the rings, its relief
 // in g->row): smoothed, and the rows now ready finalised.
@@ -829,6 +925,7 @@ static int make_track(const ChartInput *in,const ChartSources *src,TrackPoint *t
 static void ground_free(ChartBuild *b){
   const ChartSources *src=&b->src;
   if(FACE_CHART&&b->tiles&&b->tiles->pack.tables)map_pack_close(&b->tiles->pack,src->release);
+  if(b->tiles)src->release(b->tiles->cache);
   src->release(b->tiles);b->tiles=NULL;src->release(b->ground);b->ground=NULL;
 }
 static void plane_free(ChartBuild *b){
@@ -1015,8 +1112,9 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   // can hold is the heap's to say: a chart of 60 degrees takes 53 KB at the
   // most, one of 85 more than the watch has.)
   #define HOUR_HOLDS 50
-  #define HOUR_POLE 86
-  if(FACE_WORLD&&FACE_HOUR&&in->body>=2&&in->view==0&&(maxlon-minlon>HOUR_HOLDS||maxlat-minlat>HOUR_HOLDS)){release(track);b->track=NULL;b->in.view=1;goto again;}
+  // (An hour within ten degrees of a pole runs any way in longitude: what
+  // it runs is its latitude's.)
+  if(FACE_WORLD&&FACE_HOUR&&in->body>=2&&in->view==0&&((maxlon-minlon>HOUR_HOLDS&&maxlat<80&&minlat>-80)||maxlat-minlat>HOUR_HOLDS)){release(track);b->track=NULL;b->in.view=1;goto again;}
   Cam cam;memset(&cam,0,sizeof cam);cam.top=0;cam.bottom=H;
   if(VIEW_IS_DAY(in->view)){
     // The whole local day, north up, its shape fitted and set to the right.
@@ -1056,31 +1154,54 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     // A slow orbit's hour runs any way: its two stations SPAN pixels apart
     // along the route, north up, the route set off-centre away from the
     // side its figures take (above, or beside a route that runs north-south).
-    const TrackPoint *a=&track[h0],*b=&track[h1];
-    cam.lat0=(a->a+b->a)/2;cam.k=f_cos(cam.lat0*RAD);cam.lonMid=(a->b+b->b)/2;
-    const double sx_=(b->b-a->b)*cam.k,sy_=-(b->a-a->a),l0=f_sqrt(sx_*sx_+sy_*sy_),len=l0?l0:1;
-    // (Nor an hour's run larger than two degrees to the span.)
-    cam.scale=CHART_SPAN/(len>2?len:2);
-    double nx=sy_/len,ny=-sx_/len;
-    if(ny>0){nx=-nx;ny=-ny;}
-    if(fabs(ny)<.3&&nx>0){nx=-nx;ny=-ny;}
-    cam.slow=true;cam.nx=nx;cam.ny=ny;
-    cam.x0=W/2-nx*30;cam.y0=(14+H-16)/2+8-ny*30;
+    // A chart that would reach within ten degrees of a pole is a polar
+    // chart instead (place()), laid out the same way on its plane.
+    double al=track[h0].a,ao=track[h0].b,bl=track[h1].a,bo=track[h1].b;
+    cam.k=f_cos((al+bl)/2*RAD);
+    for(;;){
+      cam.lat0=(al+bl)/2;cam.lonMid=(ao+bo)/2;
+      const double sx_=(bo-ao)*cam.k,sy_=-(bl-al),l0=f_sqrt(sx_*sx_+sy_*sy_),len=l0?l0:1;
+      // (Nor an hour's run larger than two degrees to the span.)
+      cam.scale=CHART_SPAN/(len>2?len:2);
+      double nx=sy_/len,ny=-sx_/len;
+      if(ny>0){nx=-nx;ny=-ny;}
+      if(fabs(ny)<.3&&nx>0){nx=-nx;ny=-ny;}
+      cam.slow=true;cam.nx=nx;cam.ny=ny;
+      cam.x0=W/2-nx*30;cam.y0=(14+H-16)/2+8-ny*30;
+      if(!POLAR||cam.pole||(glat(&cam,0)<=80&&glat(&cam,H)>=-80))break;
+      // The plane unturned, and the hour's middle on it; north there is up
+      // (an hour about the pole itself is turned as its middle falls, a hair
+      // off it if need be). The middle is c from the pole, tan(c/2) = t, at
+      // the longitude whose east is the plane's right.
+      cam.pole=glat(&cam,0)>80?1:-1;cam.k=1;turn(&cam,1,0);
+      double pa=al,qa=ao,pb=bl,qb=bo;place(&cam,&pa,&qa);place(&cam,&pb,&qb);
+      const double mx=(qa+qb)/2+1e-9,my=(pa+pb)/2,m=f_sqrt(mx*mx+my*my),u=m/cam.pole;
+      turn(&cam,-my/u,mx/u);
+      const double t=m*RAD/2;cam.km=1+t*t;cam.cc=(1-t*t)/cam.km;cam.sc=2*t/cam.km;
+      place(&cam,&al,&ao);place(&cam,&bl,&bo);
+    }
+    // (A polar chart past its cap, the widest of a far oval orbit, has the
+    // world band.)
+    if(past_cap(&cam)){release(track);b->track=NULL;b->in.view=1;goto again;}
   }
-  // (Nor is an hour whose chart would reach a pole drawn on it: the
-  // meridians close up there and the land is drawn out along them. It has
-  // the world band.)
-  if(FACE_WORLD&&cam.slow&&(glat(&cam,0)>HOUR_POLE||glat(&cam,H)<-HOUR_POLE)){release(track);b->track=NULL;b->in.view=1;goto again;}
   b->count=count;b->h0=h0;b->h1=h1;b->cam=cam;
   release(b->track);b->track=NULL;
 
   // The ground, with the map's tiles and the relief's rings, freed after.
-  b->tiles=alloc(sizeof(Tiles));b->ground=alloc(sizeof(Ground));b->sink.alloc=alloc;
+  const size_t tiles_size=POLAR&&b->cam.pole?POLAR_TILES:sizeof(Tiles);
+  b->tiles=alloc(tiles_size);b->ground=alloc(sizeof(Ground));b->sink.alloc=alloc;
   // (Cleared before a failure frees it: the pack's tables are not yet there.)
-  if(b->tiles)memset(b->tiles,0,sizeof *b->tiles);
+  if(b->tiles)memset(b->tiles,0,tiles_size);
   if(!b->tiles||!b->ground)FAIL;
   if(!map_pack_open(&b->tiles->pack,src->map,src->map_source,alloc))FAIL;
-  tiles_choose(b->tiles,b->cam.scale);
+  tiles_choose(b->tiles,&b->cam);
+  if(POLAR&&b->cam.pole){
+    // (The tiles a row crosses: a zoomed-out chart's, GLONASS's, a dozen;
+    // a close one's, few, and its ground the more to hold.)
+    Tiles *t=b->tiles;const int n=(int)(W/(b->cam.scale*t->cell*MAP_TILE)*(fabs(b->cam.rc)+fabs(b->cam.rs)))+4;
+    t->kept=(uint8_t)(n>CAP_TILES?CAP_TILES:n);
+    if(!(t->cache=alloc((size_t)t->kept*MAP_TILE*MAP_TILE)))FAIL;
+  }
   ground_begin(b->ground,&b->cam,pal,&b->sink);
   return b;
 fail:
@@ -1147,7 +1268,7 @@ static bool fuller_tile_rows(ChartBuild *b,int to){
 static void ground_again(ChartBuild *b){
   for(RunChunk *c=b->sink.head;c;){RunChunk *next=c->next;b->src.release(c);c=next;}
   b->sink.head=b->sink.tail=NULL;b->sink.n=0;b->sink.dropped=0;b->sink.failed=false;
-  if(FACE_CHART&&b->tiles){tiles_choose(b->tiles,b->cam.scale);b->tiles->failed=false;}
+  if(FACE_CHART&&b->tiles){tiles_choose(b->tiles,&b->cam);b->tiles->failed=false;}
   ground_begin(b->ground,&b->cam,&b->plate,&b->sink);
   if(++b->shade==SHADE_AGAIN)b->ground->shade_step=0;else for(int k=0;k<b->shade;k++)b->ground->shade_step+=b->ground->shade_step/2;
 }
@@ -1215,7 +1336,7 @@ static bool finish_draw(ChartBuild *b){
   }
   else{
   if(make_track(in,src,track)!=count)FAIL;
-  for(int i=0;i<count;i++){const double lat=track[i].a,lon=track[i].b;track[i].a=sx(cam,lon);track[i].b=sy(cam,lat);}
+  for(int i=0;i<count;i++){double lat=track[i].a,lon=track[i].b;place(cam,&lat,&lon);track[i].a=sx(cam,lon);track[i].b=sy(cam,lat);}
   }
   draw=(Draw *)(b->lists+track_bytes);
   // Past the drawing's lists, room for the figures' bitmaps.
@@ -1246,11 +1367,15 @@ static bool finish_draw(ChartBuild *b){
       }
     }
   }else
-  {const double g0lat=glat(cam,bottom),g0lon=glon(cam,0),g1lat=glat(cam,top),g1lon=glon(cam,W);
-  for(double lat=f_ceil(g0lat/step)*step;lat<=g1lat;lat+=step)for(double lon=f_ceil(g0lon/step)*step;lon<=g1lon;lon+=step){
-    const double x=js_round(sx(cam,lon)),y=js_round(sy(cam,lat));if(!(y>=top&&y<=bottom))continue;
+  {// (A polar chart's crosses: on its pole's half of the Earth, the meridians'
+  // at least as far apart along a parallel as on the equator; no ticks.)
+  const bool polar=POLAR&&cam->pole;
+  const double g0lat=polar?45*cam->pole-45:glat(cam,bottom),g0lon=polar?-180:glon(cam,0),g1lat=polar?45*cam->pole+45:glat(cam,top),g1lon=polar?179:glon(cam,W);
+  for(double lat=f_ceil(g0lat/step)*step;lat<=g1lat;lat+=step){const double m=polar?step*f_ceil(1/f_cos(lat*RAD)):step;for(double lon=f_ceil(g0lon/m)*m;lon<=g1lon;lon+=m){
+    double x=sx(cam,lon),y=sy(cam,lat);if(polar)project(cam,lat,lon,&x,&y);x=js_round(x);y=js_round(y);if(!(y>=top&&y<=bottom))continue;
     for(int d=-2;d<=2;d++){plot(&cv,x+d,y,L_GRID);plot(&cv,x,y+d,L_GRID);}
-  }
+  }}
+  if(!polar){
   for(double lon=f_ceil(g0lon/minor)*minor;lon<=g1lon;lon+=minor){
     const double x=js_round(sx(cam,lon));const int len=f_mod(lon,step)==0?4:2;
     for(int d=0;d<len;d++){plot(&cv,x,top+d,L_GRID);plot(&cv,x,bottom-d,L_GRID);}
@@ -1258,7 +1383,7 @@ static bool finish_draw(ChartBuild *b){
   for(double lat=f_ceil(g0lat/minor)*minor;lat<=g1lat;lat+=minor){
     const double y=js_round(sy(cam,lat));const int len=f_mod(lat,step)==0?4:2;if(!(y>=top&&y<=bottom))continue;
     for(int d=0;d<len;d++){plot(&cv,d,y,L_GRID);plot(&cv,W-1-d,y,L_GRID);}
-  }}
+  }}}
 
   // Home, placed first so the network gives way; drawn last. (Its
   // acquisition circle on the world band is the minute's.)
@@ -1369,9 +1494,9 @@ static bool finish_draw(ChartBuild *b){
   if(!day){const int R=world?11:16;
   #define ROSE(x,y) do{const double y_=(y);if(y_>=top&&y_<=bottom)plot(&cv,(x),y_,L_INK);}while(0)
   // The rose turns to true north at the station: north is up on the
-  // cylindrical charts, anywhere on a rolled Fuller sheet.
+  // cylindrical charts, anywhere on a rolled Fuller sheet or a polar chart.
   double north=0;
-  if(rolled){
+  if(rolled||(POLAR&&cam->pole)){
     double lat,lon,q0x,q0y,q1x,q1y;if(!body_position(src,in->body,in->start+T_OF(b,h0),&lat,&lon))FAIL;
     project(cam,lat,lon,&q0x,&q0y);project(cam,lat+.5<89.9?lat+.5:89.9,lon,&q1x,&q1y);
     const double l=f_sqrt((q1x-q0x)*(q1x-q0x)+(q1y-q0y)*(q1y-q0y)),nl=l?l:1;north=f_atan2((q1x-q0x)/nl,-(q1y-q0y)/nl);
@@ -1633,8 +1758,10 @@ static bool finish_draw(ChartBuild *b){
   memcpy(out->tints,pal->tints,sizeof out->tints);
   for(int k=0;k<2;k++)out->depths[k]=k<pal->depth_count?pal->depths[k]:0;
   if(!rolled){
-  for(int y=0;y<H;y++){const double lat=glat(cam,y+.5)*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
-  for(int x=0;x<W;x++){const double lon=glon(cam,x+.5)*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}
+  // (On a polar chart, its degrees from the middle: see local().)
+  {const bool p=POLAR&&cam->pole;const double f=p?cam->km:1,y0=p?cam->lat0:0,x0=p?cam->lonMid:0;
+  for(int y=0;y<H;y++){const double lat=(glat(cam,y+.5)-y0)/f*RAD;out->row_cos[y]=(enr_real)f_cos(lat);out->row_sin[y]=(enr_real)f_sin(lat);}
+  for(int x=0;x<W;x++){const double lon=(glon(cam,x+.5)-x0)/f*RAD;out->col_cos[x]=(enr_real)f_cos(lon);out->col_sin[x]=(enr_real)f_sin(lon);}}
   }else{
     // A Fuller sheet is lit from its faces' grids: their frames, each
     // tile's place, which tile each pixel lies on, the grid's directions.
@@ -1700,7 +1827,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
   for(int m=m0;m<m1;m++){
     const int64_t t=in->start+m*60;EnrMinute *e=&out->minutes[m];
     double lat,lon,altitude;if(!body_position(src,0,t,&lat,&lon))FAIL;
-    e->sun[0]=(enr_real)(f_cos(lat*RAD)*f_cos(lon*RAD));e->sun[1]=(enr_real)(f_cos(lat*RAD)*f_sin(lon*RAD));e->sun[2]=(enr_real)f_sin(lat*RAD);
+    {double v[3];local(cam,lat,lon,v);for(int k=0;k<3;k++)e->sun[k]=(enr_real)v[k];}
     if(!body_place(src,in->body,t,&lat,&lon,&altitude))FAIL;
     double mx,my;project(cam,lat,lon,&mx,&my);
     // (Off the band to the north or south, the body rides its edge.)
@@ -1748,7 +1875,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
       p=put_int(p,(int)js_round(fabs(lat)),2);*p++=lat<0?'S':'N';*p++=' ';p=put_int(p,(int)js_round(fabs(wl)),3);*p++=wl<0?'W':'E';
     }
     else if(in->corner==2&&in->body>=2){
-      const double dot=f_cos(lat*RAD)*(e->sun[0]*f_cos(lon*RAD)+e->sun[1]*f_sin(lon*RAD))+e->sun[2]*f_sin(lat*RAD);
+      double v[3];local(cam,lat,lon,v);const double dot=v[0]*e->sun[0]+v[1]*e->sun[1]+v[2]*e->sun[2];
       const bool dark=sat_eclipsed(altitude,dot);memcpy(p,dark?"ECLIPSE":"SUNLIT",dark?7:6);
     }
     else if(world&&in->body>=2){p=put_int(p,(int)js_round(altitude),1);memcpy(p," KM",3);}

@@ -38,7 +38,7 @@ function kernelCos(x,y){
 // taken modulo 2 pi, the same way on both sides.
 let R0=0,R1=0;
 function reduce(x){
-  if(Math.abs(x)>1e6)x=x%TWO_PI;
+  if(Math.abs(x)>1e6)x=x-TWO_PI*Math.floor(x/TWO_PI);
   const fn=(x*INVPIO2+ROUND)-ROUND,n=fn|0;
   let r=x-fn*PIO2_1,w=fn*PIO2_1T,y0=r-w;
   const j=(high(x)>>>20)&0x7ff;

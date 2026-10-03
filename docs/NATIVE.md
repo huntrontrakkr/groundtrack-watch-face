@@ -53,16 +53,20 @@ At its peak a build holds 43–53 KB on Groundtrack and 47–54 KB on Fuller; a 
 
 ### The map on the watch: `native/resources/map.pack`
 
-The plates read relief only through ten thresholds (the shelf at −200 m, the contours at 500 to 5,000 m, the tints at 300 to 3,500 m), so `tools/map-pack.mjs` packs each cell's *level* between them with its land bit, in tiles of 32×32 cells that decode on their own, at three resolutions (0.25°, 0.5° and 1° cells, the coarser ones by majority): a chart decodes only the tiles under it, at the resolution its pixels need (the Sun's hour at 8 px a degree reads the 0.25° cells; the world band at about a pixel a degree reads the 1° cells). Each cell's land bit is coded from four neighbouring land bits, its level against a table chosen by land and the levels to its left and above; coding is rANS with fixed tables, and a tile of one level and one class is two bytes. The pack keeps 79°N to 66°S, the latitudes the watch's views can show (`tests/map-pack.test.mjs` checks every view stays inside, and that both decoders give every cell):
+The plates read relief only through ten thresholds (the shelf at −200 m, the contours at 500 to 5,000 m, the tints at 300 to 3,500 m), so `tools/map-pack.mjs` packs each cell's *level* between them with its land bit, in tiles of 32×32 cells that decode on their own, at three resolutions (0.25°, 0.5° and 1° cells, the coarser ones by majority): a chart decodes only the tiles under it, at the resolution its pixels need (the Sun's hour at 8 px a degree reads the 0.25° cells; the world band at about a pixel a degree reads the 1° cells). Each cell's land bit is coded from four neighbouring land bits, its level against a table chosen by land and the levels to its left and above; coding is rANS with fixed tables, and a tile of one level and one class is two bytes. The pack is the whole Earth, pole to pole: a satellite's hour chart can reach either pole, and a pack cut short of them (it once kept 79°N to 66°S) drew its last row again and again beyond, in stripes (`tests/map-pack.test.mjs` checks the cover, and that both decoders give every cell; `tests/poles.test.mjs` the charts there):
 
 | | |
 |---|---|
 | The earlier pack: every relief code, losslessly, 0.25° | 236 KB |
-| Levels and land at 0.25°, 0.5° and 1° (`map.pack`, Enroute) | 51 KB |
+| Levels and land at 0.25°, 0.5° and 1°, pole to pole (`map.pack`, Enroute) | 61 KB |
+| The two polar caps, the same three ways (in `map.pack`) | 41 KB |
+| Decoded for a polar chart | 12 tiles kept, decoded as its pixels ask |
 | Decoded for a Sun's hour chart | about 12 tiles, 12,000 cells (200,000 before) |
 | Decoded for the world band | 60 tiles, 52,000 cells (830,000 before) |
 
 Rendered from levels instead of heights, contour lines and tint edges move by a pixel here and there (the review of 30 September 2026 shows the comparison).
+
+**Near the poles** a flat chart fails: its meridians close up, so the land is drawn out along them, and past a pole it has no Earth at all. An hour chart that would reach within ten degrees of a pole (a slow orbit turning there: GLONASS's hours over the Arctic, or any satellite found at CelesTrak that crosses a pole) is drawn instead on a polar stereographic projection, turned so that north is up at its middle (`chart.c`, `place()`); the route, the rose (turned to true north, as on a Fuller sheet), the stations and home all go through it, and the chart is laid out on it as a flat one is. Its ground comes from the pack's two polar caps: the map resampled onto each pole's plane, 72 degrees of it each way, which reaches the farthest GLONASS chart. A polar chart's rows cross the cap's at any angle, so its tiles are decoded whole as its pixels ask for them, twelve kept. Its night is drawn in a frame about the chart's middle, so the minute renderer's rows and columns serve it unchanged (a few tenths of a degree out at the corners). An hour over a pole runs any way in longitude and is not sent to the world band for it; a polar chart past its cap (the widest hours of a far oval orbit) is. `tests/poles.test.mjs` checks the ground under the poles and around each polar hour, and that north is up.
 
 `native/src/c/map_pack.c` decodes it: 1.6 KB of code, 3 rows of working memory, reading the resource through a 256-byte buffer.
 

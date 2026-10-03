@@ -114,7 +114,9 @@ static double kernel_cos(double x,double y){
   return w+(((1.0-w)-hz)+(z*r-x*y));
 }
 static int reduce(double x,double *y0,double *y1){
-  if(fabs(x)>1e6)x=f_fmod(x,TWO_PI);
+  // (The watch's angles never come near a million radians: past that, the
+  // plain remainder, and f_fmod's exact one is left to the host tools.)
+  if(fabs(x)>1e6)x=f_mod(x,TWO_PI);
   // volatile keeps the rounding trick from being folded away.
   volatile double t0=x*INVPIO2+ROUND;const double fn=t0-ROUND;const int n=(int)fn;
   double r=x-fn*PIO2_1,w=fn*PIO2_1T,y=r-w;

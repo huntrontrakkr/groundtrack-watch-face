@@ -21,7 +21,7 @@ import {registerLiveFixture} from '../tests/tle-fixture.mjs';
 import {registerNominal} from '../src/nominal.js';
 import {nameCode} from '../src/events.js';
 import {readFileSync} from 'node:fs';
-import {registerElements,elementsFor} from '../src/satellites.js';
+import {registerElements,elementsFor,addSatellite,checksum} from '../src/satellites.js';
 
 registerLiveFixture();registerNominal();
 // The catalog's other satellites, on CelesTrak's elements of 2 October 2026:
@@ -29,6 +29,16 @@ registerLiveFixture();registerNominal();
 const LATER=[];
 {const l=readFileSync(new URL('../tests/fixtures/celestrak-2026-10-02.tle',import.meta.url),'utf8').trim().split('\n');
 for(let i=0;i+2<l.length;i+=3){const body='sat:'+Number(l[i+1].slice(2,7));if(!elementsFor(body)||elementsFor(body).source==='nominal'){registerElements(l.slice(i,i+3).join('\n')+'\n','fixture');LATER.push(body);}}}
+// And slow orbits over the poles, which the catalog has none of (the polar
+// charts: tests/poles.test.mjs): Meridian 7's Molniya orbit stood upright,
+// its high end in the north or the south. On Groundtrack only: Fuller's
+// whole day of one needs 60.9 KB of the heap's 61.4 (as it did before the
+// polar charts), inside the 4 KB this sweep holds back.
+const POLAR=[];
+for(const [n,perigee] of [[99001,'269.8252'],[99002,' 90.0000']]){
+  const sum=l=>l+checksum(l);addSatellite({norad:n,name:'Polar',code:'POL',period:717.8,ecc:.66});
+  registerElements(`POLAR\n${sum(`1 ${n}U 14069A   26274.86311510  .00000249  00000+0  00000+0 0  999`)}\n${sum(`2 ${n}  89.5000 204.9765 6611590 ${perigee}  20.3127  2.00606791 8737`)}\n`,'fixture');POLAR.push('sat:'+n);
+}
 const args=process.argv.slice(2),starve=args[0]==='--starve',least=args[0]==='--heap',single=args[0]==='--case'?JSON.parse(args[1]):null;
 if(starve||least||single)args.shift();
 const count=Number(args[0])||(starve?12:300),seed=Number(args[1])||1;
@@ -47,7 +57,7 @@ const TITLES=['Run','Standup','Dinner','Launch','A very long event title indeed'
 const HOMES=[[90,0],[-90,0],[89.99,179.99],[-89.99,-180],[0,0],[0,180],[0,-180],[78.22,15.65],[-77.85,166.67],[66.56,25],[40.71,-74.01],[-33.87,151.21],[51.48,0],[1.35,103.82]];
 
 function randomCase(){
-  const fuller=chance(.35),sat=chance(.6),later=sat&&chance(.5),body=later?pick(LATER):sat?pick(SATS):pick(['sun','moon']),zone=pick(ZONES);
+  const fuller=chance(.35),sat=chance(.6),later=sat&&chance(.5),body=later?pick(!fuller&&chance(.25)?POLAR:LATER):sat?pick(SATS):pick(['sun','moon']),zone=pick(ZONES);
   // Satellites inside the fixture's elements' three days; the Sun and Moon
   // anywhere from 2024 to 2037, or at one of the awkward dates.
   let t=later?Date.parse('2026-10-02T12:00:00Z')+Math.floor(rand()*48)*3600e3:sat?Date.parse('2026-09-29T20:00:00Z')+Math.floor(rand()*60)*3600e3:chance(.4)?pick(DATES)+Math.floor(rand()*5-2)*3600e3:Date.parse('2024-01-01T00:00:00Z')+Math.floor(rand()*13*365.25*24)*3600e3;
