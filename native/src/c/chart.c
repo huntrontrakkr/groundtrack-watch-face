@@ -1015,6 +1015,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   // can hold is the heap's to say: a chart of 60 degrees takes 53 KB at the
   // most, one of 85 more than the watch has.)
   #define HOUR_HOLDS 50
+  #define HOUR_POLE 86
   if(FACE_WORLD&&FACE_HOUR&&in->body>=2&&in->view==0&&(maxlon-minlon>HOUR_HOLDS||maxlat-minlat>HOUR_HOLDS)){release(track);b->track=NULL;b->in.view=1;goto again;}
   Cam cam;memset(&cam,0,sizeof cam);cam.top=0;cam.bottom=H;
   if(VIEW_IS_DAY(in->view)){
@@ -1066,6 +1067,10 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     cam.slow=true;cam.nx=nx;cam.ny=ny;
     cam.x0=W/2-nx*30;cam.y0=(14+H-16)/2+8-ny*30;
   }
+  // (Nor is an hour whose chart would reach a pole drawn on it: the
+  // meridians close up there and the land is drawn out along them. It has
+  // the world band.)
+  if(FACE_WORLD&&cam.slow&&(glat(&cam,0)>HOUR_POLE||glat(&cam,H)<-HOUR_POLE)){release(track);b->track=NULL;b->in.view=1;goto again;}
   b->count=count;b->h0=h0;b->h1=h1;b->cam=cam;
   release(b->track);b->track=NULL;
 
