@@ -48,35 +48,37 @@ const GALLERIES={
 // The reels: chosen for each face's range (its views, readouts, the Sun and
 // Moon marked, a polar chart) and its plates at their best, the charts' and
 // the instruments' more than the novelties, each in its colours next to
-// another's.
+// another's, and each in the type that suits it: Futura (Jost) on the paper
+// charts, B612 in the cockpit, Eurostile (Michroma) at mission control,
+// Orbitron on the Earth from orbit.
 const REELS={
   enroute:[
-    {body:'sun',epoch:at('2026-09-30T03:30:00Z'),plate:'enroute',readout:'flag',also:['moon']},
-    {body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'engraved',readout:'callout',numerals:'colon',also:['sun']},
-    {body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'infrared',readout:'counter',numerals:'plain'},
-    {body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'staratlas',readout:'flag'},
-    {body:'sun',epoch:at('2026-09-30T17:20:00Z'),plate:'airbrush',readout:'counter'},
-    {body:'sat:25544',epoch:at('2026-09-30T18:33:00Z'),plate:'blueprint',face:'plotboard',tape:'route',readout:'flag',also:['sun','moon']},
-    {body:'sat:57517',epoch:at('2026-10-02T20:24:00Z'),plate:'hypsometric',readout:'flag'},
-    {body:'sat:36585',epoch:at('2026-09-28T13:10:00Z'),plate:'survey',readout:'counter',numerals:'colon'},
-    {body:'sat:36585',epoch:at('2026-09-28T19:40:00Z'),plate:'voldenuit',readout:'flag'},
-    {body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'planetary',face:'plotboard',readout:'flag',also:['sun','moon']},
-    {body:'sat:57517',epoch:at('2026-10-02T19:24:00Z'),plate:'terrain',readout:'counter'},
-    {body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'survey',face:'plotboard',tape:'clock',readout:'flag'}
+    {body:'sun',epoch:at('2026-09-30T03:30:00Z'),plate:'enroute',figures:'jost',readout:'flag',also:['moon']},
+    {body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'engraved',figures:'jost',readout:'callout',numerals:'colon',also:['sun']},
+    {body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'infrared',figures:'orbitron',readout:'flag'},
+    {body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'staratlas',figures:'jost',readout:'flag'},
+    {body:'sun',epoch:at('2026-09-30T17:20:00Z'),plate:'airbrush',figures:'jost',readout:'counter'},
+    {body:'sat:25544',epoch:at('2026-09-30T18:33:00Z'),plate:'blueprint',figures:'michroma',face:'plotboard',tape:'route',readout:'flag',also:['sun','moon']},
+    {body:'sat:57517',epoch:at('2026-10-02T20:24:00Z'),plate:'hypsometric',figures:'jost',readout:'flag'},
+    {body:'sat:36585',epoch:at('2026-09-28T13:10:00Z'),plate:'survey',figures:'jost',readout:'flag'},
+    {body:'sat:36585',epoch:at('2026-09-28T19:40:00Z'),plate:'voldenuit',figures:'jost',readout:'flag'},
+    {body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'planetary',figures:'orbitron',face:'plotboard',readout:'flag',also:['sun','moon']},
+    {body:'sat:57517',epoch:at('2026-10-02T19:24:00Z'),plate:'terrain',figures:'b612',readout:'flag'},
+    {body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'survey',figures:'jost',face:'plotboard',tape:'clock',readout:'flag'}
   ],
   fuller:[
-    {body:'sun',epoch:at('2026-09-30T17:24:00Z'),plate:'engraved',readout:'flag'},
-    {body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',readout:'counter',numerals:'colon',corner:'light',legend:true,also:['moon']},
-    {body:'moon',epoch:at('2026-09-30T02:37:00Z'),plate:'airbrush',readout:'flag',numerals:'colon'},
-    {body:'sat:25544',epoch:at('2026-09-30T02:21:00Z'),plate:'nightside',readout:'flag'},
-    {body:'sun',epoch:at('2026-09-30T10:20:00Z'),plate:'sectional',readout:'flag'},
-    {body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'synthetic',readout:'flag'},
-    {body:'sat:43013',epoch:at('2026-09-30T17:42:00Z'),plate:'planetary',readout:'flag'},
-    {body:'moon',epoch:at('2026-09-30T05:44:00Z'),plate:'voldenuit',readout:'flag',also:['sun']},
-    {body:'sat:25544',epoch:at('2026-09-30T09:10:00Z'),plate:'hypsometric',readout:'flag',also:['sun']},
-    {body:'sun',epoch:at('2026-09-30T03:30:00Z'),plate:'globus',readout:'flag',also:['moon']},
-    {body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'survey',readout:'callout'},
-    {body:'sat:25544',epoch:at('2026-09-30T15:05:00Z'),plate:'infrared',readout:'counter'}
+    {body:'sun',epoch:at('2026-09-30T17:24:00Z'),plate:'engraved',figures:'jost',readout:'flag'},
+    {body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',figures:'michroma',readout:'counter',numerals:'colon',corner:'light',legend:true,also:['moon']},
+    {body:'sat:48274',epoch:at('2026-09-30T11:00:00Z'),plate:'airbrush',figures:'jost',readout:'flag'},
+    {body:'sat:25544',epoch:at('2026-09-30T02:21:00Z'),plate:'nightside',figures:'orbitron',readout:'flag'},
+    {body:'sun',epoch:at('2026-09-30T10:20:00Z'),plate:'sectional',figures:'jost',readout:'flag'},
+    {body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'synthetic',figures:'b612',readout:'flag'},
+    {body:'sat:43013',epoch:at('2026-09-30T17:42:00Z'),plate:'planetary',figures:'orbitron',readout:'flag'},
+    {body:'moon',epoch:at('2026-09-30T05:44:00Z'),plate:'voldenuit',figures:'jost',readout:'flag',also:['sun']},
+    {body:'sat:25544',epoch:at('2026-09-30T09:10:00Z'),plate:'hypsometric',figures:'jost',readout:'flag',also:['sun']},
+    {body:'sat:48274',epoch:at('2026-09-30T06:40:00Z'),plate:'globus',figures:'michroma',readout:'flag'},
+    {body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'survey',figures:'jost',readout:'flag'},
+    {body:'sat:25544',epoch:at('2026-09-30T15:05:00Z'),plate:'infrared',figures:'orbitron',readout:'flag'}
   ]
 };
 const draw=(face,state)=>new CoreRenderer(core).render({timeZone:zone,clock24:true,home,numerals:'even',zone:'utc',span:'day',tape:'fixed',transfer:'off',figures:'michroma',corner:'day',projection:face==='fuller'?'fuller':'chart',...state});
