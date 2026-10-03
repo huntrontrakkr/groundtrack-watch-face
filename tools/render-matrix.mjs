@@ -4,7 +4,7 @@
 //   node tools/render-matrix.mjs [out.png]
 import {readFileSync,writeFileSync} from 'node:fs';
 import {W,H} from '../src/chart-render.js';
-import {PLATES} from '../src/plates.js';
+import {PLATES,PLATE_ORDER} from '../src/plates.js';
 import {loadCore,CoreRenderer} from '../src/core.js';
 import {encodePNG} from './png.mjs';
 import {HOMES} from '../src/home.js';
@@ -28,7 +28,7 @@ const ROWS=[
   [['GPS','HOUR CHART','MINUTE FLAG'],{body:'sat:36585',epoch:GPS,readout:'flag'}],
   [['QZSS','WHOLE DAY','TIME CALLOUT'],{body:'sat:42738',epoch:QZSS,numerals:'even'}]
 ];
-const plates=Object.entries(PLATES),gap=16,head=22,left=116,sheetW=left+gap+plates.length*(W+gap),sheetH=head+gap+ROWS.length*(H+gap);
+const plates=PLATE_ORDER.map(k=>[k,PLATES[k]]),gap=16,head=22,left=116,sheetW=left+gap+plates.length*(W+gap),sheetH=head+gap+ROWS.length*(H+gap);
 const sheet=new Uint8ClampedArray(sheetW*sheetH*3),paper=[235,233,224],ink=[31,59,58];
 for(let i=0;i<sheet.length;i+=3)sheet.set(paper,i);
 const text=(value,x,baseline)=>{for(const c of value){const g=fonts.small[c]||fonts.small['?'];for(const [rx,ry,len] of g.r)for(let k=0;k<len;k++)sheet.set(ink,((baseline-g.t+ry)*sheetW+x+g.l+rx+k)*3);x+=g.a;}};

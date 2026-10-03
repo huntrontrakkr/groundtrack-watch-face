@@ -1,4 +1,4 @@
-import {PLATES,FIGURE_SETS,W,H} from './plates.js';
+import {PLATES,PLATE_ORDER,FIGURE_SETS,W,H} from './plates.js';
 import {loadCore,CoreRenderer} from './core.js';
 import {MINUTE} from './ephemeris.js';
 import {clockParts} from './render.js';
@@ -28,7 +28,7 @@ function render(){
   const r=main.render(state);$('enroute-watch').getContext('2d').putImageData(new ImageData(r.rgba,W,H),0,0);
   // The proofs: the same hour on every plate, each built by the core in
   // turn (about 50 ms each), the chosen plate's last so it stays built.
-  for(const plate of Object.keys(PLATES))if(plate!==state.plate)paint(proofs[plate],main.render({...state,plate}).buf);
+  for(const plate of PLATE_ORDER)if(plate!==state.plate)paint(proofs[plate],main.render({...state,plate}).buf);
   paint(proofs[state.plate],main.render(state).buf);
   $('orbit-span').classList.toggle('muted',viewOf(state.body)!=='day');document.querySelectorAll('[data-span]').forEach(b=>b.disabled=viewOf(state.body)!=='day');
   $('time-scale').classList.toggle('muted',viewOf(state.body)!=='world'||state.projection==='fuller');
@@ -58,7 +58,7 @@ function render(){
   const colors=new Set();for(let i=0;i<r.buf.length;i+=3)colors.add((r.buf[i]<<16)|(r.buf[i+1]<<8)|r.buf[i+2]);
   $('enroute-diagnostics').textContent=`${colors.size} native colors in this frame. ${main.stats.geometryBuilds} chart builds; ${main.stats.renders} renders. No idle redraws.`;
 }
-for(const [key,pal] of Object.entries(PLATES)){
+for(const [key,pal] of PLATE_ORDER.map(k=>[k,PLATES[k]])){
   const b=document.createElement('button');b.dataset.plate=key;
   const row=document.createElement('span');row.className='swatch-row';
   for(const color of [pal.land[0],pal.water[0],pal.contour[0],pal.ink[0],pal.route[0]]){const i=document.createElement('i');i.style.backgroundColor=`rgb(${color.join(',')})`;row.append(i);}

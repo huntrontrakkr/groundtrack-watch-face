@@ -3,7 +3,7 @@
 // contact sheet per study and a 2x enlargement of each default face.
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {ChartRenderer,CHARTS,W,H} from '../src/chart-render.js';
-import {PLATES,NUMERALS,FIGURE_SETS} from '../src/plates.js';
+import {PLATES,PLATE_ORDER,NUMERALS,FIGURE_SETS} from '../src/plates.js';
 import {loadCore,CoreRenderer} from '../src/core.js';
 import {encodePNG} from './png.mjs';
 import {HOMES} from '../src/home.js';
@@ -49,7 +49,7 @@ const enroute=contactSheet('study-06',[
   {name:'moon-day',caption:'MOON BY DAY / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z')},
   {name:'moon-dusk',caption:'MOON AT NIGHTFALL / 05:24',body:'moon',epoch:Date.parse('2026-09-19T09:24:00Z')},
   {name:'iss',caption:'ISS ARCHIVE / 08:24',body:'iss',epoch:Date.parse('2019-06-05T12:24:00Z')}
-],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new CoreRenderer(core).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,home,events}).buf);
+],PLATE_ORDER.map(k=>[k,PLATES[k]]).map(([k,v])=>[k,v.name]),(scene,plate)=>new CoreRenderer(core).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,home,events}).buf);
 
 // Spike: the same faces on a rolling Fuller sheet.
 const fuller=contactSheet('study-06-fuller',[
@@ -57,7 +57,7 @@ const fuller=contactSheet('study-06-fuller',[
   {name:'iss-later',caption:'ISS ARCHIVE / 09:24',body:'iss',epoch:Date.parse('2019-06-05T13:24:00Z')},
   {name:'sun',caption:'SUN / 04:24',body:'sun',epoch:Date.parse('2026-09-27T08:24:00Z')},
   {name:'moon-day',caption:'MOON BY DAY / 08:24',body:'moon',epoch:Date.parse('2026-09-15T12:24:00Z')}
-],Object.entries(PLATES).map(([k,v])=>[k,v.name]),(scene,plate)=>new CoreRenderer(core).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,projection:'fuller',home,events}).buf);
+],PLATE_ORDER.map(k=>[k,PLATES[k]]).map(([k,v])=>[k,v.name]),(scene,plate)=>new CoreRenderer(core).render({body:scene.body,epoch:scene.epoch,timeZone:zone,clock24:true,numerals:'even',plate,projection:'fuller',home,events}).buf);
 
 // Experiment: the satellite scale as a sliding tape, the world sliding too.
 const tape=contactSheet('study-06-tape',[

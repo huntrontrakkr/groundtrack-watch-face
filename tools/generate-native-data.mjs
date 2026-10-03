@@ -27,7 +27,7 @@ const hexDouble=v=>{if(v===Infinity)return 'INFINITY';if(v===-Infinity)return '-
 const hexFloat=v=>{const f=new DataView(new ArrayBuffer(4));f.setFloat32(0,v);return `0x${f.getUint32(0).toString(16).padStart(8,'0')}u`;};
 const g8=c=>c?0xC0|(c[0]/85)<<4|(c[1]/85)<<2|c[2]/85:0;
 
-const keys=['enroute','sectional','console','hypsometric','red','crt','sunlight','blueprint','amber','airbrush','dotmatrix','odyssey','trackingboard','survey','operations'];
+const keys=['enroute','sectional','console','hypsometric','red','crt','sunlight','blueprint','amber','airbrush','dotmatrix','odyssey','trackingboard','survey','operations','nightside','infrared','planetary','vector','graphite','staratlas','moonlit','rodgeryoung'];
 if(keys.join()!==Object.keys(PLATES).join())throw new Error('Plate order changed: update native/src/c/chart.h');
 const inks=['water','land','coast','contour','shelf','grid','route','ink','mark'];
 const plates=keys.map(k=>{

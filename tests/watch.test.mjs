@@ -268,7 +268,7 @@ test('settings changed while a chart is being built, and a watch short of memory
   const {w,ph}=await fresh('enroute',c,t);
   // New settings a few milliseconds into each build, over and over: the
   // last one's chart is drawn, nothing is left behind.
-  const plates=['amber','airbrush','console','odyssey','crt'];
+  const plates=['amber','airbrush','moonlit','rodgeryoung','crt'];
   for(let k=0;k<plates.length;k++){
     ph.at(w.state.t*1000);ph.listeners.webviewclosed({response:JSON.stringify({plate:plates[k],tape:k%2?'slide':'fixed'})});await ph.quiet();
     for(const m of ph.out.splice(0)){const key=Object.keys(m)[0];await w.cmd(`msg ${key} ${hex(m[key])}`);}

@@ -117,8 +117,79 @@ export const PLATES={
     water:inks(['#000000','#000000','#000000']),land:inks(['#000055','#000055','#000000']),coast:inks(['#55FFFF','#55AAAA','#005555']),
     contour:inks(['#005555','#005555','#005555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#005555','#005555','#005555']),
     route:inks(['#FFFF55','#FFFF55','#FFFF55']),ink:inks(['#AAFFFF','#AAFFFF','#AAFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
-    space:hex('#000000'),spaceInk:hex('#FFAA55')}
+    space:hex('#000000'),spaceInk:hex('#FFAA55')},
+  // Space studies, after real imagery and the quieter end of film design;
+  // interpretations, not replicas.
+  // The Earth as photographed from orbit at night: by day a dim blue sea
+  // and teal land, at night both black with the coasts lit sodium gold, the
+  // limb of the dawn a thin blue line.
+  nightside:{name:'Night Side',note:'From orbit at night: dark Earth, coastlines lit gold',night:'zones',terminator:hex('#55AAFF'),
+    water:inks(['#000055','#000055','#000000']),land:inks(['#005555','#000055','#000000']),coast:inks(['#55AAAA','#FFAA55','#FFAA00']),
+    contour:inks(['#0055AA','#000055','#000055']),shelf:inks(['#0000AA','#000055','#000000']),grid:inks(['#0055AA','#000055','#000055']),
+    route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFAA']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')},
+  // The enhancement tables forecasters lay over infrared weather-satellite
+  // images: the land in a thermal ramp by height, violet lowland to pale
+  // yellow peaks, on a black sea; map lines in the imagery's cyan; night
+  // dims the ramp through a dark screen.
+  infrared:{name:'Infrared',note:'Weather-satellite infrared: a thermal ramp on a black sea',night:'screen',
+    tints:[[300,hex('#550055')],[1000,hex('#AA0055')],[2000,hex('#FF5500')],[3500,hex('#FFAA00')],[Infinity,hex('#FFFFAA')]],depths:[[SHELF_DEPTH,hex('#000055')],[-Infinity,hex('#000000')]],
+    water:inks(['#000000','#000000','#000000']),land:inks(['#550055','#550055','#550055']),coast:inks(['#55AAAA','#55AAAA','#55AAAA']),
+    contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#005555','#005555','#005555']),
+    route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#55FFFF','#55FFFF','#55FFFF']),
+    screen:hex('#000000'),space:hex('#000000'),spaceInk:hex('#55AAAA')},
+  // The airbrushed charts of the Moon and Mars from the Apollo and Viking
+  // years (USGS), drawn over the Earth: the land modelled in ochre and
+  // salmon by light from the northwest, the sea plain paper, a blue route.
+  planetary:{name:'Planetary',note:'USGS Mars and Moon charts: airbrushed ochre relief',night:'screen',shade:true,
+    tints:[[300,hex('#550000')],[500,hex('#AA5500')],[1000,hex('#FFAA55')],[2000,hex('#FFFFAA')],[Infinity,hex('#FFFFAA')]],
+    water:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),land:inks(['#FFAA55','#FFAA55','#FFAA55']),coast:inks(['#AA5500','#AA5500','#AA5500']),
+    contour:inks(['#FFAA55','#FFAA55','#FFAA55']),shelf:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),grid:inks(['#AA5500','#AA5500','#AA5500']),
+    route:inks(['#0055AA','#0055AA','#0055AA']),ink:inks(['#550000','#550000','#550000']),mark:inks(['#000000','#000000','#000000']),
+    screen:hex('#550000'),space:hex('#FFFFFF'),spaceInk:hex('#550000')},
+  // A vector display: no fills at all, the world as line work on black, the
+  // coast in one pale blue-white beam that dims at night.
+  vector:{name:'Vector',note:'Vector display: the world in line work alone',night:'zones',terminator:hex('#0055AA'),
+    water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#AAFFFF','#55AAAA','#0055AA']),
+    contour:inks(['#0055AA','#005555','#000055']),shelf:inks(['#000055','#000055','#000000']),grid:inks(['#005555','#005555','#000055']),
+    route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#AAFFFF','#AAFFFF','#55AAAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000000'),spaceInk:hex('#AAFFFF')},
+  // Spare grey instruments: charcoal land on black, everything in greys,
+  // the route the one white thing; night takes the land away.
+  graphite:{name:'Graphite',note:'Spare grey instruments: the route the one white line',night:'zones',
+    water:inks(['#000000','#000000','#000000']),land:inks(['#555555','#555555','#000000']),coast:inks(['#AAAAAA','#AAAAAA','#555555']),
+    contour:inks(['#000000','#000000','#555555']),shelf:inks(['#555555','#555555','#000000']),grid:inks(['#555555','#555555','#555555']),
+    route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000000'),spaceInk:hex('#AAAAAA')},
+  // The engraved star atlases navigators used: deep navy paper, cream
+  // coastlines, stippled contours, a pale gold route; night deepens the navy.
+  staratlas:{name:'Star Atlas',note:'Engraved star atlas: navy paper, cream line, gold route',night:'zones',dots:true,
+    water:inks(['#000000','#000000','#000000']),land:inks(['#000055','#000055','#000000']),coast:inks(['#FFFFAA','#FFFFAA','#AAAA55']),
+    contour:inks(['#AAAA55','#555555','#555555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#AAAA55','#555555','#555555']),
+    route:inks(['#FFAA55','#FFAA55','#FFAA55']),ink:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000055'),spaceInk:hex('#FFFFAA')},
+  // The airbrushed relief by moonlight: the land modelled in silver and
+  // slate from the northwest on a black sea, a lamp-amber route.
+  moonlit:{name:'Moonlit',note:'Shaded relief by moonlight: silver and slate on black',night:'screen',shade:true,
+    tints:[[300,hex('#000000')],[500,hex('#000055')],[1000,hex('#555555')],[2000,hex('#AAAAAA')],[Infinity,hex('#AAAAAA')]],
+    water:inks(['#000000','#000000','#000000']),land:inks(['#555555','#555555','#555555']),coast:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),
+    contour:inks(['#555555','#555555','#555555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#555555','#555555','#555555']),
+    route:inks(['#FFAA55','#FFAA55','#FFAA55']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
+    screen:hex('#000000'),space:hex('#000000'),spaceInk:hex('#AAAAAA')},
+  // A fleet's tactical chart: khaki ground on a gunmetal sea, black line
+  // work, the line of advance in red.
+  rodgeryoung:{name:'Rodger Young',note:'Fleet tactical chart: khaki ground, gunmetal sea, a red line',night:'zones',terminator:hex('#FFFFFF'),
+    water:inks(['#555555','#555555','#000000']),land:inks(['#AAAA55','#555500','#555500']),coast:inks(['#000000','#000000','#AAAA55']),
+    contour:inks(['#555500','#000000','#000000']),shelf:inks(['#000000','#000000','#555555']),grid:inks(['#000000','#000000','#555555']),
+    route:inks(['#FF0000','#FF0000','#FF0000']),ink:inks(['#000000','#000000','#FFFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000000'),spaceInk:hex('#FFFFFF')}
 };
+// The order the plates are offered in, like with like: paper charts,
+// shaded relief, blue line drawings, tracking boards, mission control's
+// glass, single-ink displays, the Earth from space. (PLATES' own order is
+// their number on the watch, and only grows.)
+export const PLATE_ORDER=['enroute','sectional','hypsometric','survey','sunlight','airbrush','planetary','moonlit','blueprint','staratlas',
+  'trackingboard','rodgeryoung','console','operations','dotmatrix','crt','amber','red','vector','nightside','infrared','graphite','odyssey'];
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // Acquisition circle: ground range at which a 410 km orbit rises 5 degrees

@@ -46,7 +46,9 @@ test('every pixel is a native RGB222 color, on every plate, body and clock forma
   for(const [body,epoch] of [['sun',SUN],['moon',MOON_DUSK],['iss',ISS]])for(const plate of Object.keys(PLATES))for(const clock24 of [false,true]){
     const {out}=await draw(scene(body,epoch,{plate,clock24})),colors=new Set();
     for(let i=0;i<out.buf.length;i+=3){for(let k=0;k<3;k++)assert.equal(out.buf[i+k]%85,0);colors.add(out.buf.slice(i,i+3).join());}
-    assert.ok(colors.size>(PLATES[plate].mono?1:5)&&colors.size<=64,`${body}/${plate}: ${colors.size}`);
+    // (A plate of few inks, Graphite's four greys, draws few colours.)
+    const inks=new Set(Object.values(PLATES[plate]).flatMap(v=>Array.isArray(v)?(Array.isArray(v[0])?v:[v]):[]).filter(c=>Array.isArray(c)&&c.length===3).map(c=>c.join()));
+    assert.ok(colors.size>(PLATES[plate].mono?1:inks.size<6?2:5)&&colors.size<=64,`${body}/${plate}: ${colors.size}`);
   }
 });
 

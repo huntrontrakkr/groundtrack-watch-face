@@ -28,7 +28,7 @@
 // Satellites' element sets are fetched from CelesTrak at most once every two
 // hours each (as CelesTrak asks) and kept, under tle-<catalog number>.
 import {HOMES} from '../../src/home.js';
-import {PLATES,FIGURE_SETS} from '../../src/plates.js';
+import {PLATES,PLATE_ORDER,FIGURE_SETS} from '../../src/plates.js';
 import {registerElements,elementsFor,viewOf,plotOf,periodOf,CATALOG,GROUPS,catalogEntry,bodyId,addSatellite,forgetSatellites,addedSatellites} from '../../src/satellites.js';
 import {chartOf,faceFor,VIEW_CODES} from '../../src/settings-rules.js';
 import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
@@ -415,7 +415,7 @@ Pebble.addEventListener('showConfiguration',function(){
         CATALOG.map(function(c){var b=bodyId(c.norad);return [b,c.code+' · '+c.name,c.note,viewOf(b),c.period,c.group,plotOf(b)];})),
       groups:GROUPS,sats:addedSatellites().map(kept),
       elementsUrl:setting('elementsUrl','https://celestrak.org/NORAD/elements/gp.php'),
-      plates:Object.keys(PLATES).map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),figureSets:FIGURE_SETS,preset:preset?preset.name:null,position:position};
+      plates:PLATE_ORDER.map(function(k){return [k,PLATES[k].name,PLATES[k].note];}),figureSets:FIGURE_SETS,preset:preset?preset.name:null,position:position};
     // The settings go inside a script element: no '<' may close it.
     // (Both in one pass: an event's title may spell either mark.)
     var page=CONFIG_PAGE.replace(/__CONFIG__|__PREVIEW__|__RULES__/g,function(mark){return mark==='__RULES__'?RULES_TEXT:JSON.stringify(mark==='__CONFIG__'?config:previewInputs()).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');});

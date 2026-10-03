@@ -66,8 +66,10 @@ try{
   await page.waitForFunction(()=>window.previewDrawn,null,{timeout:20000});
   mkdirSync('test-results',{recursive:true});await page.screenshot({path:'test-results/native-settings-closed.png',fullPage:true});
   await page.evaluate(()=>document.querySelectorAll('details').forEach(d=>{d.open=true;}));
-  // The current settings, the fifteen plates and the zone's preset home.
-  assert.equal(await page.locator('input[name=plate]').count(),15);
+  // The current settings, the plates in their order (like with like, not
+  // their numbers on the watch) and the zone's preset home.
+  {const {PLATE_ORDER}=await import('../src/plates.js');
+  assert.deepEqual(await page.locator('input[name=plate]').evaluateAll(e=>e.map(x=>x.value)),PLATE_ORDER);}
   // The preview: the face sketched in the settings, and as the watch's
   // reflective screen shows its colours; it follows the settings.
   const pixels=id=>page.evaluate(id=>{const c=document.getElementById(id);return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);},id);
