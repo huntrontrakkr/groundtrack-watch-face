@@ -25,7 +25,7 @@ Contour relief, the continental shelf and coastlines come from public-domain ele
 
 A home station gives the day's sunrise and sunset, or the satellite's next pass overhead. The margins carry the local date, Zulu time and the day of the year.
 
-Thirty plates: paper and ships' charts, airbrushed and engraved relief, star atlases, mission-control glass, cockpit terrain, synthetic-vision and HUD displays, and the Earth from orbit at night or in infrared. Four sets of figures. The hour figure can carry the minutes; satellites can show sunlight or Earth shadow.
+Thirty-two plates: paper and ships' charts, a portolan, airbrushed and engraved relief, star atlases, mission-control glass, cockpit terrain, synthetic vision and HUDs, a 1930s night airmail, and the Earth from orbit at night or in infrared. Four sets of figures. The hour figure can carry the minutes; satellites can show sunlight or Earth shadow.
 
 The watch builds its charts and repaints what moves each minute. The phone sends the Sun and Moon weeks ahead and satellite orbits days ahead, so it keeps going without the phone.
 

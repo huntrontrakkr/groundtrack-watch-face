@@ -247,14 +247,32 @@ export const PLATES={
     water:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),land:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),coast:inks(['#000000','#000000','#000000']),
     contour:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),shelf:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),grid:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),
     route:inks(['#AA0000','#AA0000','#AA0000']),ink:inks(['#000000','#000000','#000000']),mark:inks(['#000000','#000000','#000000']),
-    screen:hex('#555555'),space:hex('#FFFFFF'),spaceInk:hex('#000000')}
+    screen:hex('#555555'),space:hex('#FFFFFF'),spaceInk:hex('#000000')},
+  // The portolan charts of the medieval and Renaissance navigators: one
+  // parchment for land and sea, the coasts in brown ink and waterlined,
+  // the heights stippled in gold leaf, the route in rubric red.
+  portolan:{name:'Portolan',note:'Medieval sea chart: parchment, ink coasts, gold-leaf mountains',night:'screen',pattern:'dots',waterline:hex('#55AAAA'),
+    tints:[[300,hex('#FFFFAA')],[1000,hex('#FFAA55')],[2000,hex('#FFAA55')],[3500,hex('#AA5500')],[Infinity,hex('#AA5500')]],
+    water:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),land:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),coast:inks(['#550000','#550000','#550000']),
+    contour:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),shelf:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),grid:inks(['#AAAA55','#AAAA55','#AAAA55']),
+    route:inks(['#AA0000','#AA0000','#AA0000']),ink:inks(['#550000','#550000','#550000']),mark:inks(['#AA0000','#AA0000','#AA0000']),
+    screen:hex('#AAAA55'),space:hex('#FFFFAA'),spaceInk:hex('#550000')},
+  // Saint-Exupery's night airmail (Vol de nuit, 1931) and the Aeropostale
+  // posters of its day: the world in midnight blues, the mountains picked
+  // out in gold like lights below, the coasts gold, the route vermilion.
+  voldenuit:{name:'Vol de Nuit',note:'Night airmail of the 1930s: midnight blue, the heights in gold',night:'zones',pattern:'dots',terminator:hex('#0055AA'),
+    tints:[[300,hex('#0000AA')],[1000,hex('#AA5500')],[2000,hex('#FFAA00')],[3500,hex('#FFAA55')],[Infinity,hex('#FFFFAA')]],
+    water:inks(['#000055','#000055','#000000']),land:inks(['#000055','#000055','#000000']),coast:inks(['#FFAA55','#FFAA00','#AA5500']),
+    contour:inks(['#000055','#000055','#000055']),shelf:inks(['#0000AA','#000055','#000055']),grid:inks(['#0055AA','#000055','#000055']),
+    route:inks(['#FF5500','#FF5500','#FF5500']),ink:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
+    space:hex('#000055'),spaceInk:hex('#FFAA55')}
 };
 // The order the plates are offered in, like with like: paper charts,
 // shaded relief, blue line drawings, tracking boards, mission control's
 // glass and the cockpit's, single-ink displays, the Earth from space. (PLATES' own order is
 // their number on the watch, and only grows.)
-export const PLATE_ORDER=['enroute','sectional','hypsometric','survey','bridge','globus','sunlight','engraved','airbrush','planetary','moonlit','blueprint','staratlas',
-  'trackingboard','rodgeryoung','console','operations','dotmatrix','synthetic','terrain','crt','raster','amber','red','vector','nightside','infrared','whitehot','graphite','odyssey'];
+export const PLATE_ORDER=['enroute','sectional','hypsometric','survey','bridge','globus','portolan','sunlight','engraved','airbrush','planetary','moonlit','blueprint','staratlas',
+  'trackingboard','rodgeryoung','console','operations','dotmatrix','synthetic','terrain','crt','raster','amber','red','vector','voldenuit','nightside','infrared','whitehot','graphite','odyssey'];
 // Contours in meters; the lowest is dotted, as an intermediate contour.
 export const CONTOURS=[500,1000,2000,3000,4000,5000],SHELF=-200;
 // Acquisition circle: ground range at which a 410 km orbit rises 5 degrees
