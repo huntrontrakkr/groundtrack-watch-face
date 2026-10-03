@@ -91,7 +91,7 @@ export class Core{
   // The watch's own state in the margins' corner (NO LINK, BAT 18; '' for none).
   // The battery for the fuel line along the top edge (as the watch tells the
   // renderer): percent, charging, and whether the phone is in reach.
-  power(percent=100,{charging=false,linked=true}={}){this.x.core_power(percent,(charging?1:0)|(linked?0:2));}
+  power(percent=100,{charging=false,linked=true,fuel=true}={}){this.x.core_power(percent,(charging?1:0)|(linked?0:2)|(fuel?0:4));}
   status(text){const bytes=new TextEncoder().encode(text||''),at=this.x.core_alloc(bytes.length||1);new Uint8Array(this.mem(),at,bytes.length).set(bytes);this.x.core_status(at,bytes.length);this.x.core_free(at);}
   classAt(slot,x,y){return this.x.core_class(slot,x,y);}
   zoneAt(slot,minute,x,y){return this.x.core_zone(slot,minute,x,y);}

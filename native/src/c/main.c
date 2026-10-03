@@ -240,16 +240,17 @@ static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)
 // margin's time, the world band's time scale and how its minutes fall on
 // the route, the figure set and the margins' corner (see
 // native/pkjs/main.js; an older phone app sends 25 or 26 bytes).
+static void show_state(void);
 static void take_settings(const uint8_t *b,size_t n){
   if(n<25)return;
   WatchSettings s;memset(&s,0,sizeof s);
   s.version=11;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
-  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;s.also=n>27?b[27]:0;s.bare=n>28?b[28]:0;s.legend=n>29?b[29]:0;s.vibe=n>30?b[30]:0;
+  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;s.also=n>27?b[27]:0;s.bare=n>28?b[28]:0;s.legend=n>29?b[29]:0;s.watch=n>30?b[30]:0;
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
   if(!memcmp(&s,&s_settings,sizeof s)){check_soon();return;}
-  s_settings=s;settings_save(&s);
+  s_settings=s;settings_save(&s);show_state();
   // Drawn again in the new settings.
   build_abort();chart_free(&s_now);s_status[0]=0;s_status_phone=false;
   check_soon();layer_mark_dirty(s_layer);
@@ -283,7 +284,7 @@ static void show_state(void){
   static uint16_t shown=0xFFFF;
   const BatteryChargeState b=battery_state_service_peek();
   const bool linked=connection_service_peek_pebble_app_connection();
-  const int state=(b.is_charging?ENR_CHARGING:0)|(linked?0:ENR_NO_LINK);
+  const int state=(b.is_charging?ENR_CHARGING:0)|(linked?0:ENR_NO_LINK)|(s_settings.watch&2?ENR_NO_FUEL:0);
   const uint16_t now=(uint16_t)(b.charge_percent|state<<8);
   if(now==shown)return;
   shown=now;enr_status(linked?"":"NO LINK");enr_power(b.charge_percent,state);s_drawn_minute=-1;if(s_layer)layer_mark_dirty(s_layer);
@@ -294,7 +295,7 @@ static void battery_changed(BatteryChargeState state){show_state();}
 static void connection_changed(bool connected){
   show_state();
   if(connected){s_data_asked_at=0;s_data_tries=0;s_data_ok_until=0;}
-  else if(s_settings.vibe&&!quiet_time_is_active())vibes_double_pulse();
+  else if((s_settings.watch&1)&&!quiet_time_is_active())vibes_double_pulse();
 }
 static void window_load(Window *window){
   Layer *root=window_get_root_layer(window);

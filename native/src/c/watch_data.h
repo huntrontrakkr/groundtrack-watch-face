@@ -39,9 +39,10 @@ typedef struct {
   uint8_t bare;
   // A Fuller sheet's scale bar, in its open space.
   uint8_t legend;
-  // A vibration when the phone goes out of reach (the record's last byte,
-  // once the ticker's: zero for older records).
-  uint8_t vibe;
+  // The watch's own state (the record's last byte, once the ticker's: zero
+  // for older records): 1 a vibration when the phone goes out of reach, 2
+  // no fuel line.
+  uint8_t watch;
 } WatchSettings;
 
 void settings_load(WatchSettings *s);

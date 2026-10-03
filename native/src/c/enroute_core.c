@@ -625,7 +625,8 @@ static uint8_t on_ink(const EnrScene *s,uint8_t ink){
 // The watch's state for the margins' corner (enr_status).
 static char s_status[8];
 void enr_status(const char *text){int n=0;for(;text&&text[n]&&n<7;n++)s_status[n]=text[n];s_status[n]=0;}
-// The watch's battery (percent) and its state (ENR_CHARGING, ENR_NO_LINK).
+// The watch's battery (percent) and its state (ENR_CHARGING, ENR_NO_LINK,
+// ENR_NO_FUEL: the fuel line not wanted).
 static uint8_t s_power[2]={100,0};
 void enr_power(int percent,int state){s_power[0]=(uint8_t)(percent<0?0:percent>100?100:percent);s_power[1]=(uint8_t)state;}
 // The fuel line: along the top edge a gauge of the battery, filled over
@@ -636,6 +637,7 @@ void enr_power(int percent,int state){s_power[0]=(uint8_t)(percent<0?0:percent>1
 // without a fix.
 static __attribute__((noinline)) void draw_fuel(Ctx *c){
   const EnrScene *s=c->s;const int f=s_power[1],e=s_power[0]*W/100;
+  if(f&ENR_NO_FUEL)return;
   const uint8_t fill=s->zoned[f&ENR_CHARGING?ENR_INK:s_power[0]<=20?ENR_MARK:ENR_ROUTE][0];
   for(int x=0;x<W;x++){
     const bool on=x<e&&!((f&ENR_NO_LINK)&&x%6>3);

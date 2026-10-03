@@ -68,8 +68,8 @@ class Watch{
   async close(){this.p.stdin.end();await this.done;assert.equal(this.status,0,this.err.slice(0,3000));assert.equal(this.err,'');return this.lines.find(l=>'held' in l).held;}
 }
 // The frame the core draws, with the watch's battery and link as given.
-async function expectedWith(face,c,t,{percent=100,charging=false,linked=true}={}){
-  const r=await renderer();r.core.power(percent,{charging,linked});r.core.status(linked?'':'NO LINK');
+async function expectedWith(face,c,t,{percent=100,charging=false,linked=true,fuel=true}={}){
+  const r=await renderer();r.core.power(percent,{charging,linked,fuel});r.core.status(linked?'':'NO LINK');
   try{return await expected(face,c,t);}finally{r.core.power(100);r.core.status('');}
 }
 // The phone: the bundle, its clock the watch's, its messages kept in order.
@@ -106,7 +106,7 @@ async function answer(w,ph,rounds=4){
 // A phone's storage for a case: its settings, home, events and (kept as
 // fetched an hour before) the fixture's elements.
 function storage(c,t){
-  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',vibe:c.vibe?'1':'0',
+  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',vibe:c.vibe?'1':'0',fuel:c.fuel===false?'0':'1',
     home:c.home?JSON.stringify({lat:c.home.lat,lon:c.home.lon}):JSON.stringify({none:true}),events:JSON.stringify((c.events||[]).map(([minutes,title])=>({epoch:t+minutes*60000,title,label:nameCode(title)})))};
   // (Events come from a calendar's link: read a moment ago, as the phone keeps it.)
   if((c.events||[]).length){s.calendar='https://calendar.example/private/basic.ics';s['calendar-fetched']=String(t);}
@@ -336,6 +336,11 @@ test('the fuel line shows the battery and the link on every face, and the watch 
     await w.cmd('quiet 1');await w.cmd('link 0');await w.cmd('link 1');assert.equal(w.state.vibes,1);
     await w.close();
   }
-  // Not asked for: no vibration.
-  const {w}=await fresh('enroute',{body:'sun',zone:'UTC'},t);await w.cmd('link 0');assert.equal(w.state.vibes,0);await w.close();
+  // Not asked for: no vibration. The fuel line turned off: none drawn, in
+  // any state.
+  const c={body:'sun',zone:'UTC',plate:'enroute'},{w}=await fresh('enroute',{...c,fuel:false},t),file=join(dir,'frame.bin');
+  await w.cmd('battery 15');await w.cmd('link 0');assert.equal(w.state.vibes,0);
+  await w.cmd(`frame ${file}`);const got=readFileSync(file),want=await expectedWith('enroute',c,w.state.t*1000,{percent:15,linked:false,fuel:false});
+  let differ=0;for(let i=0;i<got.length;i++)if(got[i]!==want[i])differ++;assert.equal(differ,0,'no fuel line');
+  await w.close();
 });

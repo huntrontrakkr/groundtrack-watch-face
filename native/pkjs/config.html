@@ -163,8 +163,9 @@
     <div class="group">
       <label class="row"><input type="checkbox" name="clock24"><span class="name">24-hour clock<span class="note">The hour figures and the time read 13 to 23, not 1 to 11. Zulu time and home's rise, set and passes are always 24-hour, as on a chart</span></span></label>
     </div>
-    <div class="group"><h3>The phone</h3>
-      <label class="row"><input type="checkbox" name="vibe"><span class="name">Vibrate when the phone is out of reach<span class="note">A double pulse when the link drops, except in quiet time. The fuel line along the top turns to dashes while it is down, and the corner says NO LINK</span></span></label>
+    <div class="group"><h3>Battery and phone</h3>
+      <label class="row"><input type="checkbox" name="fuel"><span class="name">The fuel line<span class="note">The battery as a line along the top edge, ticked at the quarters: in the warning ink at 20% and under, the lettering's while charging, dashed while the phone is out of reach</span></span></label>
+      <label class="row"><input type="checkbox" name="vibe"><span class="name">Vibrate when the phone is out of reach<span class="note">A double pulse when the link drops, except in quiet time. The corner says NO LINK while it is down</span></span></label>
     </div>
     <div class="group"><h3>The time in the bottom margin</h3>
       <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)</span></label>
@@ -181,7 +182,7 @@
       <label class="row"><input type="radio" name="corner" value="day"><span class="name" id="corner-day">Day of the year<span class="note">DAY 270</span></span></label>
       <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
       <label class="row" id="corner-light"><input type="radio" name="corner" value="light"><span class="name" id="corner-light-name">The Moon's light<span class="note">87% WAX</span></span></label>
-      <p class="note field">The corner also says when the phone is out of reach (NO LINK) or a satellite's orbit data is old (EL OLD). The battery is the fuel line along the top edge: filled to its charge, in the plate's warning ink at 20% and under, in its lettering ink while charging.</p>
+      <p class="note field">The corner also says when the phone is out of reach (NO LINK) or a satellite's orbit data is old (EL OLD).</p>
     </div>
   </details>
   <details class="card" id="sec-home"><summary><span class="title">Home</span><span class="now" id="now-home"></span></summary>
@@ -237,7 +238,7 @@
   var s={},info={};
   ['body','face','plate','figures','readout','numerals','corner','margin','span','tape','transfer','hourFigures'].forEach(function(k){s[k]=config.settings[k];});
   if(s.hourFigures!=='0')s.hourFigures='1';
-  s.legend=config.settings.legend==='1';s.vibe=config.settings.vibe==='1';
+  s.legend=config.settings.legend==='1';s.vibe=config.settings.vibe==='1';s.fuel=config.settings.fuel!=='0';
   s.clock24=config.settings.clock24!=='0';
   s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
   config.bodies.forEach(function(b){info[b[0]]={name:b[1],note:b[2],view:b[3],period:b[4],group:b[5],plot:b[6]};});
@@ -328,7 +329,7 @@
     hide('tape-group',!r.tape);show('tape',s.tape);
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
-    hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;form.elements.vibe.checked=s.vibe;
+    hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;form.elements.vibe.checked=s.vibe;form.elements.fuel.checked=s.fuel;
     hide('bare-group',!r.bare);show('hourFigures',s.hourFigures);
     hide('readout-group',!r.readout.length);show('readout',r.readoutShown,r.readout);
     document.getElementById('readout-title').textContent=world?'The minute, marked on the panel':'The minute, marked on the route';
@@ -356,6 +357,7 @@
     if(t.name==='clock24')s.clock24=t.checked;
     else if(t.name==='legend')s.legend=t.checked;
     else if(t.name==='vibe')s.vibe=t.checked;
+    else if(t.name==='fuel')s.fuel=t.checked;
     else if(t.name==='also'){if(t.checked&&s.also.indexOf(t.value)<0)s.also.push(t.value);if(!t.checked)s.also=s.also.filter(function(k){return k!==t.value;});}
     else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;
     render();
@@ -593,7 +595,8 @@
       if(!ok){built=null;blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
       built=made.text;
     }
-    core.core_render(0,made.minute,framePtr);drawnMinute=made.minute;
+    // (A full battery's fuel line, or none.)
+    core.core_power(100,s.fuel?0:4);core.core_render(0,made.minute,framePtr);drawnMinute=made.minute;
     show_();
     // (What was drawn, for tests to draw again.)
     window.previewDrawn={input:made.text,minute:made.minute,screen:screen};
@@ -622,7 +625,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,hourFigures:s.hourFigures,legend:s.legend?'1':'0',vibe:s.vibe?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,hourFigures:s.hourFigures,legend:s.legend?'1':'0',vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

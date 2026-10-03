@@ -253,7 +253,7 @@ void enr_measure(const EnrScene *scene,int minute,int part,int16_t out[4]);
 // none).
 void enr_status(const char *text);
 // The battery for the fuel line along the top edge: its percent and state.
-enum {ENR_CHARGING=1,ENR_NO_LINK=2};
+enum {ENR_CHARGING=1,ENR_NO_LINK=2,ENR_NO_FUEL=4};
 void enr_power(int percent,int state);
 // Lettering's box, set at x on a baseline; its width.
 void enr_text_box(const char *text,int n,int x,int baseline,int16_t out[4]);

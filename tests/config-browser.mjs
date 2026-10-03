@@ -250,8 +250,11 @@ try{
   await page.check('input[name=hourFigures][value="1"]');
   await page.check('input[name=readout][value=callout]');await page.check('input[name=hourFigures][value="0"]');await page.check('input[name=numerals][value=accent]');await page.check('input[name=figures][value=orbitron]');await page.check('input[name=corner][value=point]');
   await page.check('input[name=margin][value=body]');await page.uncheck('input[name=clock24]');
-  // Vibrate when the phone goes out of reach (off until asked for).
+  // Vibrate when the phone goes out of reach (off until asked for); the
+  // fuel line (on until turned off), which the preview follows.
   assert.ok(!await page.locator('input[name=vibe]').isChecked());await page.check('input[name=vibe]');
+  assert.ok(await page.locator('input[name=fuel]').isChecked());
+  {const before=await pixels('preview');await page.uncheck('input[name=fuel]');assert.notDeepEqual(await pixels('preview'),before,'the preview drops the fuel line');await page.check('input[name=fuel]');}
   // The calendar is off until it has a link; something that is no link is
   // refused.
   assert.equal(await page.inputValue('input[name=calendar]'),'');

@@ -371,6 +371,8 @@ test('Groundtrack\'s two faces, the Sun and Moon beside the body, and satellites
     for(const [also,bits] of [['sun',1],['moon',2],['sun,moon',3],['mars',0]])assert.deepEqual(Array.from(await settings({body:'sat:25544',also})).slice(27),[bits,0,0,0],also);
     // The vibration when the phone goes out of reach: the last byte.
     for(const [vibe,value] of [[undefined,0],['0',0],['1',1],['yes',0]])assert.equal(Array.from(await settings({body:'sun',vibe}))[30],value,String(vibe));
+    // And the fuel line: shown unless turned off (bit 2).
+    for(const [fuel,vibe,value] of [['0',undefined,2],['0','1',3],['1','1',1],['no',undefined,0]])assert.equal(Array.from(await settings({body:'sun',fuel,vibe}))[30],value,`${fuel} ${vibe}`);
     // The hour chart bare of its hour figures (byte 28): the time in full
     // beside the body then, whatever the readout was; other charts keep theirs.
     for(const [stored,readout,bare] of [[{body:'sun',readout:'off',hourFigures:'0'},2,1],[{body:'sun',readout:'off'},0,0],[{body:'sun',face:'plotboard',readout:'off',hourFigures:'0'},0,1],[{body:'sat:25544',readout:'flag',hourFigures:'0'},1,1]]){
