@@ -1,5 +1,6 @@
 // See passes.h. Mirrors nextPass() and passText() in src/home.js and
 // src/enroute-render.js.
+#include "build_size.h"
 #include "passes.h"
 #include <string.h>
 

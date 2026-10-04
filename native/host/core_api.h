@@ -23,6 +23,11 @@ void core_source(int kind,const uint8_t *data,size_t length);
 int core_build(const char *text,size_t length,int slot);
 // Why the last build failed.
 const char *core_failure(void);
+// The ground kept between builds, in memory: on or off (off forgets), and how
+// many slices of ground have been written to it (a build that took its
+// ground from it writes none).
+void core_keep(int on);
+int core_kept(void);
 // A slot's scene (NULL without one), and the offsets JavaScript reads it
 // by: core_layout fills out with sizeof(EnrScene), sizeof(EnrPoint),
 // sizeof(EnrMinute) and the offsets listed in core_api.c.

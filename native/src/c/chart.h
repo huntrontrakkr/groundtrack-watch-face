@@ -90,6 +90,12 @@ typedef struct {
   void *(*alloc)(size_t);void (*release)(void *);
   // Shrinks an allocation in place or moves it (realloc); may be NULL.
   void *(*resize)(void *,size_t);
+  // The ground's runs kept between builds (the watch's persistent storage,
+  // 256 bytes a key; NULL for none): a build of the same chart over again,
+  // as when the face is opened again, takes them instead of making the
+  // ground. kept_write with no bytes deletes the key.
+  int (*kept_read)(uint32_t key,void *out,size_t n);
+  bool (*kept_write)(uint32_t key,const void *data,size_t n);
 } ChartSources;
 
 // Builds the hour's scene: the minute renderer's own (enr_real values:
@@ -109,8 +115,8 @@ ChartBuild *chart_begin(const ChartInput *in,const ChartSources *src);
 int chart_step(ChartBuild *build);
 EnrScene *chart_finish(ChartBuild *build);
 void chart_abort(ChartBuild *build);
-// Why the last build failed, for the log.
-const char *chart_failure(void);
+// Where the last build failed (a line of chart.c), for the log.
+extern unsigned chart_failed_at;
 // The figures the day's time callout sets each minute (20, 28 and 40 px),
 // read from the figures resource into the scene.
 bool chart_callout_figures(EnrScene *scene,MapReadFn read,void *source,void *(*alloc)(size_t));

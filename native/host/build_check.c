@@ -26,6 +26,20 @@ int main(void){
   const EnrScene *s=core_scene(0);
   // HEAP_BLOCKS=1 lists what the finished hour keeps (with a modelled heap).
   if(getenv("HEAP_BLOCKS")){for(int i=0;i<hm_n;i++)fprintf(stderr,"%s%u@%u ",hm_blocks[i].used?"":"free:",(unsigned)hm_blocks[i].size,(unsigned)hm_blocks[i].at);fprintf(stderr,"\n");}
-  printf("{\"built\":true,\"peak\":%u,\"kept\":%u,\"runs\":%u}\n",(unsigned)hm_peak,(unsigned)hm_live,(unsigned)s->row_offset[ENR_H]);
+  printf("{\"built\":true,\"peak\":%u,\"kept\":%u,\"runs\":%u",(unsigned)hm_peak,(unsigned)hm_live,(unsigned)s->row_offset[ENR_H]);
+  // KEEP=1: the ground kept in memory (core_keep), the hour built again from
+  // it: what it keeps written the first time and none the second, and each
+  // minute it draws the first's.
+  if(getenv("KEEP")){
+    core_keep(1);
+    uint8_t *a=malloc(ENR_W*ENR_H),*b=malloc(ENR_W*ENR_H);
+    // (Built again to keep, as the first took none: then from what is kept.)
+    core_build(text,len,2);const int written=core_kept();core_build(text,len,1);
+    int differ=0;
+    for(int m=0;m<60;m+=7){core_render(2,m,a);core_render(1,m,b);for(int i=0;i<ENR_W*ENR_H;i++)differ+=a[i]!=b[i];}
+    printf(",\"kept_written\":%d,\"kept_again\":%d,\"kept_differ\":%d",written,core_kept()-written,differ);
+    free(a);free(b);
+  }
+  printf("}\n");
   return 0;
 }

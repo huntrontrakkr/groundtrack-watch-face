@@ -104,6 +104,13 @@ double f_fmod(double x,double y){
   return from_words((uint32_t)(hx|sx),lx);
 }
 
+// (The trigonometry is the chart builder's, once an hour: compiled small, as
+// the builder is (build_size.h); the minute renderer's floor and square root
+// are not.)
+#pragma GCC push_options
+#ifdef FACE_ENROUTE
+#pragma GCC optimize("no-schedule-insns2","no-ipa-cp","no-ipa-cp-clone","no-tree-sra","no-forward-propagate","no-delete-null-pointer-checks","no-ira-hoist-pressure","no-optimize-sibling-calls")
+#endif
 static double kernel_sin(double x,double y,int iy){
   const double z=x*x,w=z*z,r=S2+z*(S3+z*S4)+z*w*(S5+z*S6),v=z*x;
   if(iy==0)return x+v*(S1+z*r);
@@ -211,6 +218,7 @@ double f_atan2(double y,double x){
   switch(m){case 0:return z;case 1:return -z;case 2:return PI_-(z-PI_LO);default:return (z-PI_LO)-PI_;}
 }
 
+#pragma GCC pop_options
 double f_floor(double x){
   if(!(x>-9.0e15&&x<9.0e15))return x;
   const double t=(double)(int64_t)x;

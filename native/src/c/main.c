@@ -6,6 +6,7 @@
 // changed with the native core. There is no animation, no sensor and no
 // timer but the minute tick. Until a chart covers the current hour, the
 // face says so plainly rather than showing a stale one.
+#include "build_size.h"
 #include <pebble.h>
 #include "enroute_core.h"
 #include "departure_font.h"
@@ -127,7 +128,7 @@ static unsigned stack_deepest(void){
 // The app's log, one line's worth of text for all of it (every byte of the
 // app is a byte of its heap): what happened, a number that goes with it,
 // the heap free and the stack's deepest. "build", "built" (milliseconds of
-// work), a failure's place in chart.c, "no room to draw", "stack".
+// work), "chart.c line" (a failure's place), "no room to draw", "stack".
 void app_note(const char *what,unsigned n){APP_LOG(APP_LOG_LEVEL_INFO,"%s %u; heap %u; stack %u of %u",what,n,(unsigned)heap_bytes_free(),stack_deepest(),(unsigned)STACK_BYTES);}
 static uint32_t now_ms(void){time_t t;uint16_t ms;time_ms(&t,&ms);return (uint32_t)t*1000+ms;}
 static void build_step(void *data);
@@ -156,12 +157,12 @@ static void build_step(void *data){
   do r=chart_step(s_build);while(r>0&&now_ms()-t0<80);
   s_build_ms+=now_ms()-t0;
   if(r>0){s_build_timer=app_timer_register(10,build_step,NULL);return;}
-  if(r<0){app_note(chart_failure(),0);build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
+  if(r<0){app_note("chart.c line",chart_failed_at);build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
   if(scene){s_now.scene=scene;s_chart_serial++;s_status[0]=0;s_status_phone=false;app_note("built",(unsigned)s_build_ms);}
-  else{s_status_phone=false;set_status("NO ROOM FOR THE CHART");app_note(chart_failure(),1);}
+  else{s_status_phone=false;set_status("NO ROOM FOR THE CHART");app_note("chart.c line",chart_failed_at);}
   layer_mark_dirty(s_layer);
   // A build that ran over the hour's end made the last hour's chart.
   if(scene)check(time(NULL));

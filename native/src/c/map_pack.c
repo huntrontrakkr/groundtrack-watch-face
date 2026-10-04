@@ -1,5 +1,6 @@
 // The map pack's decoder. Mirrors decodeTile in tools/map-pack.mjs step
 // for step; integer arithmetic only, so both decode identical cells.
+#include "build_size.h"
 #include "map_pack.h"
 #include <string.h>
 

@@ -26,8 +26,20 @@ def build(ctx):
         # Optimised across the sources at link time: about 1.3 KB smaller,
         # and every byte of the app is a byte of its heap.
         ctx.env.append_value('CFLAGS', ['-ffp-contract=off', '-flto', '-D' + FACE])
+        # The app's version is in the key of the ground it keeps (chart.c
+        # keep_try): a new version makes it again.
+        import json
+        ctx.env.append_value('CFLAGS', ['-DGT_VERSION=\"%s\"' % json.load(open('package.json'))['version']])
         # (The app's header is referenced by nothing: -u keeps it through the link.)
         ctx.env.append_value('LINKFLAGS', ['-flto', '-Os', '-ffp-contract=off', '-Wl,-u,__pbl_app_info'])
+        # Smaller still, for the kept ground's room: fewer functions inlined,
+        # and loops left as written (about 2.4 KB on Groundtrack; tools/energy
+        # measures what it costs the watch's work).
+        size = ['-fno-inline-functions-called-once', '-fno-early-inlining', '-fno-partial-inlining',
+                '-fno-tree-tail-merge', '-fno-tree-pre', '-fno-reorder-blocks', '-fno-move-loop-invariants',
+                '-fno-tree-dominator-opts', '-fno-tree-loop-im', '-fno-tree-scev-cprop']
+        ctx.env.append_value('CFLAGS', size)
+        ctx.env.append_value('LINKFLAGS', size)
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         # Doubles throughout, as the JavaScript: the SDK builds for the

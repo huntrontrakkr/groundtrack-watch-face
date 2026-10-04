@@ -1,4 +1,5 @@
 // See segments.h; each step mirrors src/segments.js.
+#include "build_size.h"
 #include "segments.h"
 bool sat_eclipsed(double altitude,double solar_dot){
   // Earth's umbra narrows by about 0.00461 km per km behind it.

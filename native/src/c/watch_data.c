@@ -1,4 +1,5 @@
 // See watch_data.h.
+#include "build_size.h"
 #include "watch_data.h"
 #include "fmath.h"
 #include "chart.h"
@@ -170,6 +171,12 @@ void local_chart_done(void){free(s_days);s_days=NULL;}
 // (the stack is small), and let go once the build has taken its copy.
 typedef struct {ChartInput in;uint8_t events[252];} Assembly;
 static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as);
+// The ground's runs kept in persistent storage (chart.h kept_read); with no
+// bytes, a key deleted.
+static bool kept_write(uint32_t key,const void *data,size_t n){
+  if(!n){persist_delete(key);return true;}
+  return persist_write_data(key,data,n)==(int)n;
+}
 ChartBuild *local_chart(time_t now,const WatchSettings *s){
   if(s->body>BODY_SATELLITE)return NULL;
   Assembly *as=malloc(sizeof(Assembly));if(!as)return NULL;
@@ -235,7 +242,7 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
 #endif
     .figures=resource_read,.figure_source=&figures,.tables=resource_read,.table_source=&tables,
     .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,
-    .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc};
+    .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc,.kept_read=persist_read_data,.kept_write=kept_write};
   #undef days
   ChartBuild *build=chart_begin(&in,&src);
   if(!build){app_note("no chart started",0);local_chart_done();}

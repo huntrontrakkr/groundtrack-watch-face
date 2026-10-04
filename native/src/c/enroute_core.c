@@ -1122,6 +1122,11 @@ static bool work_begin(const EnrScene *s,bool masks){
 static void work_end(void){if(!work)return;free(work->mask);if(work->night){free(work->night[0].h);free(work->night[1].h);}free(work->night);free(work->scratch_px);free(work->cache);free(work);work=NULL;}
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){if(work_begin(scene,false)){render(scene,minute,frame,row_stride,NULL,NULL,NULL);work_end();}}
 
+// (Once a chart, when it is built: compiled small, as the builder is; see
+// build_size.h.)
+#ifdef FACE_ENROUTE
+__attribute__((optimize("no-schedule-insns2","no-ipa-cp","no-ipa-cp-clone","no-tree-sra","no-forward-propagate","no-delete-null-pointer-checks","no-ira-hoist-pressure","no-optimize-sibling-calls")))
+#endif
 void enr_ready(EnrScene *s){
   if(!ROLLED(s))for(int y=0;y<H;y++){s->row_q[y][0]=q30(s->row_cos[y]);s->row_q[y][1]=q30(s->row_sin[y]);}
   // Night's thresholds: sunrise, civil twilight, the zones' dither for each

@@ -24,6 +24,23 @@ static void pass_for(void *ctx,int64_t t,char out[24]){
 }
 static size_t unhex(const char *hex,uint8_t *out,size_t max){size_t n=0;while(hex[0]&&hex[1]&&n<max){unsigned v;sscanf(hex,"%2x",&v);out[n++]=(uint8_t)v;hex+=2;}return n;}
 static EnrScene *s_scene[CORE_SLOTS];static char s_why[64];
+// The ground kept between builds (chart.h kept_read), in memory here:
+// core_keep(1) turns it on, core_kept() counts the slices written to it (a
+// build that took its ground from it writes none).
+#define KEPT_FIRST 700
+#define KEPT_KEYS 270
+static uint8_t s_kept_data[KEPT_KEYS][256];static int s_kept_len[KEPT_KEYS];static bool s_keep_on;static int s_kept_writes;
+static int kept_read(uint32_t key,void *out,size_t n){
+  if(key<KEPT_FIRST||key>=KEPT_FIRST+KEPT_KEYS||s_kept_len[key-KEPT_FIRST]<=0)return -1;
+  const int have=s_kept_len[key-KEPT_FIRST];if((size_t)have<n)n=(size_t)have;
+  memcpy(out,s_kept_data[key-KEPT_FIRST],n);return (int)n;
+}
+static bool kept_write(uint32_t key,const void *data,size_t n){
+  if(key<KEPT_FIRST||key>=KEPT_FIRST+KEPT_KEYS||n>256)return false;
+  if(n)memcpy(s_kept_data[key-KEPT_FIRST],data,n);s_kept_len[key-KEPT_FIRST]=(int)n;if(n&&key>KEPT_FIRST)s_kept_writes++;return true;
+}
+void core_keep(int on){s_keep_on=on;if(!on){memset(s_kept_len,0,sizeof s_kept_len);s_kept_writes=0;}}
+int core_kept(void){return s_kept_writes;}
 static void *(*s_alloc)(size_t)=malloc;static void (*s_release)(void *)=free;static void *(*s_resize)(void *,size_t)=realloc;
 void core_allocator(void *(*alloc)(size_t),void (*release)(void *),void *(*resize)(void *,size_t)){s_alloc=alloc;s_release=release;s_resize=resize;}
 
@@ -70,9 +87,10 @@ int core_build(const char *text,size_t length,int slot){
   }
   const ChartSources src={.map=mem_read,.map_source=&s_source[CORE_MAP],.figures=mem_read,.figure_source=&s_source[CORE_FIGURES],.tables=mem_read,.table_source=&s_source[CORE_TABLES],
     .grids=s_source[CORE_GRIDS].data?mem_read:NULL,.grid_source=&s_source[CORE_GRIDS],.land=s_source[CORE_LAND].data?mem_read:NULL,.land_source=&s_source[CORE_LAND],
-    .segment=seg_for,.satellite=sat_for,.pass_line=pass_for,.alloc=s_alloc,.release=s_release,.resize=s_resize};
+    .segment=seg_for,.satellite=sat_for,.pass_line=pass_for,.alloc=s_alloc,.release=s_release,.resize=s_resize,
+    .kept_read=s_keep_on?kept_read:NULL,.kept_write=s_keep_on?kept_write:NULL};
   s_scene[slot]=chart_build(&in,&src);
-  if(!s_scene[slot]){snprintf(s_why,sizeof s_why,"%s",chart_failure());return 0;}
+  if(!s_scene[slot]){snprintf(s_why,sizeof s_why,"chart.c:%u",chart_failed_at);return 0;}
   return 1;
 }
 int core_render(int slot,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;enr_render(s,minute,frame,ENR_W);return 0;}

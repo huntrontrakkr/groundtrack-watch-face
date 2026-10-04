@@ -99,6 +99,11 @@ async function check(c){
   const b=await run(`build_check-${f}`,[],text,{HEAP_LIMIT:String(HEAPS[f]-4000)});
   if(b.status!==0){fail(c,`no chart in a heap of ${HEAPS[f]-4000} bytes: ${b.out}${b.err.slice(0,400)}`);return;}
   const m=JSON.parse(b.out),key=`${f} ${c.plate}`;if(!(runs[key]>=m.runs))runs[key]=m.runs;
+  // The ground kept (chart.c keep_try): built again from it, the chart is the
+  // chart, and the second build keeps nothing.
+  const k=await run(`san-build_check-${f}`,[],text,{KEEP:'1'});
+  if(k.err.trim())fail(c,`the kept ground: ${k.err.slice(0,1500)}`);
+  else{const q=JSON.parse(k.out);if(q.kept_differ||q.kept_again||!(q.kept_written>2))fail(c,`the kept ground: written ${q.kept_written}, again ${q.kept_again}, ${q.kept_differ} pixels differ`);}
   for(const k of ['peak','kept'])if(m[k]>worst[f][k])worst[f][k]=m[k];
   if(m.kept>KEPT[f])fail(c,`keeps ${m.kept} bytes: more than ${KEPT[f]} leaves too little to draw a minute`);
 }

@@ -2,6 +2,7 @@
 // it mirrors; arithmetic follows it operation for operation (doubles where
 // it uses numbers, floats where it stores Float32Array values), with sine
 // and cosine from fmath.c. Build without fused multiply-adds.
+#include "build_size.h"
 #include "chart.h"
 #include "fmath.h"
 #include "face.h"
@@ -32,9 +33,9 @@ static double js_round(double v){const double r=f_floor(v);return v-r>=0.5?r+1:r
 static double wrap(double lon){return f_mod(lon+180,360)-180;}
 
 // Where the last build failed (a line of this file), for the log.
-static int s_failure_line;
-#define FAIL do{s_failure_line=__LINE__;goto fail;}while(0)
-const char *chart_failure(void){static char text[24];char *p=text;memcpy(p,"chart.c:",8);p+=8;int v=s_failure_line,n=0;char d[8];do{d[n++]=(char)('0'+v%10);v/=10;}while(v);while(n)*p++=d[--n];*p=0;return text;}
+unsigned chart_failed_at;
+#define FAIL do{chart_failed_at=__LINE__;goto fail;}while(0)
+
 // ---------------------------------------------------------------- camera
 // chartCamera(body, start, {span: SPAN}): the hour chart, or for a fast
 // satellite the world band, between WORLD_NORTH and WORLD_SOUTH.
@@ -43,10 +44,10 @@ const char *chart_failure(void){static char text[24];char *p=text;memcpy(p,"char
 // wide: a whole-orbit or whole-day view (fewer contours, a one-ink plate's
 // waterlines left out); on a rolling Fuller sheet every satellite's.
 // pole: a polar chart's (1 north, -1 south; see place()), its plane turned
-// by rc, rs (turn()); km its degrees of plane to a degree of the Earth at
+// by rc, rs (axes()); km its degrees of plane to a degree of the Earth at
 // the middle, and cc, sc the cosine and sine of the middle's angle from
 // the pole (local()).
-typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world,day,wide;double nx,ny;int top,bottom;int pole;double rc,rs,km,cc,sc,p[6];} Cam;
+typedef struct {double lat0,k,scale,lonMid,x0,y0;bool slow,world,day,wide;double nx,ny;int top,bottom;int pole;double rc,rs,km,cc,sc;} Cam;
 // The rolling Fuller sheet being built, if it is one: projection goes
 // through it (roll.js project()).
 static const FullerCam *s_roll;
@@ -56,23 +57,21 @@ static double glat(const Cam *c,double y){return c->lat0+(c->y0-y)/c->scale;}
 static double glon(const Cam *c,double x){return c->lonMid+(x-c->x0)/(c->k*c->scale);}
 // A place's direction: x, y and z.
 static void dir3(double lat,double lon,double d[3]){const double c=f_cos(lat*RAD);d[0]=c*f_cos(lon*RAD);d[1]=c*f_sin(lon*RAD);d[2]=f_sin(lat*RAD);}
-static double dot3(const double *a,const double *b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
 // A polar chart's plane (tools/generate-map-pack.mjs capOf()), turned so
 // that north is up at the chart's middle: a place's latitude and longitude
-// become its distances right and up on it, which the chart is drawn by as
-// a flat chart is by longitude and latitude (sx(), sy()). Near a pole the
-// flat chart's meridians close up; this one has none to. (On the plane,
-// unturned, a direction d is at 2 (d.y, -pole d.x) / (1 + pole d.z)
-// radians; the turned axes are cam->p's rows.)
+// become its distances up and right on it, which the chart is drawn by as a
+// flat chart is by latitude and longitude (sx(), sy()). Near a pole the
+// flat chart's meridians close up; this one has none to. A direction d, its
+// plane unturned, is at 2 (d.y, -pole d.x) / (1 + pole d.z) radians; turned
+// by (rc, rs), its right and up are a and b below, over that.
+static void axes(const Cam *c,const double d[3],double *a,double *b){
+  *a=c->rc*d[1]-c->pole*c->rs*d[0];*b=c->rc*d[0]+c->pole*c->rs*d[1];
+}
 static void place(const Cam *c,double *lat,double *lon){
   if(!POLAR||!c->pole)return;
-  double d[3];dir3(*lat,*lon,d);const double q=1+c->pole*d[2];
-  *lon=dot3(c->p,d)/q;*lat=dot3(c->p+3,d)/q;
-}
-// The plane turned: its right (rc, rs), and the axes for place().
-static void turn(Cam *c,double rc,double rs){
-  const double k=2/RAD,p[6]={-c->pole*rs*k,rc*k,0,-c->pole*rc*k,-rs*k,0};
-  c->rc=rc;c->rs=rs;memcpy(c->p,p,sizeof p);
+  double d[3],a,b;dir3(*lat,*lon,d);axes(c,d,&a,&b);
+  const double q=(1+c->pole*d[2])*RAD/2;
+  *lon=a/q;*lat=-c->pole*b/q;
 }
 // A direction on the Earth (the Sun's, a satellite's): x, y and z; on a
 // polar chart, along its middle's direction, east and north there, the
@@ -84,8 +83,8 @@ static void local(const Cam *c,double lat,double lon,double v[3]){
   if(POLAR&&c->pole){
     // (East is the plane's right; the middle's direction and north there
     // are along the plane's up, b, and z: the middle is c from the pole.)
-    const double a=dot3(c->p,v)*RAD/2,b=-c->pole*dot3(c->p+3,v)*RAD/2,z=c->pole*v[2];
-    v[0]=c->sc*b+c->cc*z;v[1]=a;v[2]=c->pole*(c->sc*z-c->cc*b);
+    double a,b;axes(c,v,&a,&b);
+    const double z=v[2];v[0]=c->sc*b+c->cc*c->pole*z;v[1]=a;v[2]=c->sc*z-c->cc*c->pole*b;
   }
 }
 // project(): the copy of a longitude nearest the middle of the view.
@@ -345,8 +344,8 @@ typedef struct RunChunk {struct RunChunk *next;uint16_t used;uint8_t data[RUN_CH
 // dropped: chunks let go from the head, their rows read for the last time.
 typedef struct {uint8_t *arena;RunChunk *head,*tail;void *(*alloc)(size_t);uint16_t row_offset[H+1];unsigned n,cap,dropped;bool failed;} RunSink;
 static int row_runs(const uint8_t *row,uint8_t *out);
-static void sink_row(RunSink *k,int y,const uint8_t *row){
-  uint8_t runs[2*W];const int n=row_runs(row,runs);
+// Runs appended to the sink: the arena first, then chunks.
+static void sink_put(RunSink *k,const uint8_t *runs,int n){
   // (The rows' offsets are 16 bits.)
   if(k->n+(unsigned)n>65535){k->failed=true;return;}
   int at=0;
@@ -360,7 +359,11 @@ static void sink_row(RunSink *k,int y,const uint8_t *row){
     const int take=n-at<RUN_CHUNK-k->tail->used?n-at:RUN_CHUNK-k->tail->used;
     memcpy(k->tail->data+k->tail->used,runs+at,take);k->tail->used=(uint16_t)(k->tail->used+take);at+=take;
   }
-  k->n+=(unsigned)n;k->row_offset[y+1]=(uint16_t)k->n;
+  k->n+=(unsigned)n;
+}
+static void sink_row(RunSink *k,int y,const uint8_t *row){
+  uint8_t runs[2*W];const int n=row_runs(row,runs);
+  sink_put(k,runs,n);k->row_offset[y+1]=(uint16_t)k->n;
 }
 typedef struct {
   const Cam *cam;const Plate *pal;RunSink *sink;uint8_t crow[W];
@@ -896,6 +899,9 @@ struct ChartBuild {
   uint32_t heard;int tile_row;unsigned tile_piece,tile_used;
   // How many times a shaded plate's ground has been begun again, lighter.
   uint8_t shade;
+  // The ground's runs, kept: the chart's key, whether they await keeping, and
+  // how many of the keys are written (keep_step).
+  uint32_t key;uint16_t saved;bool keep;
 };
 static void sink_free(ChartBuild *b){
   for(RunChunk *c=b->sink.head;c;){RunChunk *next=c->next;b->src.release(c);c=next;}
@@ -921,6 +927,11 @@ static int make_track(const ChartInput *in,const ChartSources *src,TrackPoint *t
     track[count].a=lat;track[count].b=lon+turn;count++;
   }
   return count;
+}
+// The sink emptied (its chunks let go).
+static void sink_reset(ChartBuild *b){
+  for(RunChunk *c=b->sink.head;c;){RunChunk *next=c->next;b->src.release(c);c=next;}
+  b->sink.head=b->sink.tail=NULL;b->sink.n=0;b->sink.dropped=0;b->sink.failed=false;
 }
 static void ground_free(ChartBuild *b){
   const ChartSources *src=&b->src;
@@ -1011,7 +1022,6 @@ static bool fuller_begin(ChartBuild *b){
   }
   if(src->tables(src->table_source,TABLE_METERS_AT,(uint8_t *)b->gc->meters,1024)!=1024)return false;
   ground_begin(b->ground,&b->cam,&b->plate,&b->sink);
-
   return true;
 }
 // A grid direction at a quarter-pixel place on a tile, in the face's frame.
@@ -1173,10 +1183,10 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
       // (an hour about the pole itself is turned as its middle falls, a hair
       // off it if need be). The middle is c from the pole, tan(c/2) = t, at
       // the longitude whose east is the plane's right.
-      cam.pole=glat(&cam,0)>80?1:-1;cam.k=1;turn(&cam,1,0);
+      cam.pole=glat(&cam,0)>80?1:-1;cam.k=1;cam.rc=1;cam.rs=0;
       double pa=al,qa=ao,pb=bl,qb=bo;place(&cam,&pa,&qa);place(&cam,&pb,&qb);
       const double mx=(qa+qb)/2+1e-9,my=(pa+pb)/2,m=f_sqrt(mx*mx+my*my),u=m/cam.pole;
-      turn(&cam,-my/u,mx/u);
+      cam.rc=-my/u;cam.rs=mx/u;
       const double t=m*RAD/2;cam.km=1+t*t;cam.cc=(1-t*t)/cam.km;cam.sc=2*t/cam.km;
       place(&cam,&al,&ao);place(&cam,&bl,&bo);
     }
@@ -1266,8 +1276,7 @@ static bool fuller_tile_rows(ChartBuild *b,int to){
 #define SHADE_RUNS(b) ((b)->sink.cap+(FACE_ROLL&&(!FACE_CHART||(b)->fc)?((b)->fine?0:4):3)*RUN_CHUNK)
 #define SHADE_AGAIN 5
 static void ground_again(ChartBuild *b){
-  for(RunChunk *c=b->sink.head;c;){RunChunk *next=c->next;b->src.release(c);c=next;}
-  b->sink.head=b->sink.tail=NULL;b->sink.n=0;b->sink.dropped=0;b->sink.failed=false;
+  sink_reset(b);
   if(FACE_CHART&&b->tiles){tiles_choose(b->tiles,&b->cam);b->tiles->failed=false;}
   ground_begin(b->ground,&b->cam,&b->plate,&b->sink);
   if(++b->shade==SHADE_AGAIN)b->ground->shade_step=0;else for(int k=0;k<b->shade;k++)b->ground->shade_step+=b->ground->shade_step/2;
@@ -1280,20 +1289,87 @@ static void ground_again(ChartBuild *b){
 #define CHART_STEP_MINUTES 6
 // (Each stage a function of its own, not folded into chart_step: the
 // watch's stack is 2 KB, and one stage's frame must not lie under another's.)
+// The ground's end: what it used freed (the night's grid, if it read it,
+// goes to the scene).
+static void ground_end(ChartBuild *b){
+  ground_free(b);
+  if(b->gc){b->src.release(b->gc);b->gc=NULL;b->src.release(b->tgrid);b->tgrid=NULL;}
+}
+// ------------------------------------------------ the ground kept
+// The ground's runs, the work of four fifths of a build, are kept in
+// persistent storage under the chart's key, the hash of all that makes
+// them: this version, the camera, the plate. Keys: the header (the key and
+// the runs' length), two for the rows' offsets, then the runs 256 bytes at a
+// time (a multiple of the arena and the chunks).
+#define KEPT_KEY 700
+#define KEPT_SLICE 256
+_Static_assert(RUN_ARENA%KEPT_SLICE==0&&RUN_CHUNK%KEPT_SLICE==0,"the runs are kept in slices");
+#ifndef GT_VERSION
+#define GT_VERSION "host"
+#endif
+static __attribute__((noinline)) void keep_hash(uint32_t *h,const void *p,size_t n){for(const uint8_t *q=p;n--;q++)*h=(*h^*q)*16777619u;}
+// The kept slices: the rows' offsets (the first two, 458 bytes) and then
+// the runs, 256 bytes each, from the arena and then the chunks. A slice's
+// length (0 past the last: the offsets say how long the runs are) and place.
+static unsigned keep_len(const RunSink *k,unsigned j){
+  if(j<2)return j?sizeof k->row_offset-KEPT_SLICE:KEPT_SLICE;
+  const unsigned at=(j-2)*KEPT_SLICE,total=k->row_offset[H];
+  return at>=total?0:total-at<KEPT_SLICE?total-at:KEPT_SLICE;
+}
+static uint8_t *keep_ptr(RunSink *k,unsigned j){
+  if(j<2)return (uint8_t *)k->row_offset+j*KEPT_SLICE;
+  unsigned at=(j-2)*KEPT_SLICE;
+  if(at<k->cap)return k->arena+at;
+  at-=k->cap;RunChunk *c=k->head;
+  for(;at>=RUN_CHUNK;at-=RUN_CHUNK)c=c->next;
+  return c->data+at;
+}
+// A build before its first step of ground: take the ground kept for it, if
+// it is there, and the ground is done; else note the chart's key.
+static void keep_try(ChartBuild *b){
+  const ChartSources *s=&b->src;RunSink *k=&b->sink;
+  if(!s->kept_read)return;   // (and kept_write: they come together)
+  uint32_t h=2166136261u,kept=0;
+  keep_hash(&h,GT_VERSION,sizeof GT_VERSION);keep_hash(&h,&b->cam,sizeof b->cam);keep_hash(&h,&b->plate,sizeof b->plate);
+  // (The Fuller camera but for its first member, a pointer.)
+  if(FACE_ROLL&&b->fc){keep_hash(&h,&b->fc->ux,sizeof *b->fc-offsetof(FullerCam,ux));keep_hash(&h,&b->fine,1);}
+  b->key=h;
+  if(s->kept_read(KEPT_KEY,&kept,sizeof kept)!=(int)sizeof kept||kept!=h)return;
+  uint8_t slice[KEPT_SLICE];unsigned j=0,n;
+  while((n=keep_len(k,j))||j<2){
+    if(s->kept_read(KEPT_KEY+1+j,j<2?keep_ptr(k,j):slice,n)!=(int)n)break;
+    if(j++>1)sink_put(k,slice,(int)n);
+  }
+  if(!n&&!k->failed){b->key=0;ground_end(b);return;}
+  // (Not all there: the ground is made as ever.)
+  sink_reset(b);
+}
+// A few of the keys written at a time, the header last (this is what makes
+// the rest true): a build between the ground and the drawing, which then
+// consumes the runs.
+static void keep_step(ChartBuild *b){
+  const ChartSources *s=&b->src;RunSink *k=&b->sink;
+  if(!b->saved)s->kept_write(KEPT_KEY,NULL,0);
+  for(int i=0;i<8&&b->keep;i++){
+    const unsigned n=keep_len(k,b->saved);
+    if(!n&&b->saved>1){b->keep=false;s->kept_write(KEPT_KEY,&b->key,sizeof b->key);break;}
+    b->keep=s->kept_write(KEPT_KEY+1+b->saved,keep_ptr(k,b->saved),n);b->saved++;
+  }
+}
 static __attribute__((noinline)) int ground_slice(ChartBuild *b){
     const int r=FACE_ROLL&&(!FACE_CHART||b->fc)?fuller_ground_step(b,b->fine?1:FULLER_STEP_ROWS):ground_step(b->ground,b->tiles,CHART_STEP_ROWS);
     if((b->plate.flags&PLATE_SHADE)&&b->shade<SHADE_AGAIN&&(b->sink.failed||b->sink.n>SHADE_RUNS(b))){ground_again(b);return 1;}
-    if(r<=0){
-      ground_free(b);
-      if(b->gc){
-        // (The night's grid, if the ground read it, goes to the scene.)
-        b->src.release(b->gc);b->gc=NULL;b->src.release(b->tgrid);b->tgrid=NULL;
-      }
-    }
+    if(r<=0){ground_end(b);b->keep=r==0&&b->key;}   // (a ground that ends 0 did not fail)
     return r<0?-1:1;
 }
 int chart_step(ChartBuild *b){
-  if(b->ground)return ground_slice(b);
+  if(b->ground){
+    // (The kept ground, if there is one, first: from here, from a timer,
+    // where the stack is shallow, not from chart_begin.)
+    if(!b->key){keep_try(b);if(!b->ground)return 1;}   // (a key says it was tried)
+    return ground_slice(b);
+  }
+  if(b->keep){keep_step(b);return 1;}
   if(!b->out)return finish_draw(b)?1:-1;
   if(FACE_ROLL&&b->out->fuller&&b->tile_row<H)return fuller_tile_rows(b,b->tile_row+TILE_STEP_ROWS)?1:-1;
   if(b->minute<60){
