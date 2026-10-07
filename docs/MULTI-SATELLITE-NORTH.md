@@ -13,3 +13,11 @@ To fit the native apps, persistent segment records are read directly into their 
 ![Groundtrack (left) and Fuller (right), Console above and Survey below](screenshots/multi-north-v0.6.0.png)
 
 These previews use the saved test elements at 30 September 2026, 13:20 UTC.
+
+## Shared picker (0.6.2)
+
+Checking a satellite in the catalog or CelesTrak results adds a companion. It does not change the primary. The cards above the catalog identify the primary (route and clock) and up to two companions (markers only). **Make primary** swaps a companion with the previous primary. If that primary was the Sun or Moon, it remains a context marker instead of occupying a satellite slot.
+
+**Replace** names the position being edited and reuses the same catalog and search for it. Choosing an already selected satellite swaps positions; an empty slot cannot take away the primary. Cancel leaves selections intact. At capacity, unchecked satellites are disabled until the user replaces or removes a selection. The Sun and Moon are offered when replacing the primary.
+
+Custom satellites are saved under **Your satellites** and can fill any role. Removing a companion only stops tracking it. **Forget saved satellite** is available for unselected custom entries and removes them from that library. Search results show checkmarks and current roles, and selecting one does not clear the results. The settings preview updates before Save.

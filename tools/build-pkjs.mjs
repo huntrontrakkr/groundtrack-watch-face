@@ -52,7 +52,7 @@ const rulesText={
   setup(b){
     b.onResolve({filter:/^groundtrack-rules-text$/},()=>({path:'rules-text',namespace:'groundtrack'}));
     b.onLoad({filter:/^rules-text$/,namespace:'groundtrack'},async()=>{
-      const source=readFileSync(fileURLToPath(new URL('src/settings-rules.js',root)),'utf8').replace(/^export /gm,'');
+      const source=['src/settings-rules.js','src/tracking-selection.js'].map(f=>readFileSync(fileURLToPath(new URL(f,root)),'utf8').replace(/^export /gm,'')).join('\n');
       // (As the phone's own script is: ES2015, small.)
       const {transform}=await import('esbuild');
       const {code}=await transform(source+'\nsettingsFor;chartOf;',{target:'es2015',minifyWhitespace:true,minifySyntax:true});
