@@ -153,6 +153,7 @@ function watchSettings(){
     (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,(setting('legend','0')==='1'?1:0)|(FACE==='fuller'&&setting('north','0')==='1'?2:0),
     (setting('vibe','0')==='1'?1:0)|(setting('fuel','1')==='0'?2:0));
   var companions=extra();for(var j=0;j<2;j++)i32(companions[j]?Number(companions[j].slice(4)):0);
+  for(var j=0;j<2;j++){var c=companions[j]?catalogEntry(companions[j]).code:'';for(var k=0;k<3;k++)bytes.push(k<c.length?c.charCodeAt(k):0);}
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}

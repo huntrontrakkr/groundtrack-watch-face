@@ -3,6 +3,7 @@
 // native/host/core_api.c, so the study draws with the watch's code. An hour
 // is built from the same input text the phone would give the watch
 // (chart-input.js); a minute is drawn from the built scene.
+import {catalogEntry} from './satellites.js';
 import {chartInput} from './chart-input.js';
 import {clockParts} from './render.js';
 import {position,MINUTE} from './ephemeris.js';
@@ -141,7 +142,7 @@ export class CoreRenderer{
     const stations=s.stations.map(st=>{const w=core.textWidth(st.code),right=st.x+5+w<W-3;return {...st,x:turned(st.x),box:turnedBox({x:right?st.x-3:st.x-6-w,y:st.y-5,w:w+9,h:11})};});
     const margins=[];
     if(!world){const d=localDate(start,timeZone),MONTHS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'],WEEKDAYS=['SUN','MON','TUE','WED','THU','FRI','SAT'];
-      const left=`${WEEKDAYS[new Date(Date.UTC(d.year,d.month-1,d.day)).getUTCDay()]} ${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]}`,right=m.corner;
+      const left=`${s.body>=2?(catalogEntry(body)?.code||(body==='iss'?'ISS':'SAT')):WEEKDAYS[new Date(Date.UTC(d.year,d.month-1,d.day)).getUTCDay()]} ${String(d.day).padStart(2,'0')} ${MONTHS[d.month-1]}`,right=m.corner;
       for(const b of [core.textBox(left,6,H-5),right&&core.textBox(right,W-6-core.textWidth(right),H-5)])if(b)margins.push(b);}
     const zuluBox=core.textBox(m.zulu,s.zulu.x,s.zulu.baseline);
     this.last={buf,rgba,frame,start,time:parts.text,world,day,fuller:s.fuller,scene:s,slot,minute,zulu:{text:m.zulu,box:zuluBox},margins,

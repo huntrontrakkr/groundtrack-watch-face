@@ -140,7 +140,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
     // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,...Array(8).fill(0)]},{Events:[0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,...Array(14).fill(0)]},{Events:[0]}]));
     // The browser's other options, as set: a time callout in Departure Mono,
     // the 12-hour clock, the nautical zone; QZSS on the hour chart.
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
@@ -208,10 +208,12 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
       const set=p.messages.find(m=>m.Settings).Settings;
       assert.equal(JSON.stringify([set[0],set[13]|set[14]<<8,set[17],String.fromCharCode(...set.slice(18,21))]),JSON.stringify([2,25544,1|1<<1,'ISS']));
     }
+    {const p=phone(bundle,now,{timeZone:'UTC',body:'sat:25544',extra:'sat:20580,sat:48274'});p.listeners.ready({});await p.quiet();
+      assert.equal(String.fromCharCode(...p.messages.find(m=>m.Settings).Settings.slice(39)), 'HSTCSS');}
     // How the tape's minutes fall on the route: the settings' 25th byte.
     for(const [transfer,code] of [['vernier',1],['comb',2],['chevrons',3],['wavy',0]]){
       const p=phone(bundle,now,{timeZone:'UTC',transfer});p.listeners.ready({});await p.quiet();
-      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,39);assert.equal(set[24],code);
+      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,45);assert.equal(set[24],code);
     }
     // The minute readout (byte 2): none, the flag, the time in full, or the
     // counter (this hour's figure as the time); one the phone doesn't know

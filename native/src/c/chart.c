@@ -749,6 +749,11 @@ static const char WEEKDAYS[7][4]={"SUN","MON","TUE","WED","THU","FRI","SAT"};
 static const char MONTHS[12][4]={"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
 // Integer to decimal, zero-padded to `width`.
 static char *put_int(char *p,int v,int width){char d[12];int n=0;do{d[n++]=(char)('0'+v%10);v/=10;}while(v);while(n<width)d[n++]='0';while(n)*p++=d[--n];*p=0;return p;}
+// Satellite maps identify the primary in the date margin's existing footprint.
+static void date_label(char *p,const ChartInput *in){
+  memcpy(p,in->body>=2?in->code:WEEKDAYS[in->weekday%7],4);p+=3;*p++=' ';
+  p=put_int(p,in->day,2);*p++=' ';memcpy(p,MONTHS[in->month-1],4);
+}
 
 #define SCRATCH 512
 // The drawing's pixel lists and placements.
@@ -1759,7 +1764,7 @@ static bool finish_draw(ChartBuild *b){
     // satellite's height or ground point). Under it, the pass line and
     // Zulu time.
     char source[24];
-    {char *p=source;memcpy(p,WEEKDAYS[in->weekday%7],3);p+=3;*p++=' ';p=put_int(p,in->day,2);*p++=' ';memcpy(p,MONTHS[in->month-1],3);p[3]=0;}
+    date_label(source,in);
     if(cv.wrap)memcpy(b->source,source,sizeof b->source);
     else{const int n=text_pixels(source,6,top-6,scratch);letter(&cv,scratch,n,L_INK,1);}
     zulu_x=(int16_t)(W-6-text_width("0000Z"));zulu_baseline=H-1;top_baseline=H-1;height_right=W-6;height_baseline=(int16_t)(top-6);
@@ -1769,7 +1774,7 @@ static bool finish_draw(ChartBuild *b){
     // time between them, centred as for the widest corner; over the chart,
     // home's rise and set.
     char left[24];
-    {char *p=left;memcpy(p,WEEKDAYS[in->weekday%7],3);p+=3;*p++=' ';p=put_int(p,in->day,2);*p++=' ';memcpy(p,MONTHS[in->month-1],3);p[3]=0;}
+    date_label(left,in);
     {const int y=H-5,lw=text_width(left),rw=text_width(CORNER_WIDEST);
     int n=text_pixels(left,6,y,scratch);letter(&cv,scratch,n,L_INK,1);
     // The corner is lettered each minute: the callout's leader breaks for it.
@@ -1800,7 +1805,7 @@ static bool finish_draw(ChartBuild *b){
   // The scene, small: its minutes, tables and runs lie in blocks of their
   // own, none of them large (by now the heap is in pieces).
   out=alloc(sizeof(EnrScene));if(!out)FAIL;
-  memset(out,0,sizeof *out);
+  memset(out,0,sizeof *out);memcpy(out->extra_code,in->extra_code,sizeof out->extra_code);
   // Its class plane as row runs: each row the ground's classes with what
   // was drawn laid over them, into pieces a row never straddles; the
   // ground's chunks and the plane's bands let go as their rows are done, so
@@ -1958,8 +1963,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     // QZSS's, whose segments span six hours, hold for a fortnight, and
     // CelesTrak's newest are often two days old.)
     const bool old=ss&&t-(int64_t)ss->epoch>(ss->span>3600?14:2)*86400;char *p=e->corner;
-    // (On the world band led by the satellite's code, but for old elements.)
-    if(world&&!old&&in->body>=2){for(const char *k=in->code[0]?in->code:"SAT";*k;k++)*p++=*k;*p++=' ';}
+    // The primary identifier is always beside the date, including old elements.
     if(old){memcpy(p,"EL OLD",6);p+=6;if(world&&altitude<9999.5){*p++=' ';p=put_int(p,(int)js_round(altitude),1);memcpy(p," KM",3);}}
     else if(in->corner==1){
       // The ground point, to the degree: 23N 045E.

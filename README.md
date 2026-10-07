@@ -27,7 +27,7 @@ Read [the Enroute notes](docs/STUDY-06.md), [the Chart notes](docs/STUDY-05.md),
 
 ## Multiple satellites and Fuller north
 
-Both native watchfaces can mark two additional satellites on the primary body's map. Set Satellite 1 and Satellite 2 in **Additional satellites**; the numbered markers update each minute where visible. Groundtrack Fuller also offers **True-north arrows** under **Triangle orientation**: small star-tipped north lines following the USGS convention, off by default. [Feature details and limits](docs/MULTI-SATELLITE-NORTH.md).
+Both native watchfaces can mark two additional satellites on the primary body's map. Set Satellite 1 and Satellite 2 in **Additional satellites**; the markers labeled with short satellite identifiers update each minute where visible. The primary satellite’s identifier appears beside the date. Groundtrack Fuller also offers **True-north arrows** under **Triangle orientation**: small star-tipped north lines following the USGS convention, off by default. [Feature details and limits](docs/MULTI-SATELLITE-NORTH.md).
 
 ## Data and light
 

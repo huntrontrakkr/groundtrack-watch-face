@@ -43,7 +43,8 @@ typedef struct {
   // for older records): 1 a vibration when the phone goes out of reach, 2
   // no fuel line.
   uint8_t watch;
-  int32_t extra[2]; // additional satellite markers, numbered 1 and 2
+  int32_t extra[2]; // additional satellite catalog numbers
+  char extra_code[2][3]; // compact catalog identifiers, no terminators
 
 } WatchSettings;
 

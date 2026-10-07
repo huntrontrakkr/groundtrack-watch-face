@@ -131,7 +131,7 @@ static unsigned stack_deepest(void){
 // app is a byte of its heap): what happened, a number that goes with it,
 // the heap free and the stack's deepest. "build", "built" (milliseconds of
 // work), "chart.c line" (a failure's place), "no room to draw", "stack".
-void app_note(const char *what,unsigned n){APP_LOG(APP_LOG_LEVEL_INFO,"%s %u; heap %u; stack %u of %u",what,n,(unsigned)heap_bytes_free(),stack_deepest(),(unsigned)STACK_BYTES);}
+void app_note(const char *what,unsigned n){APP_LOG(APP_LOG_LEVEL_INFO,"%s %u H%u S%u/%u",what,n,(unsigned)heap_bytes_free(),stack_deepest(),(unsigned)STACK_BYTES);}
 static uint32_t now_ms(void){time_t t;uint16_t ms;time_ms(&t,&ms);return (uint32_t)t*1000+ms;}
 static void build_step(void *data);
 static void build_abort(void){
@@ -248,12 +248,13 @@ static void take_settings(const uint8_t *b,size_t n){
   WatchSettings s;memset(&s,0,sizeof s);
   _Static_assert(offsetof(WatchSettings,extra)-offsetof(WatchSettings,numerals)==10,"contiguous settings options");
   _Static_assert(offsetof(WatchSettings,norad)-offsetof(WatchSettings,lat100)==8,"contiguous coordinate fields");
-  s.version=12;s.figures=2;
+  _Static_assert(offsetof(WatchSettings,extra_code)-offsetof(WatchSettings,numerals)==18,"contiguous identifier bytes");
+  s.version=13;s.figures=2;
   // Wire bytes are little-endian on both Pebble and the host; the three
   // coordinate/catalog fields and the option bytes are contiguous.
   memcpy(&s.body,b,5);memcpy(&s.lat100,b+5,12);
   s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);
-  memcpy(&s.numerals,b+21,n>=39?18:n-21<10?n-21:10);
+  memcpy(&s.numerals,b+21,n>=45?24:n>=39?18:n-21<10?n-21:10);
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
