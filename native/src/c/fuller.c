@@ -83,6 +83,13 @@ void fuller_to_screen(const FullerCam *cam,const double p[2],double *x,double *y
   const double dx=p[0]-cam->mid[0],dy=p[1]-cam->mid[1];
   *x=W/2+(dx*cam->ux+dy*cam->uy)*cam->scale;*y=TRACK_Y-(-dx*cam->uy+dy*cam->ux)*cam->scale;
 }
+void fuller_north(const FullerCam *cam,int tile,double *x,double *y,double *dx,double *dy){
+  const FullerTile *t=&cam->tiles[tile];const double *n=cam->g->bases[t->face];
+  double p[2],d[3]={n[0],n[1],n[2]+0.001},w[3],xx,yy;
+  centre(t->tri,p);fuller_to_screen(cam,p,x,y);
+  fuller_forward(cam->g,t->face,d,w);flat_point(w,t->tri,p);fuller_to_screen(cam,p,&xx,&yy);
+  const double len=hypot2(xx-*x,yy-*y);*dx=len?(xx-*x)/len:0;*dy=len?(yy-*y)/len:0;
+}
 void fuller_to_plane(const FullerCam *cam,double x,double y,double p[2]){
   const double s=(x-W/2)/cam->scale,t=(TRACK_Y-y)/cam->scale;
   p[0]=cam->mid[0]+s*cam->ux-t*cam->uy;p[1]=cam->mid[1]+s*cam->uy+t*cam->ux;

@@ -37,12 +37,14 @@ typedef struct {
   uint8_t also;
   // The hour chart without its hour figures.
   uint8_t bare;
-  // A Fuller sheet's scale bar, in its open space.
+  // Fuller overlays: bit 0 the scale bar, bit 1 local true-north marks.
   uint8_t legend;
   // The watch's own state (the record's last byte, once the ticker's: zero
   // for older records): 1 a vibration when the phone goes out of reach, 2
   // no fuel line.
   uint8_t watch;
+  int32_t extra[2]; // additional satellite markers, numbered 1 and 2
+
 } WatchSettings;
 
 void settings_load(WatchSettings *s);
@@ -55,7 +57,7 @@ void rise_sets_store(const uint8_t *bytes,size_t length);
 int32_t segments_missing(int32_t from,int days);
 // A satellite's segments (160 bytes each) and home's pass blocks, as the
 // phone sends them.
-void sat_segments_store(const uint8_t *bytes,size_t length);
+void sat_segments_store(const uint8_t *bytes,size_t length,const WatchSettings *s);
 void pass_blocks_store(const uint8_t *bytes,size_t length,const WatchSettings *s);
 // The first second from `from` within `seconds` with no segment of the
 // satellite, or -1; and whether the pass block holding t is kept.

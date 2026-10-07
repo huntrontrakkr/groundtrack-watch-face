@@ -300,7 +300,7 @@ try{
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1]));
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1,...Array(8).fill(0)]));
   assert.equal(stored.vibe,'1');
   assert.equal(stored.hourFigures,'0');
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);
@@ -346,6 +346,15 @@ try{
   await page2.waitForFunction(()=>window.previewDrawn,null,{timeout:20000});
   await page2.check('input[name=legend]');
   await page2.waitForFunction(()=>/\nlegend 1\n/.test(window.previewDrawn.input));
+  assert.ok(await page.locator('input[name=north]').isHidden());
+  await page2.check('input[name=north]');
+  await page2.waitForFunction(()=>/\nlegend 3\n/.test(window.previewDrawn.input));
+  await page2.selectOption('select[name=extra0]','sat:25544');
+  await page2.selectOption('select[name=extra1]','sat:43013');
+  await page2.waitForFunction(()=>/\nextra 25544 43013\n/.test(window.previewDrawn.input));
+  assert.equal(await page2.locator('select[name=extra1] option[value="sat:25544"]').count(),0);
+  assert.ok(await page2.evaluate(()=>document.documentElement.scrollWidth<=320));
+  await page2.screenshot({path:'test-results/multi-north-settings.png',fullPage:true});
   assert.equal(errors2.length,0,errors2.join('\n'));}
   console.log('settings page: ok');
 }finally{

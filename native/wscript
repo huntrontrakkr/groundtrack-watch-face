@@ -41,7 +41,7 @@ def build(ctx):
         # (Groundtrack, the tighter, compiles its build-time sources smaller
         # still: src/c/build_size.h. Not the minute renderer, whose work is
         # a minute's, every minute.)
-        size += ['-fmerge-all-constants']
+        size += ['-fmerge-all-constants', '-fno-caller-saves', '-fno-tree-bit-ccp', '-fno-reorder-functions']
         ctx.env.append_value('CFLAGS', size)
         ctx.env.append_value('LINKFLAGS', size)
         import os

@@ -23,11 +23,16 @@ bool seg_decode(const uint8_t *b,Segment *seg){
 }
 bool seg_decode_watch(const uint8_t *b,Segment *seg){
   memset(seg,0,sizeof *seg);
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  _Static_assert(sizeof(float)==4&&sizeof(int32_t)==4,"segment word sizes");
+  memcpy(seg,b,SEG_WATCH_BYTES);
+#else
   seg->day=(int32_t)((uint32_t)b[0]|(uint32_t)b[1]<<8|(uint32_t)b[2]<<16|(uint32_t)b[3]<<24);
   for(int i=0;i<SEG_WATCH_COEFFICIENTS;i++){
     const uint32_t v=(uint32_t)b[4+4*i]|(uint32_t)b[5+4*i]<<8|(uint32_t)b[6+4*i]<<16|(uint32_t)b[7+4*i]<<24;
     memcpy(&seg->c[i],&v,4);
   }
+#endif
   return true;
 }
 // Clenshaw's recurrence, term for term as chebyshev() in the JavaScript.

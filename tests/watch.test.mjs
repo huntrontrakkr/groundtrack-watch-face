@@ -106,7 +106,7 @@ async function answer(w,ph,rounds=4){
 // A phone's storage for a case: its settings, home, events and (kept as
 // fetched an hour before) the fixture's elements.
 function storage(c,t){
-  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',vibe:c.vibe?'1':'0',fuel:c.fuel===false?'0':'1',
+  const s={timeZone:c.zone,body:c.body,plate:c.plate||'enroute',readout:c.readout||'flag',numerals:c.numerals||'even',figures:c.figures||'michroma',corner:c.corner||'day',margin:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',clock24:c.clock24===false?'0':'1',...(c.face?{face:c.face}:{}),also:(c.also||[]).join(','),hourFigures:c.bare?'0':'1',legend:c.legend?'1':'0',north:c.north?'1':'0',extra:(c.extra||[]).join(','),vibe:c.vibe?'1':'0',fuel:c.fuel===false?'0':'1',
     home:c.home?JSON.stringify({lat:c.home.lat,lon:c.home.lon}):JSON.stringify({none:true}),events:JSON.stringify((c.events||[]).map(([minutes,title])=>({epoch:t+minutes*60000,title,label:nameCode(title)})))};
   // (Events come from a calendar's link: read a moment ago, as the phone keeps it.)
   if((c.events||[]).length){s.calendar='https://calendar.example/private/basic.ics';s['calendar-fetched']=String(t);}
@@ -128,7 +128,7 @@ const what=(face,c,t)=>`${face} ${JSON.stringify(c)} at ${new Date(t).toISOStrin
 async function expected(face,c,t){
   const r=await renderer();
   r.render({body:c.body,epoch:t,timeZone:c.zone,clock24:c.clock24!==false,plate:c.plate||'enroute',readout:c.readout==='off'?false:c.readout||'flag',numerals:c.numerals||'even',zone:c.margin||'utc',span:c.span||'day',tape:c.tape||'fixed',transfer:c.transfer||'off',
-    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart',face:c.face,also:c.also||[],bare:!!c.bare,legend:!!c.legend});
+    figures:c.figures||'michroma',corner:c.corner||'day',events:(c.events||[]).map(([minutes,title])=>({epoch:c.t0+minutes*60000,label:nameCode(title)})),home:c.home?{code:'HOM',name:'Home',...c.home}:null,projection:face==='fuller'?'fuller':'chart',face:c.face,also:c.also||[],bare:!!c.bare,legend:!!c.legend,north:!!c.north,extra:c.extra||[]});
   return Buffer.from(r.last.frame);
 }
 async function same(face,c,w,label){
@@ -146,6 +146,9 @@ const NY={lat:40.71,lon:-74.01},KTM={lat:27.7,lon:85.32},MCM={lat:-77.85,lon:166
 // after midnight UTC and just before; with home and without, events, and
 // the settings' corners.
 const NEW_ALL=[
+  ['enroute',{body:'sat:25544',zone:'UTC',tape:'slide',extra:['sat:20580','sat:48274']},'2026-09-30T13:20:00Z'],
+  ['fuller',{body:'sat:25544',zone:'UTC',north:true,extra:['sat:20580','sat:48274']},'2026-09-30T13:20:00Z'],
+  ['fuller',{body:'sun',zone:'Asia/Kathmandu',north:true,extra:['sat:43013','sat:36585']},'2026-09-30T13:20:00Z'],
   ['enroute',{body:'sun',zone:'Asia/Kathmandu',plate:'survey',readout:'counter',numerals:'colon'},'2026-09-30T13:59:20Z'],
   ['enroute',{body:'sat:25544',zone:'UTC',plate:'trackingboard',readout:'counter',tape:'slide',corner:'light',events:[[10,'Launch']]},'2026-09-30T13:09:00Z'],
   ['fuller',{body:'sat:25544',zone:'America/New_York',plate:'operations',readout:'counter',numerals:'even',corner:'light',home:NY},'2026-09-30T13:59:20Z'],

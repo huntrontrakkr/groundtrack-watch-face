@@ -52,6 +52,7 @@ bool fuller_roll(FullerCam *cam,FullerCell *cells,const FullerConst *g,const dou
 // screen position.
 void fuller_track_start(const FullerConst *g,const double d0[3],FullerCell *tile);
 void fuller_track_next(const FullerCam *cam,FullerCell *tile,const double d[3],double *x,double *y);
+void fuller_north(const FullerCam *cam,int tile,double *x,double *y,double *dx,double *dy);
 void fuller_to_plane(const FullerCam *cam,double x,double y,double p[2]);
 void fuller_to_screen(const FullerCam *cam,const double p[2],double *x,double *y);
 // The tile holding a screen point, or -1; with its weights.
