@@ -8,6 +8,15 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import vm from 'node:vm';
 
+async function replacePrimary(page,body){
+  if(await primary(page)===body)return;
+  await page.locator('[data-slot="0"] .replace-tracked').click();
+  const row=page.locator((body.startsWith('sat:')?'#groups':'#bodies')+' .satellite-row[data-key="'+body+'"]');
+  const details=row.locator('xpath=ancestor::details[contains(@class,"sub")]');
+  if(await details.count()&&!await details.evaluate(d=>d.open))await details.locator('summary').click();
+  await row.locator('.use-body').click();
+}
+const primary=page=>page.locator('[data-slot="0"]').getAttribute('data-key');
 const dir=mkdtempSync(join(tmpdir(),'groundtrack-config-'));
 let browser;
 try{
@@ -36,7 +45,8 @@ try{
   const html=decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length));
 
   browser=await chromium.launch();
-  const page=await browser.newPage({viewport:{width:320,height:640},timezoneId:zone});
+  const browserContext=await browser.newContext({viewport:{width:320,height:640},timezoneId:zone});
+  const page=await browserContext.newPage();
   const errors=[],closes=[];
   page.on('pageerror',e=>errors.push(e.message));
   // Leaving for pebblejs://close#... is how the page answers; the browser
@@ -53,7 +63,7 @@ try{
   // (And the catalog's own satellites with their sets of 2 October, which
   // the page asks for to preview one the phone has no elements for.)
   const asked=[],himawari=readFileSync('tests/fixtures/celestrak-name-himawari.txt','utf8'),searched=()=>asked.filter(u=>!/CATNR=(25544|43013|40296|36585|42738)&/.test(u));
-  await page.route('https://celestrak.org/**',route=>{const url=route.request().url();asked.push(url);
+  await page.context().route('https://celestrak.org/**',route=>{const url=route.request().url();asked.push(url);
     const number=/CATNR=(\d+)/.exec(url),lines=(himawari+readFileSync('tests/fixtures/celestrak-2026-10-02.tle','utf8')).split(/\r?\n/);let body=/NAME=HIMAWARI/.test(url)?himawari:'No GP data found';
     if(number)for(let i=0;i+2<lines.length;i+=3)if(Number(lines[i+1].slice(2,7))===Number(number[1]))body=lines.slice(i,i+3).join('\r\n')+'\r\n';
     route.fulfill({contentType:'text/plain',headers:{'access-control-allow-origin':'*'},body});});
@@ -103,7 +113,7 @@ try{
   assert.notDeepEqual(await pixels('preview'),colours,'the preview follows the plate');
   await page.check('input[name=plate][value=crt]');
   assert.equal(await page.locator('input[name=plate]:checked').getAttribute('value'),'crt');
-  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
+  assert.equal(await primary(page),'sun');
   assert.equal(await page.locator('#title').textContent(),'Groundtrack');
   assert.equal(await page.locator('input[name=figures]').count(),4);
   assert.equal(await page.locator('input[name=figures]:checked').getAttribute('value'),'michroma');
@@ -115,13 +125,13 @@ try{
   // fast for Enroute is put on the Plotboard, with why; the face asked for
   // comes back with a body it can show.
   const {CATALOG,GROUPS}=await import('../src/satellites.js');
-  assert.equal(await page.locator('input[name=body]').count(),2+CATALOG.length);
+  assert.equal(await page.locator('input[name=tracked]').count(),2+CATALOG.length);
   assert.deepEqual(await page.locator('#groups details').evaluateAll(e=>e.map(d=>d.id)),GROUPS.map(g=>'group-'+g[0]));
   assert.match(await page.locator('#group-starlink summary').textContent(),/^Starlink 6 · SL1, SL5, SL2?P?/);
   const faceNow=()=>page.locator('input[name=face]:checked').getAttribute('value');
   assert.equal(await faceNow(),'enroute');
   assert.ok(await page.locator('#face-why').isHidden());
-  await page.check('input[name=body][value="sat:25544"]');
+  await replacePrimary(page,'sat:25544');
   assert.equal(await faceNow(),'plotboard');
   assert.ok(await page.locator('input[name=face][value=enroute]').isDisabled());
   assert.equal(await page.locator('#face-why').textContent(),'International Space Station is on the Plotboard. Too fast for Enroute: round the Earth in 93 minutes, more of the world in an hour than its chart can hold.');
@@ -135,7 +145,7 @@ try{
   await page.waitForFunction(()=>window.previewDrawn&&/\ncode ISS\n/.test(window.previewDrawn.input),null,{timeout:20000});
   assert.equal(asked.filter(u=>/CATNR=25544&FORMAT=TLE$/.test(u)).length,1);
   assert.equal(await page.locator('#preview-note').textContent(),'');
-  await page.check('input[name=body][value="sat:36585"]');
+  await replacePrimary(page,'sat:36585');
   assert.equal(await faceNow(),'enroute');
   assert.ok(await page.locator('input[name=face][value=enroute]').isEnabled());
   assert.ok(await page.locator('#face-why').isHidden());
@@ -149,9 +159,9 @@ try{
   await page.check('input[name=also][value=sun]');await page.check('input[name=also][value=moon]');
   assert.notDeepEqual(await pixels('preview'),before,'the Sun and Moon are marked on the preview');
   assert.equal(await page.locator('#now-follow').textContent(),'GPS · with the Sun and Moon');
-  await page.check('input[name=body][value="sat:25544"]');
+  await replacePrimary(page,'sat:25544');
   assert.match(await page.locator('#route-note').textContent(),/^A ruler as long as the hour's run/);
-  await page.check('input[name=body][value=sun]');
+  await replacePrimary(page,'sun');
   // (Both are always offered; the one followed is not marked beside itself.)
   assert.deepEqual(await page.locator('input[name=also]').evaluateAll(e=>e.map(x=>[x.offsetParent!==null,x.disabled,x.checked])),[[true,true,false],[true,false,true]]);
   // The preview stays at the top of the screen as the settings scroll.
@@ -162,43 +172,47 @@ try{
   // Any other satellite, from CelesTrak: by name, the one meant chosen from
   // the answers, added under Your satellites and followed; by catalog
   // number; and one already listed is only chosen.
+  await page.locator('[data-slot="0"] .replace-tracked').click();
   await page.fill('#find','hi');await page.click('#find-go');
   assert.match(await page.locator('#find-note').textContent(),/^Three letters or more/);
   await page.fill('#find','http://example.com/gp.php?CATNR=5');await page.click('#find-go');
   assert.match(await page.locator('#find-note').textContent(),/^Only CelesTrak's links/);
   assert.equal(searched().length,0);
   await page.fill('#find','HIMAWARI');await page.press('#find','Enter');
-  await page.waitForSelector('#found button');
+  await page.waitForSelector('#found .use-body');
   assert.match(searched()[0],/gp\.php\?NAME=HIMAWARI&FORMAT=TLE$/);
-  assert.equal(await page.locator('#found button').count(),13);
-  assert.match(await page.locator('#found button').nth(10).textContent(),/^HIMAWARI-8Catalog number 40267 · round the Earth in 24 hours · either face$/);
-  await page.locator('#found button').nth(10).click();
-  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sat:40267');
+  assert.equal(await page.locator('#found .use-body').count(),13);
+  assert.match(await page.locator('#found .satellite-row').nth(10).textContent(),/HIMAWARI-8/);
+  await page.locator('#found .use-body').nth(10).click();
+  assert.equal(await primary(page),'sat:40267');
   assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 1$/);
   assert.equal(await page.locator('#now-follow').textContent(),'HIM · with the Sun');
   // (Previewed at once, on the elements it came with.)
   await page.waitForFunction(()=>window.previewDrawn&&/^body 2\n/.test(window.previewDrawn.input)&&/\ncode HIM\n/.test(window.previewDrawn.input));
   assert.equal(await page.locator('#preview-note').textContent(),'');
   // (The same question is not put to CelesTrak twice.)
-  await page.fill('#find','HIMAWARI');await page.click('#find-go');await page.waitForSelector('#found button');
+  await page.locator('[data-slot="0"] .replace-tracked').click();
+  await page.fill('#find','HIMAWARI');await page.click('#find-go');await page.waitForSelector('#found .use-body');
   assert.equal(searched().length,1);
   await page.fill('#find','41836');await page.click('#find-go');
-  await page.waitForFunction(()=>document.querySelectorAll('#found button').length===1);
+  await page.waitForFunction(()=>document.querySelectorAll('#found .use-body').length===1);
   assert.match(searched()[1],/gp\.php\?CATNR=41836&FORMAT=TLE$/);
-  await page.locator('#found button').first().click();
-  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sat:41836');
+  await page.locator('#found .use-body').first().click();
+  assert.equal(await primary(page),'sat:41836');
   assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 1$/);
   await page.fill('#find','https://celestrak.org/NORAD/elements/gp.php?NAME=NOSUCH&FORMAT=JSON');await page.click('#find-go');
   await page.waitForFunction(()=>/^Nothing found/.test(document.getElementById('find-note').textContent));
   assert.match(searched()[2],/NAME=NOSUCH&FORMAT=TLE$/);
   // One added can be removed; here a second is, and the first kept.
-  await page.fill('#find','HIMAWARI');await page.click('#find-go');await page.waitForSelector('#found button');
-  await page.locator('#found button').first().click();
+  await page.locator('[data-slot="0"] .replace-tracked').click();
+  await page.fill('#find','HIMAWARI');await page.click('#find-go');await page.waitForSelector('#found .use-body');
+  await page.locator('#found .use-body').first().click();
   assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 2$/);
   await page.evaluate(()=>{document.getElementById('group-yours').open=true;});
+  await replacePrimary(page,'sun');
   await page.locator('#group-yours button.drop').nth(1).click();
   assert.match(await page.locator('#group-yours summary').textContent(),/^Your satellites 1$/);
-  assert.equal(await page.locator('input[name=body]:checked').getAttribute('value'),'sun');
+  assert.equal(await primary(page),'sun');
   await page.evaluate(()=>document.querySelectorAll('details').forEach(d=>{d.open=true;}));
   // Each body's chart offers the settings it takes and no others, by the
   // rules the watch's own code is held to (tests/settings.test.mjs); a
@@ -214,7 +228,7 @@ try{
   // oval orbit, each on each face that can show it.)
   for(const body of ['sun','moon','sat:36585','sat:42738','sat:25544','sat:43013','sat:40296'])for(const face of viewOf(body)==='world'?['plotboard']:['enroute','plotboard'])
   for(const readout of ['off','flag','callout'])for(const tape of face==='plotboard'?['fixed','tape','slide','clock','route']:['fixed'])for(const span of viewOf(body)==='day'&&face==='enroute'?['day','hour']:['day']){
-    await page.check(`input[name=body][value="${body}"]`);
+    await replacePrimary(page,body);
     await page.check(`input[name=face][value=${face}]`);
     // (Set where the control shows; a hidden one keeps what it had.)
     for(const [name,value] of [['span',span],['tape',tape],['readout',readout]])if(await page.locator(`input[name=${name}][value=${value}]`).isVisible())await page.check(`input[name=${name}][value=${value}]`);
@@ -225,8 +239,8 @@ try{
     assert.deepEqual([got.numerals,got.tape,got.transfer,got.span,got.light,got.bare,got.note.startsWith(KIND[want.chart]),got.rest],[want.numerals,want.tape,want.transfer,want.span,want.light,want.bare,true,true],`${at}: the settings offered`);
   }
   // Back to the ISS under the ruler with its flag, and Enroute's Sun.
-  await page.check('input[name=body][value="sat:25544"]');await page.check('input[name=tape][value=fixed]');await page.check('input[name=readout][value=flag]');
-  await page.check('input[name=body][value=sun]');await page.check('input[name=face][value=enroute]');
+  await replacePrimary(page,'sat:25544');await page.check('input[name=tape][value=fixed]');await page.check('input[name=readout][value=flag]');
+  await replacePrimary(page,'sun');await page.check('input[name=face][value=enroute]');
   assert.equal(await page.locator('input[name=readout]:checked').getAttribute('value'),'flag');}
   // Nothing wider than a small phone.
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'the page scrolls sideways at 320 px');
@@ -245,7 +259,7 @@ try{
   assert.ok(await page.locator('input[name=hourFigures][value="0"]').isHidden());
   await page.check('input[name=face][value=enroute]');}
   // Choose the Moon on the Sectional, no flag, and a home of one's own.
-  await page.check('input[name=body][value=moon]');
+  await replacePrimary(page,'moon');
   await page.check('input[name=plate][value=sectional]');
   await page.check('input[name=hourFigures][value="1"]');
   await page.check('input[name=readout][value=callout]');await page.check('input[name=hourFigures][value="0"]');await page.check('input[name=numerals][value=accent]');await page.check('input[name=figures][value=orbitron]');await page.check('input[name=corner][value=point]');
@@ -320,24 +334,24 @@ try{
   // Groundtrack Fuller is one face: no choice of face, every body followed,
   // and each sheet's own settings.
   {const out2=join(dir,'fuller.js');execFileSync(process.execPath,['tools/build-pkjs.mjs','--face','fuller',out2],{stdio:'pipe'});
-  const l2={};let opened2=null;
+  const l2={},stored2={},messages2=[];let opened2=null;
   const c2=vm.createContext({console:{log:()=>{}},setTimeout:(f,ms)=>{const t=setTimeout(f,ms);t.unref();return t;},clearTimeout,XMLHttpRequest,navigator:{},
-    localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},Pebble:{addEventListener:(n,f)=>{l2[n]=f;},openURL:u=>{opened2=u;},sendAppMessage:(m,ok)=>setTimeout(ok,0)}});
+    localStorage:{getItem:k=>stored2[k]??null,setItem:(k,v)=>{stored2[k]=String(v);},removeItem:k=>{delete stored2[k];}},Pebble:{addEventListener:(n,f)=>{l2[n]=f;},openURL:u=>{opened2=u;},sendAppMessage:(m,ok)=>{messages2.push(m);setTimeout(ok,0);}}});
   vm.runInContext(`Date.now=()=>${now};`,c2);vm.runInContext(readFileSync(out2,'utf8').replace(/\n/g,'\n\t'),c2);
   l2.showConfiguration({});for(let i=0;i<400&&!opened2;i++)await new Promise(r=>setTimeout(r,20));
-  const page2=await browser.newPage({viewport:{width:320,height:640},timezoneId:zone}),errors2=[];
+  const page2=await page.context().newPage(),errors2=[];
   page2.on('pageerror',e=>errors2.push(e.message));
   await page2.setContent(decodeURIComponent(opened2.slice('data:text/html;charset=utf-8,'.length)));
   await page2.evaluate(()=>document.querySelectorAll('details').forEach(d=>{d.open=true;}));
   assert.equal(await page2.locator('#title').textContent(),'Groundtrack Fuller');
   assert.equal(await page2.locator('#sec-face').count(),0);
-  assert.equal(await page2.locator('input[name=body]').count(),2+CATALOG.length);
+  assert.equal(await page2.locator('input[name=tracked]').count(),2+CATALOG.length);
   assert.ok(await page2.locator('#group-stations').evaluate(d=>d.open),'the chosen satellite\'s group is open');
   assert.equal(await page2.locator('#chart-title').textContent(),'Sheet');
-  assert.equal(await page2.locator('input[name=body]:checked').getAttribute('value'),'sat:25544');
+  assert.equal(await primary(page2),'sat:25544');
   const shown=n=>page2.locator(`input[name=${n}]`).evaluateAll(e=>e.filter(x=>x.offsetParent!==null).map(x=>x.value));
   assert.deepEqual([await shown('readout'),(await shown('tape')).length,(await shown('numerals')).length>0],[['off','flag','counter','callout'],0,false]);
-  await page2.check('input[name=body][value=sun]');
+  await replacePrimary(page2,'sun');
   assert.deepEqual([await shown('readout'),(await shown('numerals')).length],[[],5]);
   assert.match(await page2.locator('#chart-note').textContent(),/^Whole-day sheet/);
   // The sheet's open space can carry a scale bar (Fuller alone offers it).
@@ -349,13 +363,59 @@ try{
   assert.ok(await page.locator('input[name=north]').isHidden());
   await page2.check('input[name=north]');
   await page2.waitForFunction(()=>/\nlegend 3\n/.test(window.previewDrawn.input));
-  await page2.selectOption('select[name=extra0]','sat:25544');
-  await page2.selectOption('select[name=extra1]','sat:43013');
+  await page2.check('input[name=tracked][value="sat:25544"]');
+  await page2.check('input[name=tracked][value="sat:43013"]');
   await page2.waitForFunction(()=>/\nextra 25544 43013\n/.test(window.previewDrawn.input));
   assert.match(await page2.evaluate(()=>window.previewDrawn.input),/extra_code0 ISS\nextra_code1 N20\n/);
-  assert.equal(await page2.locator('select[name=extra1] option[value="sat:25544"]').count(),0);
+  assert.equal(await page2.locator('input[name=tracked]:checked').count(),3);
+  assert.equal(await page2.locator('select[name=extra0]').count(),0);
   assert.ok(await page2.evaluate(()=>document.documentElement.scrollWidth<=320));
-  await page2.screenshot({path:'test-results/multi-north-settings.png',fullPage:true});
+  // Selection never changes the primary implicitly; replacement can be cancelled.
+  assert.equal(await primary(page2),'sun');
+  assert.ok(await page2.locator('input[name=tracked][value="sat:48274"]').isDisabled());
+  await page2.locator('[data-slot="0"] .replace-tracked').click();await page2.click('#picker-cancel');assert.equal(await primary(page2),'sun');
+  await page2.locator('[data-slot="1"] .make-primary').click();assert.equal(await primary(page2),'sat:25544');
+  assert.ok(await page2.locator('input[name=also][value=sun]').isChecked());
+  await page2.locator('[data-slot="1"] .add-companion').click();
+  assert.ok(await page2.locator('#groups .satellite-row[data-key="sat:25544"] .use-body').isDisabled(),'an empty slot cannot remove the primary');
+  async function custom(slot,norad){
+    if(await page2.locator('#picker-mode').isHidden())await page2.locator('[data-slot="'+slot+'"] .replace-tracked').click();
+    await page2.fill('#find',String(norad));await page2.click('#find-go');
+    await page2.locator('#found .satellite-row[data-key="sat:'+norad+'"] .use-body').click();
+    assert.equal(await page2.locator('[data-slot="'+slot+'"]').getAttribute('data-key'),'sat:'+norad);
+  }
+  await custom(1,40267);
+  await page2.locator('[data-slot="1"] .make-primary').click();assert.equal(await primary(page2),'sat:40267');
+  assert.equal(await page2.locator('[data-slot="1"]').getAttribute('data-key'),'sat:25544','promotion keeps the former primary');
+  await custom(1,10143);await custom(2,12677);
+  await page2.waitForFunction(()=>window.previewDrawn?.input.includes('extra 10143 12677'));
+  assert.ok(await page2.locator('#found .drop').isHidden(),'tracking removal and forgetting the saved custom satellite are distinct');
+  // A keyboard checkmark adds the removed custom companion back, without changing primary.
+  await page2.locator('[data-slot="2"] .remove-tracked').click();
+  await page2.locator('#found input[name=tracked]').focus();await page2.keyboard.press('Space');
+  assert.equal(await primary(page2),'sat:40267');assert.equal(await page2.locator('[data-slot="2"]').getAttribute('data-key'),'sat:12677');
+  await page2.fill('#find','');
+  await page2.evaluate(()=>document.querySelectorAll('#groups details').forEach(d=>{d.open=d.id==='group-yours';}));
+  for(const width of [320,390]){
+    await page2.setViewportSize({width,height:844});assert.ok(await page2.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  }
+  await page2.screenshot({path:'test-results/shared-picker.png',fullPage:true});
+  const closes2=[],cdp2=await page2.context().newCDPSession(page2);await cdp2.send('Page.enable');cdp2.on('Page.frameRequestedNavigation',e=>closes2.push(e.url));
+  await page2.click('#save');for(let i=0;i<50&&!closes2.length;i++)await page2.waitForTimeout(50);
+  assert.ok(closes2[0]?.startsWith('pebblejs://close#'));l2.webviewclosed({response:closes2[0].slice('pebblejs://close#'.length)});
+  for(let i=0;i<100&&!messages2.some(m=>m.Settings);i++)await page2.waitForTimeout(20);
+  assert.equal(stored2.body,'sat:40267');assert.equal(stored2.extra,'sat:10143,sat:12677');
+  assert.deepEqual(JSON.parse(stored2.sats).map(e=>e.norad),[40267,10143,12677]);
+  for(const n of [40267,10143,12677])assert.ok(JSON.parse(stored2['tle-'+n]).text.includes('1 '+n));
+  const wire=messages2.find(m=>m.Settings).Settings,u32=at=>wire[at]|wire[at+1]<<8|wire[at+2]<<16|wire[at+3]<<24;
+  assert.deepEqual([u32(13),u32(31),u32(35)],[40267,10143,12677]);
+  opened2=null;l2.showConfiguration({});for(let i=0;i<400&&!opened2;i++)await new Promise(r=>setTimeout(r,20));
+  await page2.setContent(decodeURIComponent(opened2.slice('data:text/html;charset=utf-8,'.length)));
+  assert.equal(await primary(page2),'sat:40267');assert.deepEqual(await page2.locator('.tracking-card').evaluateAll(cards=>cards.map(c=>c.dataset.key)),['sat:40267','sat:10143','sat:12677']);
+
+  await page2.setViewportSize({width:320,height:844});
+  await page2.evaluate(()=>scrollBy(0,document.getElementById('tracking-cards').getBoundingClientRect().top-190));
+  await page2.screenshot({path:'test-results/shared-picker-cards.png'});
   assert.equal(errors2.length,0,errors2.join('\n'));}
   console.log('settings page: ok');
 }finally{
