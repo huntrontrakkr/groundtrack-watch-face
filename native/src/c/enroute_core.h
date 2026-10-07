@@ -57,10 +57,9 @@ typedef struct {
   // 140W"), or for old elements "EL OLD" ("EL OLD 412 KM").
   char corner[14];
   uint8_t circle;
-  // The Sun and the Moon marked beside the body (each if asked for, and on
-  // the chart this minute): their pixels (bytes: the record stays its
-  // size), or x 255.
-  uint8_t also[2][2];
+  // Sun, Moon, and companion satellites 1 and 2: their pixels when
+  // selected and on this chart this minute, or x 255 when absent.
+  uint8_t also[4][2];
 } EnrMinute;
 
 // A point of the route, rounded to the pixel, with the step from the one

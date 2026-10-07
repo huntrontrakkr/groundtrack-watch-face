@@ -33,7 +33,7 @@ static WatchSettings s_settings;
 static Chart s_now;                // this hour's chart
 static time_t s_data_asked_at;     // when segments were last asked for
 static uint8_t s_data_tries;       // requests since the data was last whole
-static char s_status[32];          // why there is no chart, if known
+static char s_status[24];          // why there is no chart, if known
 static bool s_status_phone;        // the phone's word (it stands until data comes)
 static ChartBuild *s_build;        // a chart being built
 static AppTimer *s_build_timer;    // its next slice
@@ -68,12 +68,12 @@ static int zone_minutes(time_t now){const struct tm *lt=localtime(&now);return (
 
 // Segments from the first missing day (-1: none), and home's rise and set
 // or, for a satellite, its own segments and passes.
-static void request_data(time_t now,int32_t day){
+static void request_data(time_t now,int32_t day,int32_t norad){
   if(s_data_asked_at&&now-s_data_asked_at<(RETRY_SECONDS<<(s_data_tries>6?5:s_data_tries?s_data_tries-1:0)))return;
   DictionaryIterator *out;
   if(app_message_outbox_begin(&out)!=APP_MSG_OK)return;
   dict_write_int32(out,MESSAGE_KEY_DataRequest,day);
-  if(s_settings.body==BODY_SATELLITE)dict_write_int32(out,MESSAGE_KEY_DataBody,s_settings.norad);
+  if(norad)dict_write_int32(out,MESSAGE_KEY_DataBody,norad);
   if(app_message_outbox_send()==APP_MSG_OK){s_data_asked_at=now;if(s_data_tries<255)s_data_tries++;}
 }
 
@@ -97,7 +97,9 @@ static void need_data(time_t now){
     const struct tm *lt=localtime(&now);
     more=s_settings.home&&!rise_set_known(civil_date(lt->tm_year+1900,lt->tm_mon+1,lt->tm_mday));
   }
-  if(missing>=0||more)request_data(now,missing);
+  int32_t wanted=sat?s_settings.norad:0;
+  if(!more)for(int k=0;k<2;k++)if(s_settings.extra[k]&&sat_segments_missing(s_settings.extra[k],n.start,6*3600)>=0){wanted=s_settings.extra[k];more=true;break;}
+  if(missing>=0||more)request_data(now,missing,wanted);
   else{s_data_ok_until=n.start+3600;s_data_tries=0;}
 }
 // How deep the stack has been, in bytes. PebbleOS gives an app 2 KB of it
@@ -157,12 +159,12 @@ static void build_step(void *data){
   do r=chart_step(s_build);while(r>0&&now_ms()-t0<80);
   s_build_ms+=now_ms()-t0;
   if(r>0){s_build_timer=app_timer_register(10,build_step,NULL);return;}
-  if(r<0){app_note("chart.c line",chart_failed_at);build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
+  if(r<0){app_note("chart",chart_failed_at);build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
   if(scene){s_now.scene=scene;s_chart_serial++;s_status[0]=0;s_status_phone=false;app_note("built",(unsigned)s_build_ms);}
-  else{s_status_phone=false;set_status("NO ROOM FOR THE CHART");app_note("chart.c line",chart_failed_at);}
+  else{s_status_phone=false;set_status("NO ROOM FOR THE CHART");app_note("chart",chart_failed_at);}
   layer_mark_dirty(s_layer);
   // A build that ran over the hour's end made the last hour's chart.
   if(scene)check(time(NULL));
@@ -200,7 +202,7 @@ static void update(Layer *layer,GContext *ctx){
   if(drawn<0&&partial)drawn=enr_render_update(s_now.scene,-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
   graphics_release_frame_buffer(ctx,frame);
   // Without the memory to draw, the next tick tries the whole minute again.
-  if(drawn<0){app_note("no room to draw",0);s_drawn_minute=-1;s_tick_redraw=false;return;}
+  if(drawn<0){app_note("draw",0);s_drawn_minute=-1;s_tick_redraw=false;return;}
   s_drawn_serial=s_chart_serial;s_drawn_minute=minute;s_tick_redraw=false;s_painted=true;
 }
 
@@ -233,7 +235,6 @@ static void data_arrived(bool changed){
 // a quarter of the stack down, and a build starts deep.
 static void check_now(void *data){check(time(NULL));layer_mark_dirty(s_layer);}
 static void check_soon(void){app_timer_register(1,check_now,NULL);}
-static int32_t le32(const uint8_t *p){return (int32_t)((uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24);}
 // Settings as the phone packs them: body, plate, flag, clock24, home, then
 // home's latitude and longitude in hundredths of a degree (i32 each), then
 // a satellite's catalog number (i32), its kind (1 a station, plus its view
@@ -245,8 +246,14 @@ static void show_state(void);
 static void take_settings(const uint8_t *b,size_t n){
   if(n<25)return;
   WatchSettings s;memset(&s,0,sizeof s);
-  s.version=11;s.body=b[0];s.plate=b[1];s.readout=b[2];s.clock24=b[3];s.home=b[4];s.lat100=le32(b+5);s.lon100=le32(b+9);
-  s.norad=le32(b+13);s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);s.numerals=b[21];s.zone_body=b[22];s.tape=b[23];s.transfer=b[24];s.figures=n>25?b[25]:2;s.corner=n>26?b[26]:0;s.also=n>27?b[27]:0;s.bare=n>28?b[28]:0;s.legend=n>29?b[29]:0;s.watch=n>30?b[30]:0;
+  _Static_assert(offsetof(WatchSettings,extra)-offsetof(WatchSettings,numerals)==10,"contiguous settings options");
+  _Static_assert(offsetof(WatchSettings,norad)-offsetof(WatchSettings,lat100)==8,"contiguous coordinate fields");
+  s.version=12;s.figures=2;
+  // Wire bytes are little-endian on both Pebble and the host; the three
+  // coordinate/catalog fields and the option bytes are contiguous.
+  memcpy(&s.body,b,5);memcpy(&s.lat100,b+5,12);
+  s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);
+  memcpy(&s.numerals,b+21,n>=39?18:n-21<10?n-21:10);
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
@@ -263,7 +270,7 @@ static void inbox(DictionaryIterator *in,void *context){
   // Data for the watch's own charts. A reply comes in several messages: the
   // hour is drawn again once, a moment after the last (redraw_soon).
   if((t=dict_find(in,MESSAGE_KEY_Segments))){segments_store(t->value->data,t->length);data_arrived(false);}
-  if((t=dict_find(in,MESSAGE_KEY_SatSegments))){sat_segments_store(t->value->data,t->length);s_status_phone=false;data_arrived(false);}
+  if((t=dict_find(in,MESSAGE_KEY_SatSegments))){sat_segments_store(t->value->data,t->length,&s_settings);s_status_phone=false;data_arrived(s_settings.extra[0]||s_settings.extra[1]);}
   // Home's rise and set, or its passes, may have changed the hour's chart.
   if((t=dict_find(in,MESSAGE_KEY_RiseSets))){rise_sets_store(t->value->data,t->length);data_arrived(true);}
   if((t=dict_find(in,MESSAGE_KEY_Events))){events_store(t->value->data,t->length);data_arrived(true);}

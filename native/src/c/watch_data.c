@@ -8,6 +8,9 @@
 #include "passes.h"
 #include "face.h"
 
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error Watch storage requires a little-endian target
+#endif
 #define SETTINGS_KEY 1
 #define SEGMENT_KEY 100        // + UTC day % 64
 #define RISE_SET_KEY 200       // + local date % 64
@@ -25,13 +28,14 @@ void settings_load(WatchSettings *s){
   // the phone sends one.
   // The Sun on Groundtrack, the ISS on Fuller.
 #if defined(FACE_FULLER)
-  const WatchSettings defaults={11,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0,0};
+  const WatchSettings defaults={12,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0}};
 #else
-  const WatchSettings defaults={11,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0};
+  const WatchSettings defaults={12,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0}};
 #endif
+  memset(s,0,sizeof *s);
   const int n=persist_read_data(SETTINGS_KEY,s,sizeof *s);
-  if(n==(int)sizeof *s&&s->version==10){s->version=11;s->watch=0;}
-  else if(n!=(int)sizeof *s||s->version!=11)*s=defaults;
+  if(n==36&&(s->version==10||s->version==11)){if(s->version==10)s->watch=0;s->version=12;}
+  else if(n!=(int)sizeof *s||s->version!=12)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
@@ -43,10 +47,19 @@ void segments_store(const uint8_t *b,size_t n){
 void rise_sets_store(const uint8_t *b,size_t n){
   for(size_t at=0;at+RISE_SET_BYTES<=n;at+=RISE_SET_BYTES)persist_write_data(RISE_SET_KEY+ring(le32(b+at)),b+at,RISE_SET_BYTES);
 }
-void sat_segments_store(const uint8_t *b,size_t n){
+// Separate rings for the two companions: 32 slots each, beyond saved maps.
+static int32_t s_extra[2];
+static int sat_bank(int32_t norad){return norad==s_extra[0]?1100:norad==s_extra[1]?1132:SAT_KEY;}
+static uint32_t sat_key(int32_t norad,int32_t start,int32_t span){
+  const int bank=sat_bank(norad),count=bank==SAT_KEY?SAT_RING:32;
+  const int slot=(start/span)%count;return bank+(uint32_t)(slot<0?slot+count:slot);
+}
+void sat_segments_store(const uint8_t *b,size_t n,const WatchSettings *s){
+  memcpy(s_extra,s->extra,sizeof s_extra);
   for(size_t at=0;at+SAT_SEGMENT_BYTES<=n;at+=SAT_SEGMENT_BYTES){
+    const int32_t norad=le32(b+at);if(norad!=s->norad&&norad!=s->extra[0]&&norad!=s->extra[1])continue;
     const int32_t start=le32(b+at+4),span=le32(b+at+8);
-    if(span>0)persist_write_data(SAT_KEY+(uint32_t)(((start/span)%SAT_RING+SAT_RING)%SAT_RING),b+at,SAT_SEGMENT_BYTES);
+    if(span>0)persist_write_data(sat_key(norad,start,span),b+at,SAT_SEGMENT_BYTES);
   }
 }
 // Events: each its time (i32 Unix seconds) and five-letter name.
@@ -77,9 +90,10 @@ static int pass_block_load(int64_t t,const WatchSettings *s,uint8_t *r){
 static bool sat_segment_load(int32_t norad,int64_t t,SatSegment *seg){
   static const int32_t spans[2]={3600,21600};
   for(int k=0;k<2;k++){
-    uint8_t b[SAT_SEGMENT_BYTES];const int32_t start=(int32_t)(q64(t,spans[k])*spans[k]);
-    if(persist_read_data(SAT_KEY+(uint32_t)(((start/spans[k])%SAT_RING+SAT_RING)%SAT_RING),b,sizeof b)!=(int)sizeof b)continue;
-    if(le32(b)==norad&&le32(b+4)==start&&le32(b+8)==spans[k])return sat_segment_decode(b,seg);
+    _Static_assert(sizeof(SatSegment)==SAT_SEGMENT_BYTES,"satellite wire layout");
+    const int32_t start=(int32_t)(q64(t,spans[k])*spans[k]);
+    if(persist_read_data(sat_key(norad,start,spans[k]),seg,sizeof *seg)!=(int)sizeof *seg)continue;
+    if(seg->norad==norad&&seg->start==start&&seg->span==spans[k])return true;
   }
   return false;
 }
@@ -90,9 +104,9 @@ int64_t sat_segments_missing(int32_t norad,int64_t from,int32_t seconds){
 }
 bool pass_block_known(int64_t t,const WatchSettings *s){uint8_t r[256];return pass_block_load(t,s,r)>0;}
 static bool segment_load(int32_t day,Segment *seg){
-  uint8_t b[SEG_WATCH_BYTES];
-  if(persist_read_data(SEGMENT_KEY+ring(day),b,sizeof b)!=(int)sizeof b||le32(b)!=day)return false;
-  return seg_decode_watch(b,seg);
+  _Static_assert(offsetof(Segment,c)==4,"solar segment wire layout");
+  memset(seg,0,sizeof *seg);
+  return persist_read_data(SEGMENT_KEY+ring(day),seg,SEG_WATCH_BYTES)==SEG_WATCH_BYTES&&seg->day==day;
 }
 int32_t segments_missing(int32_t from,int days){
   uint8_t b[4];
@@ -134,9 +148,12 @@ static time_t midnight(time_t t){time_t c=t-t%60-wall(t)*60;for(int i=0;i<3&&off
 void local_day(time_t t,int64_t *start,int64_t *end){*start=midnight(t);*end=midnight(*start+26*3600);}
 
 // The segments and pass blocks a build needs, read once from storage.
-typedef struct {Segment seg[3];int n;SatSegment sat[6];int nsat;uint8_t pass[2][256];int pass_len[2];} Days;
+typedef struct {Segment seg[3];int n;SatSegment sat[6];int nsat;uint8_t pass[2][256];int pass_len[2];SatSegment extra;} Days;
 static const Segment *segment_for(void *ctx,int32_t day){Days *d=ctx;for(int i=0;i<d->n;i++)if(d->seg[i].day==day)return &d->seg[i];return NULL;}
 static const SatSegment *sat_for(void *ctx,int64_t t){Days *d=ctx;for(int i=0;i<d->nsat;i++)if(t>=d->sat[i].start&&t<d->sat[i].start+d->sat[i].span)return &d->sat[i];return NULL;}
+static const SatSegment *extra_for(void *ctx,int32_t norad,int64_t t){
+  Days *d=ctx;return sat_segment_load(norad,t,&d->extra)?&d->extra:NULL;
+}
 static void pass_for(void *ctx,int64_t t,char out[24]){
   Days *d=ctx;
   for(int i=0;i<2;i++){const uint8_t *b=d->pass[i]+PASS_WHOSE;if(d->pass_len[i]>=PASS_WHOSE+5&&t>=le32(b)&&t<le32(b)+PASS_BLOCK_SECONDS){pass_line_from(b,(size_t)(d->pass_len[i]-PASS_WHOSE),t,out);return;}}
@@ -150,6 +167,7 @@ static size_t resource_read(void *source,uint32_t at,uint8_t *out,size_t n){
 }
 
 void chart_needs(time_t now,const WatchSettings *s,ChartNeeds *n){
+  memcpy(s_extra,s->extra,sizeof s_extra);
   const struct tm *lt=localtime(&now);
   const bool sat=s->body==BODY_SATELLITE;
   // On Groundtrack Fuller every chart is a rolling Fuller sheet, of the day
@@ -190,7 +208,7 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
   memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
   in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.also=s->also;in.bare=s->bare;in.legend=s->legend;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
-  in.local_hour=lt->tm_hour;
+  memcpy(in.extra,s->extra,sizeof in.extra);in.local_hour=lt->tm_hour;
   in.weekday=lt->tm_wday;in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;
   in.home=s->home;in.home_lat=s->lat100/100.0;in.home_lon=s->lon100/100.0;
   // (After the last of this localtime: finding the day asks for others.)
@@ -241,11 +259,11 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
   const ChartSources src={.map=resource_read,.map_source=&map,
 #endif
     .figures=resource_read,.figure_source=&figures,.tables=resource_read,.table_source=&tables,
-    .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,
+    .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,.extra=extra_for,
     .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc,.kept_read=persist_read_data,.kept_write=kept_write};
   #undef days
   ChartBuild *build=chart_begin(&in,&src);
-  if(!build){app_note("no chart started",0);local_chart_done();}
+  if(!build){app_note("chart",0);local_chart_done();}
   return build;
   #undef in
 }

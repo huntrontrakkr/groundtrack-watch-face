@@ -18,6 +18,8 @@
   label.row:first-of-type{border-top:0}
   label.row input[type=radio],label.row input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--route);flex:none}
   .name{flex:1}
+  label.row:has(select){flex-wrap:wrap}
+  label.row select{width:100%;min-width:0;padding:10px;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px}
   .note{display:block;font-size:13px;opacity:.65}
   .coords{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:6px 14px 12px}
   .coords label{font-size:13px}
@@ -116,6 +118,11 @@
       <ul id="found"></ul>
       <p class="note field" id="find-note">The search goes to CelesTrak, which keeps the orbit of everything tracked round the Earth.</p>
     </div>
+    <div class="group"><h3>Additional satellites</h3>
+      <p class="note field">Up to two extra satellites, marked 1 and 2, updated each minute on the primary body's map. Its route and pass forecast stay primary. Markers appear only inside the map and while orbit data is available. Plotboard gives the widest coverage.</p>
+      <label class="row"><span class="name">Satellite 1</span><select name="extra0" aria-label="Satellite 1"></select></label>
+      <label class="row"><span class="name">Satellite 2</span><select name="extra1" aria-label="Satellite 2"></select></label>
+    </div>
     <div class="group" id="also-group"><h3>Also marked on the chart</h3>
       <label class="row"><input type="checkbox" name="also" value="sun"><span class="name">The Sun<span class="note">Where it stands overhead, when that is on the chart (not beside itself)</span></span></label>
       <label class="row"><input type="checkbox" name="also" value="moon"><span class="name">The Moon<span class="note">In its phase, where it stands overhead (not beside itself)</span></span></label>
@@ -175,6 +182,9 @@
   <details class="card" id="sec-look"><summary><span class="title">Look</span><span class="now" id="now-look"></span></summary>
     <div class="group"><h3>Plate</h3><div id="plates" class="tiles"></div><p class="picked-note" id="plate-note"></p></div>
     <div class="group"><h3>Hour figures</h3><div id="figure-sets" class="tiles"></div><p class="picked-note" id="figures-note"></p></div>
+    <div class="group" id="north-group"><h3>Triangle orientation</h3>
+      <label class="row"><input type="checkbox" name="north"><span class="name">True-north arrows<span class="note">A small star-tipped north line, following USGS map convention, at each triangle's centre where visible. North is local to that point; the map bends within each triangle.</span></span></label>
+    </div>
     <div class="group" id="legend-group"><h3>In the sheet's open space</h3>
       <label class="row"><input type="checkbox" name="legend"><span class="name">A scale bar<span class="note">A round length of the ground at the sheet's scale, where the net leaves room for it</span></span></label>
     </div>
@@ -238,6 +248,7 @@
   var s={},info={};
   ['body','face','plate','figures','readout','numerals','corner','margin','span','tape','transfer','hourFigures'].forEach(function(k){s[k]=config.settings[k];});
   if(s.hourFigures!=='0')s.hourFigures='1';
+  s.extra=(config.settings.extra||['','']).slice(0,2);s.north=config.settings.north==='1';
   s.legend=config.settings.legend==='1';s.vibe=config.settings.vibe==='1';s.fuel=config.settings.fuel!=='0';
   s.clock24=config.settings.clock24!=='0';
   s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
@@ -319,6 +330,12 @@
       radios('face').forEach(function(f){f.disabled=f.value==='enroute'&&!!why;f.parentNode.classList.toggle('off',f.disabled);});
       document.getElementById('face-why').hidden=!why;document.getElementById('face-why').textContent=why?info[s.body].name.split(' · ').pop()+' is on the Plotboard. '+why:'';
     }
+    hide('north-group',!fuller);form.elements.north.checked=s.north;
+    [0,1].forEach(function(k){var select=form.elements['extra'+k];select.textContent='';
+      var none=document.createElement('option');none.value='';none.textContent='None';select.appendChild(none);
+      Object.keys(info).filter(function(b){return b.indexOf('sat:')===0&&b!==s.body&&b!==s.extra[1-k];}).forEach(function(b){var option=document.createElement('option');option.value=b;option.textContent=info[b].name;select.appendChild(option);});
+      if(s.extra[k]===s.body)s.extra[k]='';select.value=s.extra[k]||'';
+    });
     // (The Sun or Moon followed is not marked beside itself.)
     radios('also').forEach(function(a){var own=a.value===s.body;a.checked=!own&&s.also.indexOf(a.value)>=0;a.disabled=own;a.parentNode.classList.toggle('off',own);});
     document.getElementById('route-note').textContent=daily?'A ruler of the day: each hour\'s mark stands over the body\'s place at that hour, the pointer over the body':'A ruler as long as the hour\'s run across the world: each minute\'s mark stands over that minute\'s place on the orbit, the pointer over the satellite';
@@ -355,6 +372,8 @@
   form.addEventListener('change',function(e){
     var t=e.target;
     if(t.name==='clock24')s.clock24=t.checked;
+    else if(t.name==='north')s.north=t.checked;
+    else if(t.name==='extra0'||t.name==='extra1')s.extra[Number(t.name.slice(-1))]=t.value;
     else if(t.name==='legend')s.legend=t.checked;
     else if(t.name==='vibe')s.vibe=t.checked;
     else if(t.name==='fuel')s.fuel=t.checked;
@@ -556,7 +575,7 @@
   function inputNow(){
     var now=Date.now()+skew,minute=Number(GT.clockParts(now,PV.zone).m),start=Math.floor(now/60000)*60000-minute*60000;
     return {minute:minute,text:GT.chartInput({body:s.body,start:start,plate:s.plate,readout:s.readout==='off'?false:s.readout,numerals:s.numerals,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,
-      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend})};
+      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,north:s.north,extra:s.extra})};
   }
   // A satellite's elements for the preview, asked of CelesTrak once.
   function need(n){
@@ -585,6 +604,7 @@
   function paint(){
     if(!core||!GT)return;
     if(s.body.indexOf('sat:')===0&&!GT.elementsFor(s.body)){blank(true);window.previewDrawn=null;need(s.body.slice(4));return;}
+    s.extra.forEach(function(b){if(b&&!GT.elementsFor(b)&&!failed[b.slice(4)]&&!fetching[b.slice(4)])need(b.slice(4));});
     var made;try{made=inputNow();}catch(error){blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
     blank(false);
     // (The hour is built again only when its input has changed.)
@@ -625,7 +645,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,hourFigures:s.hourFigures,legend:s.legend?'1':'0',vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

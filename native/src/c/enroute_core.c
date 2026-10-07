@@ -1048,7 +1048,7 @@ static void draw_events(Ctx *c){
 // its flag (or the tape's index and minutes), what was drawn over them, then
 // the margins' Zulu time, pass line and height. PART_ALL draws them all; a
 // single part is drawn alone, to measure where it goes.
-enum {PART_ALL,PART_SUN,PART_MOON,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PARTS};
+enum {PART_ALL,PART_SUN,PART_MOON,PART_EXTRA1,PART_EXTRA2,PART_BODY,PART_INDEX,PART_READOUT,PART_CALLOUT,PART_EVENTS,PART_ZULU,PART_TOP,PART_HEIGHT,PART_SOURCE,PART_CIRCLE,PARTS};
 // The sliding band: how far its columns are turned at a minute (the body's
 // column comes under the index, W/2), and the rows turned (the band and
 // the route, between the tape's panel and the bottom margin). What stands
@@ -1069,7 +1069,10 @@ static void draw_moving(Ctx *c,int part){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=VIEW_IS_WORLD(s->view),flag=(s->flags&ENR_MINUTE_FLAG)&&VIEW_IS_HOUR(s->view);
   if(part==PART_CIRCLE){draw_circle(c);return;}
   // The Sun and Moon beside the body, under it.
-  for(int k=0;k<2;k++)if((!part||part==PART_SUN+k)&&m->also[k][0]<255)draw_mark(c,k,m->also[k][0],m->also[k][1]);
+  for(int k=0;k<4;k++)if((!part||part==PART_SUN+k)&&m->also[k][0]<255){
+    int x=m->also[k][0],y=m->also[k][1];draw_mark(c,k<2?k:ENR_SATELLITE,x,y);
+    if(k>=2){const char label=(char)('1'+k-2);draw_text(c,&label,1,x<180?x+8:x-14,0,y+4);}
+  }
   if(!part||part==PART_BODY){
     // The body, then what lies over it; the flag, then what lies over that.
     Ctx box=*c;box.measure=true;

@@ -336,7 +336,7 @@ static void smooth_finish(Smooth *s){
 // the plane; any more go to chunks.
 // (The arena then becomes the scene's own: its minutes and, on the map's
 // charts, the columns' lighting table.)
-#define RUN_ARENA (FACE_CHART?9472:8192)
+#define RUN_ARENA (FACE_CHART?9984:8192)
 #define RUN_CHUNK 2048
 _Static_assert(RUN_ARENA>=60*sizeof(EnrMinute)+(FACE_CHART?2*W*sizeof(enr_real):0)&&60*sizeof(EnrMinute)%8==0,"the arena holds the scene's minutes and columns");
 typedef struct RunChunk {struct RunChunk *next;uint16_t used;uint8_t data[RUN_CHUNK];} RunChunk;
@@ -1226,6 +1226,17 @@ static __attribute__((noinline)) bool track_reach(const TrackPoint *track,int co
 }
 // A Fuller sheet's scale bar (see finish_draw), in whole numbers but for its
 // length: a function of its own, small.
+// USGS true north: a meridian stem with a star at its north end.
+static void north_marks(Canvas *cv,const FullerCam *fc){
+  for(int k=0;k<fc->tile_count;k++){
+    double x,y,dx,dy;fuller_north(fc,k,&x,&y,&dx,&dy);
+    if(x<10||x>W-11||y<28||y>H-25)continue;
+    for(int d=-4;d<=3;d++)plot(cv,x+dx*d,y+dy*d,L_EARLY_INK);
+    // Five-point star, seven pixels wide, upright for legibility.
+    static const uint8_t star[7]={8,8,127,62,28,54,34};
+    for(int j=0;j<7;j++)for(int i=0;i<7;i++)if(star[j]>>i&1)plot(cv,x+dx*7+i-3,y+dy*7+j-3,L_EARLY_INK);
+  }
+}
 static __attribute__((noinline)) void scale_bar(Canvas *cv,const FullerCam *fc,const Box *taken,int taken_n,const Box *figs,int nfigs,Px *scratch){
   static const uint16_t ROUND[7]={50,100,200,500,1000,2000,5000};
   const int per=(int)(fc->scale*(65536/7054.0));int km=0,len=0;
@@ -1511,6 +1522,7 @@ static bool finish_draw(ChartBuild *b){
     if((JUMP(i-1,i)&&!cv.wrap)||!(HOUR_OF(b,i-1)&&HOUR_OF(b,i)))continue;
     segment(&cv,track[i-1].a,track[i-1].b,ON_ROUND(i-1,i),track[i].b,casing_pixel,&heavy);
   }
+  if(rolled&&(in->legend&2))north_marks(&cv,b->fc);
   cv.early=false;cv.stage=2;
   for(int i=1;i<count;i++){
     if(JUMP(i-1,i)&&!cv.wrap)continue;
@@ -1698,7 +1710,7 @@ static bool finish_draw(ChartBuild *b){
   // sheet's open space (off the net, clear of the margins, the network and
   // the hour's figures), the lowest and leftmost place that is. (An edge of
   // the icosahedron, the net's unit, is 63.43 degrees of the Earth: 7,054 km.)
-  if(rolled&&in->legend)scale_bar(&cv,b->fc,taken,taken_n,figs,nfigs,scratch);
+  if(rolled&&(in->legend&1))scale_bar(&cv,b->fc,taken,taken_n,figs,nfigs,scratch);
   // Events are compulsory reporting points: a filled triangle on the route
   // at the event's minute, its name over it (the minute's: see
   // enroute_core.c), clear of the lettering, the network and the figures.
@@ -1910,10 +1922,14 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     if(world){if(my<cam->top)my=cam->top;if(my>cam->bottom)my=cam->bottom;}
     e->mx=(enr_real)mx;e->my=(enr_real)my;
     // The Sun and Moon beside the body, where they are on the chart.
-    for(int k=0;k<2;k++){
+    for(int k=0;k<4;k++){
       double la,lo,x,y;uint8_t *const a=e->also[k];a[0]=255;
-      if(!(in->also>>k&1)||in->body==k)continue;
-      if(!body_position(src,k,t,&la,&lo))FAIL;
+      if(k<2){if(!(in->also>>k&1)||in->body==k)continue;if(!body_position(src,k,t,&la,&lo))FAIL;}
+      else{
+        const SatSegment *extra=in->extra[k-2]&&src->extra?src->extra(src->satellite_context,in->extra[k-2],t):NULL;
+        if(!extra)continue;
+        double alt;sat_segment_position(extra,t,&la,&lo,&alt);
+      }
       project(cam,la,lo,&x,&y);
       int xi=(int)js_round(x);const int yi=(int)js_round(y);
       // (Round the sliding world, its place on the band.)

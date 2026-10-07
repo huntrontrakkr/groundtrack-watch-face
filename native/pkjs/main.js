@@ -134,6 +134,7 @@ function daily(body){var c=chart(body);return c==='day'||c==='worldday';}
 // (The hour chart bare of its hour figures: hourFigures '0'.)
 function bare(){return setting('hourFigures','1')==='0';}
 function also(){return setting('also','').split(',').filter(function(k){return k==='sun'||k==='moon';});}
+function extra(){var seen={};return setting('extra',',').split(',').slice(0,2).map(function(b){if(b===currentBody()||!b||b.indexOf('sat:')!==0||!known(b)||seen[b])return '';seen[b]=true;return b;});}
 function watchSettings(){
   var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate',DEFAULT_PLATE));
   var sat=body.indexOf('sat:')===0,entry=sat?catalogEntry(body):null,numerals=NUMERALS.indexOf(setting('numerals','even'));
@@ -149,8 +150,9 @@ function watchSettings(){
   var transfer=TRANSFERS.indexOf(setting('transfer','off'));
   var figures=FIGURES.indexOf(setting('figures','michroma')),corner=CORNERS.indexOf(setting('corner','day'));
   bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?FIGURES.indexOf('michroma'):figures,corner<0?0:corner,
-    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,setting('legend','0')==='1'?1:0,
+    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,(setting('legend','0')==='1'?1:0)|(FACE==='fuller'&&setting('north','0')==='1'?2:0),
     (setting('vibe','0')==='1'?1:0)|(setting('fuel','1')==='0'?2:0));
+  var companions=extra();for(var j=0;j<2;j++)i32(companions[j]?Number(companions[j].slice(4)):0);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -163,14 +165,14 @@ function sendSatellite(norad){
   // (Asked again while its elements are being fetched: that answer serves.)
   if(fetching[norad])return;
   elements(body,function(problem,reason){
-    if(problem){console.log('No elements for '+body+': '+(reason||problem));status(problem);return;}
+    if(problem){console.log('No elements for '+body+': '+(reason||problem));if(body===currentBody())status(problem);return;}
     // From an hour ago, or for the whole-day chart from a day ago (its day
     // starts at local midnight).
     // (The hour's chart starts 40 minutes before its local hour, which the
     // watch may be 59 minutes into.)
-    var span,now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=daily(body)?26*3600:6000;
+    var primary=body===currentBody(),span,now=Math.floor(Date.now()/1000),bytes=[],sent=0,back=primary&&daily(body)?26*3600:6000;
     try{span=satelliteSpan(body);}catch(error){console.log('No orbit for '+body+': '+error.message);return;}
-    for(var t=Math.floor((now-back)/span)*span;t<now+SAT_DAYS*86400;t+=span){
+    for(var t=Math.floor((now-back)/span)*span;t<now+(primary?SAT_DAYS:1)*86400;t+=span){
       var seg;try{seg=encodeSatelliteSegment(satelliteSegmentFor(body,t*1000));}catch(error){break;}
       for(var k=0;k<seg.length;k++)bytes.push(seg[k]);sent++;
       if(bytes.length>=12*seg.length){enqueue({SatSegments:bytes});bytes=[];}
@@ -178,9 +180,9 @@ function sendSatellite(norad){
     if(bytes.length)enqueue({SatSegments:bytes});
     // (Elements that place it nowhere, a decayed satellite's say: the watch
     // is told, not left waiting.)
-    if(!sent){status('NO ELEMENTS: DATA');return;}
+    if(!sent){if(body===currentBody())status('NO ELEMENTS: DATA');return;}
     var timeZone=zone(),h=home(timeZone);
-    if(h)for(var b=Math.floor(Date.now()/PASS_BLOCK)*PASS_BLOCK;b<Date.now()+SAT_DAYS*DAY;b+=PASS_BLOCK){
+    if(h&&body===currentBody())for(var b=Math.floor(Date.now()/PASS_BLOCK)*PASS_BLOCK;b<Date.now()+SAT_DAYS*DAY;b+=PASS_BLOCK){
       // (With whose they are: the watch may have chosen another since.)
       try{enqueue({Passes:Array.prototype.slice.call(encodePassBlock(body,h,b,timeZone)),DataBody:Number(norad)});}catch(error){break;}
     }
@@ -263,7 +265,7 @@ function elements(body,done){
     // Again when the wait is over, if this satellite is still the one shown:
     // quietly, the watch sent its orbit only once CelesTrak has given it.
     setTimeout(function(){
-      if(currentBody()===body)elements(body,function(problem,stale){if(!problem&&!stale)sendSatellite(norad);});
+      if(currentBody()===body||extra().indexOf(body)>=0)elements(body,function(problem,stale){if(!problem&&!stale)sendSatellite(norad);});
     },retry+1000);
     fallback(reason,why,finish);
   }
@@ -409,7 +411,7 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),extra:extra(),north:setting('north','0'),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
@@ -452,6 +454,8 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(chosen.face==='enroute'||chosen.face==='plotboard')localStorage.setItem('face',chosen.face);
   if(chosen.vibe==='1'||chosen.vibe==='0')localStorage.setItem('vibe',chosen.vibe);
   if(chosen.fuel==='1'||chosen.fuel==='0')localStorage.setItem('fuel',chosen.fuel);
+  if(chosen.north==='1'||chosen.north==='0')localStorage.setItem('north',chosen.north);
+  if(Array.isArray(chosen.extra))localStorage.setItem('extra',chosen.extra.slice(0,2).map(function(b){return typeof b==='string'&&b.indexOf('sat:')===0&&known(b)?b:'';}).join(','));
   if(chosen.legend==='1'||chosen.legend==='0')localStorage.setItem('legend',chosen.legend);
   if(chosen.hourFigures==='1'||chosen.hourFigures==='0')localStorage.setItem('hourFigures',chosen.hourFigures);
   if(Array.isArray(chosen.also))localStorage.setItem('also',chosen.also.filter(function(k){return k==='sun'||k==='moon';}).join(','));
@@ -490,5 +494,6 @@ Pebble.addEventListener('appmessage',function(e){
     if(owed)payOwed();else sendEvents(true);
     if(from>=0)sendSegments(from);
     if(e.payload.DataBody)sendSatellite(e.payload.DataBody);else sendRiseSets();
+    extra().forEach(function(b){if(b&&b!=='sat:'+e.payload.DataBody)sendSatellite(Number(b.slice(4)));});
   }
 });

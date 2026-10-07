@@ -5,6 +5,6 @@
 // saves between 8 and 136 bytes; none changes what the code means. tools/energy
 // measured the minute renderer's work 14% greater with them.
 #pragma once
-#ifdef FACE_ENROUTE
+#if defined(FACE_ENROUTE) || defined(FACE_FULLER)
 #pragma GCC optimize("no-schedule-insns2","no-ipa-cp","no-ipa-cp-clone","no-tree-sra","no-forward-propagate","no-delete-null-pointer-checks","no-ira-hoist-pressure","no-optimize-sibling-calls")
 #endif

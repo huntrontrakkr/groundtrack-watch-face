@@ -16,6 +16,7 @@ static Segment s_segs[8];static int s_nsegs;
 static const Segment *seg_for(void *ctx,int32_t day){for(int i=0;i<s_nsegs;i++)if(s_segs[i].day==day)return &s_segs[i];return 0;}
 static SatSegment s_sats[64];static int s_nsats;
 static const SatSegment *sat_for(void *ctx,int64_t t){for(int i=0;i<s_nsats;i++)if(t>=s_sats[i].start&&t<s_sats[i].start+s_sats[i].span)return &s_sats[i];return 0;}
+static const SatSegment *extra_for(void *ctx,int32_t norad,int64_t t){for(int i=0;i<s_nsats;i++)if(s_sats[i].norad==norad&&t>=s_sats[i].start&&t<s_sats[i].start+s_sats[i].span)return &s_sats[i];return NULL;}
 static uint8_t s_blocks[4][2048];static size_t s_block_len[4];static int s_nblocks;
 static void pass_for(void *ctx,int64_t t,char out[24]){
   for(int i=0;i<s_nblocks;i++){const uint8_t *b=s_blocks[i];const int32_t start=(int32_t)((uint32_t)b[0]|(uint32_t)b[1]<<8|(uint32_t)b[2]<<16|(uint32_t)b[3]<<24);
@@ -65,6 +66,7 @@ int core_build(const char *text,size_t length,int slot){
     if(!strcmp(key,"satseg")){if(s_nsats<64){uint8_t b[SAT_SEGMENT_BYTES];unhex(value,b,sizeof b);sat_segment_decode(b,&s_sats[s_nsats++]);}}
     else if(!strcmp(key,"passes")){if(s_nblocks<4){s_block_len[s_nblocks]=unhex(value,s_blocks[s_nblocks],sizeof s_blocks[0]);s_nblocks++;}}
     else if(!strcmp(key,"segment")){if(s_nsegs<8){uint8_t b[SEG_BYTES];unhex(value,b,sizeof b);seg_decode(b,&s_segs[s_nsegs++]);}}
+    else if(!strcmp(key,"extra"))sscanf(value,"%d %d",&in.extra[0],&in.extra[1]);
     else if(!strcmp(key,"fuller"))in.fuller=atoi(value);
     else if(!strcmp(key,"body"))in.body=atoi(value);else if(!strcmp(key,"view"))in.view=atoi(value);
     else if(!strcmp(key,"daystart"))in.day_start=atoll(value);else if(!strcmp(key,"dayend"))in.day_end=atoll(value);
@@ -87,7 +89,7 @@ int core_build(const char *text,size_t length,int slot){
   }
   const ChartSources src={.map=mem_read,.map_source=&s_source[CORE_MAP],.figures=mem_read,.figure_source=&s_source[CORE_FIGURES],.tables=mem_read,.table_source=&s_source[CORE_TABLES],
     .grids=s_source[CORE_GRIDS].data?mem_read:NULL,.grid_source=&s_source[CORE_GRIDS],.land=s_source[CORE_LAND].data?mem_read:NULL,.land_source=&s_source[CORE_LAND],
-    .segment=seg_for,.satellite=sat_for,.pass_line=pass_for,.alloc=s_alloc,.release=s_release,.resize=s_resize,
+    .segment=seg_for,.satellite=sat_for,.extra=extra_for,.pass_line=pass_for,.alloc=s_alloc,.release=s_release,.resize=s_resize,
     .kept_read=s_keep_on?kept_read:NULL,.kept_write=s_keep_on?kept_write:NULL};
   s_scene[slot]=chart_build(&in,&src);
   if(!s_scene[slot]){snprintf(s_why,sizeof s_why,"chart.c:%u",chart_failed_at);return 0;}
