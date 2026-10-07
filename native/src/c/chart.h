@@ -50,6 +50,7 @@ typedef struct {
   int legend;                // Fuller overlays: 1 scale bar, 2 true-north marks
   int bare;                  // the hour chart without its hour figures
   int32_t extra[2];          // companion catalog numbers, or 0
+  char extra_code[2][3];     // compact catalog identifiers
   int also;                  // the Sun (1) and the Moon (2) marked beside the body
   int transfer;              // on the fixed tape, how its minutes fall on the route: 0 off, 1 vernier, 2 comb, 3 chevrons
   // Events, set on the route as compulsory reporting points: their times

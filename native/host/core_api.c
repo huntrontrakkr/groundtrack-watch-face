@@ -66,6 +66,7 @@ int core_build(const char *text,size_t length,int slot){
     if(!strcmp(key,"satseg")){if(s_nsats<64){uint8_t b[SAT_SEGMENT_BYTES];unhex(value,b,sizeof b);sat_segment_decode(b,&s_sats[s_nsats++]);}}
     else if(!strcmp(key,"passes")){if(s_nblocks<4){s_block_len[s_nblocks]=unhex(value,s_blocks[s_nblocks],sizeof s_blocks[0]);s_nblocks++;}}
     else if(!strcmp(key,"segment")){if(s_nsegs<8){uint8_t b[SEG_BYTES];unhex(value,b,sizeof b);seg_decode(b,&s_segs[s_nsegs++]);}}
+    else if(!strncmp(key,"extra_code",10)&&key[10]>='0'&&key[10]<='1')memcpy(in.extra_code[key[10]-'0'],value,strlen(value)<3?strlen(value):3);
     else if(!strcmp(key,"extra"))sscanf(value,"%d %d",&in.extra[0],&in.extra[1]);
     else if(!strcmp(key,"fuller"))in.fuller=atoi(value);
     else if(!strcmp(key,"body"))in.body=atoi(value);else if(!strcmp(key,"view"))in.view=atoi(value);

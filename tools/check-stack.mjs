@@ -3,7 +3,7 @@
 // Compiles each source for each app with the SDK's compiler and
 // -fstack-usage, and fails if any frame is over the budget. (The frames are
 // a guard against a large local creeping back; what the stack really
-// reaches is in the app's log, "stack N of 2016", from the emulator.)
+// reaches is in the app's log, "S<N>/2016", from the emulator.)
 //   node tools/check-stack.mjs [budget=640]
 import {execFileSync} from 'node:child_process';
 import {existsSync,mkdtempSync,readdirSync,readFileSync,rmSync} from 'node:fs';

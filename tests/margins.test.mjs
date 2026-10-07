@@ -29,14 +29,14 @@ test('on the world band the line over it gives the date, and the satellite\'s he
   const r=await renderer();
   const out=r.render({body:'iss',epoch:ISS,timeZone:'UTC',clock24:true,plate:'crt'});
   // The 2019 archive's elements are its own hour's: not old.
-  assert.match(out.scene.minutes[24].corner,/^ISS \d{3} KM$/);
-  assert.match(r.render({body:'iss',epoch:ISS,timeZone:'UTC',clock24:true,plate:'crt',corner:'point'}).scene.minutes[24].corner,/^ISS \d\d[NS] \d{3}[EW]$/);
+  assert.match(out.scene.minutes[24].corner,/^\d{3} KM$/);
+  assert.match(r.render({body:'iss',epoch:ISS,timeZone:'UTC',clock24:true,plate:'crt',corner:'point'}).scene.minutes[24].corner,/^\d\d[NS] \d{3}[EW]$/);
   // Elements more than two days old (CelesTrak's of 29 September) are
   // noted, the height kept; younger, not.
   const {registerLiveFixture}=await import('./tle-fixture.mjs');registerLiveFixture();
   const {elementsFor}=await import('../src/satellites.js'),epoch=elementsFor('sat:25544').epoch;
   const at=t=>r.render({body:'sat:25544',epoch:Math.floor((epoch+t)/3600000)*3600000+24*MINUTE,timeZone:'UTC',clock24:true,plate:'crt'}).scene.minutes[24].corner;
-  assert.match(at(30*3600000),/^ISS \d{3} KM$/);
+  assert.match(at(30*3600000),/^\d{3} KM$/);
   assert.match(at(60*3600000),/^EL OLD \d{3} KM$/);
 });
 

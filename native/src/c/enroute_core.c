@@ -1071,7 +1071,7 @@ static void draw_moving(Ctx *c,int part){
   // The Sun and Moon beside the body, under it.
   for(int k=0;k<4;k++)if((!part||part==PART_SUN+k)&&m->also[k][0]<255){
     int x=m->also[k][0],y=m->also[k][1];draw_mark(c,k<2?k:ENR_SATELLITE,x,y);
-    if(k>=2){const char label=(char)('1'+k-2);draw_text(c,&label,1,x<180?x+8:x-14,0,y+4);}
+    if(k>=2)draw_text(c,s->extra_code[k-2],3,x<W-32?x+8:x-29,0,y+4);
   }
   if(!part||part==PART_BODY){
     // The body, then what lies over it; the flag, then what lies over that.

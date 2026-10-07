@@ -53,8 +53,7 @@ typedef struct {
   int16_t index;
   // The margins' corner, set right to (height_right, height_baseline): the
   // day of the year, the body's ground point or the Moon's light ("DAY
-  // 270", "23N 045E", "87% WAX"; the world band: "ISS 412 KM", "ISS 12S
-  // 140W"), or for old elements "EL OLD" ("EL OLD 412 KM").
+  // 270", "23N 045E", "87% WAX"; the world band: "412 KM", "12S 140W"), or for old elements "EL OLD" ("EL OLD 412 KM").
   char corner[14];
   uint8_t circle;
   // Sun, Moon, and companion satellites 1 and 2: their pixels when
@@ -224,6 +223,7 @@ typedef struct {
   int32_t (*row_q)[2],night_q[34];
   // Whether a class's colour differs between night's zones (enr_ready).
   uint8_t zone_matters[256/8];
+  char extra_code[2][3];
 } EnrScene;
 
 // Frees what a scene holds (not the scene itself).
