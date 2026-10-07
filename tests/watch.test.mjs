@@ -347,3 +347,16 @@ test('the fuel line shows the battery and the link on every face, and the watch 
   let differ=0;for(let i=0;i<got.length;i++)if(got[i]!==want[i])differ++;assert.equal(differ,0,'no fuel line');
   await w.close();
 });
+
+test('companion satellites refresh through their own ring rollover without replacing the primary',{skip:!cc&&'no C compiler',timeout:180000},async()=>{
+  for(const face of ['enroute','fuller']){
+    const t=Date.parse('2026-09-30T00:20:00Z'),c={body:'sat:25544',zone:'UTC',plate:'console',north:true,extra:['sat:20580','sat:48274'],t0:t};
+    const {w,ph}=await fresh(face,c,t);
+    for(let hour=0;hour<30;hour++){
+      await w.cmd('run 3600');await answer(w,ph);
+      assert.equal(w.state.chart,true,`${face} hour ${hour}`);
+      await same(face,c,w,`${face} companions hour ${hour}`);
+    }
+    await w.close();
+  }
+});
