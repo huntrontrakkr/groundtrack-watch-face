@@ -1,7 +1,7 @@
 {
   "name": "groundtrack-enroute",
   "author": "Groundtrack",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "private": true,
   "keywords": [
     "pebble-app"

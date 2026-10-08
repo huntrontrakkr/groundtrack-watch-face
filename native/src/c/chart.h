@@ -43,16 +43,18 @@ typedef struct {
   int plate;                 // index into PLATES (src/enroute-render.js order)
   bool flag;                 // the minute flag (readout 1)
   int readout;               // the minute readout: 0 none, 1 the flag, 2 a time callout
-  int numerals;              // the callout's figures (ENR_COLON ... ENR_ACCENT)
-  int figures;               // the figure set (FIGURE_SETS in src/plates.js: 0 Jost)
-  bool zone_body;            // the margin's time in the nautical zone under the body, not Zulu
-  int tape;                  // the world band's time scale: 0 fixed, 1 a sliding tape, 2 the world sliding too, 3 a clock
-  int legend;                // Fuller overlays: 1 scale bar, 2 true-north marks
-  int bare;                  // the hour chart without its hour figures
+  // Contiguous option bytes, matching WatchSettings.numerals through legend.
+  uint8_t numerals;         // the callout's figures (ENR_COLON ... ENR_ACCENT)
+  uint8_t zone_body;        // the margin's time in the nautical zone under the body, not Zulu
+  uint8_t tape;             // the world band's time scale: 0 fixed, 1 a sliding tape, 2 the world sliding too, 3 a clock
+  uint8_t transfer;         // on the fixed tape, how its minutes fall on the route: 0 off, 1 vernier, 2 comb, 3 chevrons
+  uint8_t figures;          // the figure set (FIGURE_SETS in src/plates.js: 0 Jost)
+  uint8_t corner;           // 0 day/altitude, 1 ground point, 2 Moon light
+  uint8_t also;             // the Sun (1) and the Moon (2) marked beside the body
+  uint8_t bare;             // the hour chart without its hour figures
+  uint8_t legend;           // Overlay bits: 1 Fuller scale, 2 north, 4/8 companion tracks
   int32_t extra[2];          // companion catalog numbers, or 0
   char extra_code[2][3];     // compact catalog identifiers
-  int also;                  // the Sun (1) and the Moon (2) marked beside the body
-  int transfer;              // on the fixed tape, how its minutes fall on the route: 0 off, 1 vernier, 2 comb, 3 chevrons
   // Events, set on the route as compulsory reporting points: their times
   // (Unix seconds) and five-letter name codes.
   int event_count;
@@ -62,10 +64,6 @@ typedef struct {
   int local_hour;            // the local clock's hour at start, 0-23
   int day,month,year,day_of_year;   // the local date at start
   int weekday;               // its day of the week, 0 Sunday
-  // The corner of the margins (the bottom right; on the world band the
-  // right of the line over it): 0 the day of the year (the world band: the
-  // satellite's height), 1 the body's ground point, 2 the Moon's light.
-  int corner;
   bool home;double home_lat,home_lon;
   char rise_left[24],rise_right[24];  // home's rise and set line ("HOM SR 0650", "SS 1841"), or empty
 } ChartInput;

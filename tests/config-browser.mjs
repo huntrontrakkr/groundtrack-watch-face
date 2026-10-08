@@ -369,6 +369,14 @@ try{
   assert.match(await page2.evaluate(()=>window.previewDrawn.input),/extra_code0 ISS\nextra_code1 N20\n/);
   assert.equal(await page2.locator('input[name=tracked]:checked').count(),3);
   assert.equal(await page2.locator('select[name=extra0]').count(),0);
+  assert.equal(await page2.locator('input[name=tracks]:checked').count(),0,'tracks default off');
+  await page2.check('input[name=tracks][value="sat:25544"]');
+  await page2.waitForFunction(()=>/\nlegend 7\n/.test(window.previewDrawn.input));
+  await page2.check('input[name=tracks][value="sat:43013"]');
+  await page2.waitForFunction(()=>/\nlegend 15\n/.test(window.previewDrawn.input));
+  assert.ok(await page2.locator('input[name=tracks][value="sat:43013"]').evaluate(e=>e===document.activeElement));
+  await page2.keyboard.press('Space');
+  await page2.waitForFunction(()=>/\nlegend 7\n/.test(window.previewDrawn.input));
   assert.ok(await page2.evaluate(()=>document.documentElement.scrollWidth<=320));
   // Selection never changes the primary implicitly; replacement can be cancelled.
   assert.equal(await primary(page2),'sun');
@@ -387,7 +395,10 @@ try{
   await custom(1,40267);
   await page2.locator('[data-slot="1"] .make-primary').click();assert.equal(await primary(page2),'sat:40267');
   assert.equal(await page2.locator('[data-slot="1"]').getAttribute('data-key'),'sat:25544','promotion keeps the former primary');
+  assert.ok(await page2.locator('input[name=tracks][value="sat:25544"]').isChecked(),'track preference follows the satellite through role swaps');
   await custom(1,10143);await custom(2,12677);
+  assert.equal(await page2.locator('input[name=tracks]:checked').count(),0,'replacement starts with its own track preference');
+  await page2.check('input[name=tracks][value="sat:10143"]');
   await page2.waitForFunction(()=>window.previewDrawn?.input.includes('extra 10143 12677'));
   assert.ok(await page2.locator('#found .drop').isHidden(),'tracking removal and forgetting the saved custom satellite are distinct');
   // A keyboard checkmark adds the removed custom companion back, without changing primary.
@@ -405,14 +416,17 @@ try{
   assert.ok(closes2[0]?.startsWith('pebblejs://close#'));l2.webviewclosed({response:closes2[0].slice('pebblejs://close#'.length)});
   for(let i=0;i<100&&!messages2.some(m=>m.Settings);i++)await page2.waitForTimeout(20);
   assert.equal(stored2.body,'sat:40267');assert.equal(stored2.extra,'sat:10143,sat:12677');
+  assert.equal(stored2.tracks,'sat:10143');
   assert.deepEqual(JSON.parse(stored2.sats).map(e=>e.norad),[40267,10143,12677]);
   for(const n of [40267,10143,12677])assert.ok(JSON.parse(stored2['tle-'+n]).text.includes('1 '+n));
   const wire=messages2.find(m=>m.Settings).Settings,u32=at=>wire[at]|wire[at+1]<<8|wire[at+2]<<16|wire[at+3]<<24;
-  assert.deepEqual([u32(13),u32(31),u32(35)],[40267,10143,12677]);
+  assert.deepEqual([u32(13),u32(31),u32(35)],[40267,10143,12677]);assert.equal(wire[29],7);
   opened2=null;l2.showConfiguration({});for(let i=0;i<400&&!opened2;i++)await new Promise(r=>setTimeout(r,20));
   await page2.setContent(decodeURIComponent(opened2.slice('data:text/html;charset=utf-8,'.length)));
   assert.equal(await primary(page2),'sat:40267');assert.deepEqual(await page2.locator('.tracking-card').evaluateAll(cards=>cards.map(c=>c.dataset.key)),['sat:40267','sat:10143','sat:12677']);
 
+  assert.ok(await page2.locator('input[name=tracks][value="sat:10143"]').isChecked());
+  assert.ok(!await page2.locator('input[name=tracks][value="sat:12677"]').isChecked());
   await page2.setViewportSize({width:320,height:844});
   await page2.evaluate(()=>scrollBy(0,document.getElementById('tracking-cards').getBoundingClientRect().top-190));
   await page2.screenshot({path:'test-results/shared-picker-cards.png'});

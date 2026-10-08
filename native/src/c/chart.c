@@ -773,9 +773,9 @@ typedef struct {double a,b;} TrackPoint;
 static bool read_plate(const ChartSources *src,int k,Plate *p){
   uint8_t t[100];if(src->tables(src->table_source,TABLE_PLATE_AT(k),t,100)!=100)return false;
   memset(p,0,sizeof *p);
-  p->flags=(uint16_t)(t[0]|t[1]<<8);memcpy(p->zoned,t+2,27);
-  p->space=t[29];p->space_ink=t[30];p->screen=t[31];p->waterline=t[32];p->terminator=t[33];p->night_dots=t[34];
-  p->tint_count=t[35];memcpy(p->tints,t+36,5);memcpy(p->tint_limits,t+41,40);
+  _Static_assert(offsetof(Plate,tints)+5-offsetof(Plate,zoned)==39,"contiguous palette bytes");
+  p->flags=(uint16_t)(t[0]|t[1]<<8);memcpy(p->zoned,t+2,39);
+  memcpy(p->tint_limits,t+41,40);
   p->depth_count=t[81];memcpy(p->depths,t+82,2);memcpy(p->depth_limits,t+84,16);
   for(int k=0;k<5;k++)p->tint_q[k]=isfinite(p->tint_limits[k])?(int32_t)(p->tint_limits[k]*256):INT32_MAX;
   for(int k=0;k<2;k++)p->depth_q[k]=isfinite(p->depth_limits[k])?(int32_t)(p->depth_limits[k]*256):INT32_MIN;
@@ -1097,7 +1097,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   void *(*const alloc)(size_t)=src->alloc;void (*const release)(void *)=src->release;
   if(in->plate<0||in->plate>=TABLE_PLATES||!read_plate(src,in->plate,&b->plate))FAIL;
   // The figure set's table, Jost's for an unknown set.
-  {const int set=in->figures>=0&&in->figures<FIGURE_SETS?in->figures:0;uint8_t t[6*10];
+  {const int set=in->figures<FIGURE_SETS?in->figures:0;uint8_t t[6*10];
   // (Ten at a time: the stack is small.)
   for(int k=0;k<50;k++){
     if(k%10==0&&src->figures(src->figure_source,FIGURE_TABLE_AT(set)+6*k,t,sizeof t)!=sizeof t)FAIL;
@@ -1236,10 +1236,27 @@ static void north_marks(Canvas *cv,const FullerCam *fc){
   for(int k=0;k<fc->tile_count;k++){
     double x,y,dx,dy;fuller_north(fc,k,&x,&y,&dx,&dy);
     if(x<10||x>W-11||y<28||y>H-25)continue;
-    for(int d=-4;d<=3;d++)plot(cv,x+dx*d,y+dy*d,L_EARLY_INK);
-    // Five-point star, seven pixels wide, upright for legibility.
-    static const uint8_t star[7]={8,8,127,62,28,54,34};
-    for(int j=0;j<7;j++)for(int i=0;i<7;i++)if(star[j]>>i&1)plot(cv,x+dx*7+i-3,y+dy*7+j-3,L_EARLY_INK);
+    for(int d=-4;d<=6;d++)plot(cv,x+dx*d,y+dy*d,L_EARLY_INK);
+    // Five-pixel star: its top point turns with the meridian stem.
+    static const uint8_t star[5]={4,31,14,10,17};
+    for(int j=0;j<5;j++)for(int i=0;i<5;i++)if(star[j]>>i&1)plot(cv,x+dx*(9-j)-dy*(i-2),y+dy*(9-j)+dx*(i-2),L_EARLY_INK);
+  }
+}
+static __attribute__((noinline)) bool companion_place(ChartBuild *b,int k,int64_t t,double *x,double *y){
+  const ChartSources *src=&b->src;const int32_t id=b->in.extra[k];
+  const SatSegment *s=id&&src->extra?src->extra(src->satellite_context,id,t):NULL;
+  if(!s)return false;
+  double lat,lon,alt;sat_segment_position(s,t,&lat,&lon,&alt);
+  project(&b->cam,lat,lon,x,y);return true;
+}
+// Half-minute dots never bridge a map cut. Only this hour.
+static __attribute__((noinline)) void companion_tracks(ChartBuild *b,Canvas *cv){
+  for(int k=0;k<2;k++)if(b->in.legend&(4<<k)){
+    for(int dt=0;dt<3600;dt+=30){
+      double x,y;
+      if(!companion_place(b,k,b->in.start+dt,&x,&y))continue;
+      if(y>=cv->top&&y<=cv->bottom)plot(cv,x,y,L_GRID);
+    }
   }
 }
 static __attribute__((noinline)) void scale_bar(Canvas *cv,const FullerCam *fc,const Box *taken,int taken_n,const Box *figs,int nfigs,Px *scratch){
@@ -1494,6 +1511,7 @@ static bool finish_draw(ChartBuild *b){
     }
   }
   cv.stage=1;
+  companion_tracks(b,&cv);
   // The tracking stations, circled, with their codes; on the world band
   // each with its acquisition circle.
   const double acquisition=reach(410,5);
@@ -1846,8 +1864,9 @@ static bool finish_draw(ChartBuild *b){
   out->wash=(pal->flags&PLATE_WASH)!=0;out->counter=counter;out->pattern=(uint8_t)PLATE_PATTERN(pal->flags);
   out->transfer=(uint8_t)(daily||!world||in->tape>2?0:in->transfer);
   out->body=(uint8_t)in->body;out->view=world?ENR_VIEW_WORLD:day?ENR_VIEW_DAY:ENR_VIEW_HOUR;out->forward=(int8_t)(forward?1:-1);out->hour_start=(int32_t)in->start;
-  memcpy(out->zoned,pal->zoned,sizeof out->zoned);
-  out->space=pal->space;out->space_ink=pal->space_ink;out->screen=pal->screen;out->waterline=pal->waterline;out->terminator=pal->terminator;out->night_dots=pal->night_dots;
+  _Static_assert(offsetof(EnrScene,night_dots)-offsetof(EnrScene,zoned)==32,"contiguous scene inks");
+  _Static_assert(offsetof(Plate,night_dots)-offsetof(Plate,zoned)==32,"contiguous palette inks");
+  memcpy(out->zoned,pal->zoned,33);
   memcpy(out->tints,pal->tints,sizeof out->tints);
   for(int k=0;k<2;k++)out->depths[k]=k<pal->depth_count?pal->depths[k]:0;
   if(!rolled){
@@ -1929,13 +1948,8 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
     // The Sun and Moon beside the body, where they are on the chart.
     for(int k=0;k<4;k++){
       double la,lo,x,y;uint8_t *const a=e->also[k];a[0]=255;
-      if(k<2){if(!(in->also>>k&1)||in->body==k)continue;if(!body_position(src,k,t,&la,&lo))FAIL;}
-      else{
-        const SatSegment *extra=in->extra[k-2]&&src->extra?src->extra(src->satellite_context,in->extra[k-2],t):NULL;
-        if(!extra)continue;
-        double alt;sat_segment_position(extra,t,&la,&lo,&alt);
-      }
-      project(cam,la,lo,&x,&y);
+      if(k<2){if(!(in->also>>k&1)||in->body==k)continue;if(!body_position(src,k,t,&la,&lo))FAIL;project(cam,la,lo,&x,&y);}
+      else if(!companion_place(b,k-2,t,&x,&y))continue;
       int xi=(int)js_round(x);const int yi=(int)js_round(y);
       // (Round the sliding world, its place on the band.)
       if(world&&in->tape==2)xi=(xi%W+W)%W;

@@ -134,6 +134,7 @@ function daily(body){var c=chart(body);return c==='day'||c==='worldday';}
 // (The hour chart bare of its hour figures: hourFigures '0'.)
 function bare(){return setting('hourFigures','1')==='0';}
 function also(){return setting('also','').split(',').filter(function(k){return k==='sun'||k==='moon';});}
+function tracks(){return setting('tracks','').split(',').filter(Boolean);}
 function extra(){var seen={};return setting('extra',',').split(',').slice(0,2).map(function(b){if(b===currentBody()||!b||b.indexOf('sat:')!==0||!known(b)||seen[b])return '';seen[b]=true;return b;});}
 function watchSettings(){
   var body=currentBody(),h=home(zone()),plate=Object.keys(PLATES).indexOf(setting('plate',DEFAULT_PLATE));
@@ -147,12 +148,12 @@ function watchSettings(){
   bytes.push((entry&&entry.symbol==='station'?1:0)|(sat||FACE!=='fuller'?VIEW_CODES[chart(body)]:0)<<1);
   var code=entry?entry.code:'';for(var k=0;k<3;k++)bytes.push(k<code.length?code.charCodeAt(k):0);
   var tape=TAPES.indexOf(setting('tape','fixed'));
-  var transfer=TRANSFERS.indexOf(setting('transfer','off'));
+  var transfer=TRANSFERS.indexOf(setting('transfer','off')),companions=extra(),shownTracks=tracks();
   var figures=FIGURES.indexOf(setting('figures','michroma')),corner=CORNERS.indexOf(setting('corner','day'));
   bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?FIGURES.indexOf('michroma'):figures,corner<0?0:corner,
-    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,(setting('legend','0')==='1'?1:0)|(FACE==='fuller'&&setting('north','0')==='1'?2:0),
+    (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,(setting('legend','0')==='1'?1:0)|(FACE==='fuller'&&setting('north','0')==='1'?2:0)|(companions[0]&&shownTracks.indexOf(companions[0])>=0?4:0)|(companions[1]&&shownTracks.indexOf(companions[1])>=0?8:0),
     (setting('vibe','0')==='1'?1:0)|(setting('fuel','1')==='0'?2:0));
-  var companions=extra();for(var j=0;j<2;j++)i32(companions[j]?Number(companions[j].slice(4)):0);
+  for(var j=0;j<2;j++)i32(companions[j]?Number(companions[j].slice(4)):0);
   for(var j=0;j<2;j++){var c=companions[j]?catalogEntry(companions[j]).code:'';for(var k=0;k<3;k++)bytes.push(k<c.length?c.charCodeAt(k):0);}
   return bytes;
 }
@@ -412,7 +413,7 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),extra:extra(),north:setting('north','0'),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),extra:extra(),tracks:tracks(),north:setting('north','0'),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
@@ -457,6 +458,7 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(chosen.fuel==='1'||chosen.fuel==='0')localStorage.setItem('fuel',chosen.fuel);
   if(chosen.north==='1'||chosen.north==='0')localStorage.setItem('north',chosen.north);
   if(Array.isArray(chosen.extra))localStorage.setItem('extra',chosen.extra.slice(0,2).map(function(b){return typeof b==='string'&&b.indexOf('sat:')===0&&known(b)?b:'';}).join(','));
+  if(Array.isArray(chosen.tracks))localStorage.setItem('tracks',chosen.tracks.filter(function(b){return typeof b==='string'&&b.indexOf('sat:')===0&&known(b);}).slice(0,3).join(','));
   if(chosen.legend==='1'||chosen.legend==='0')localStorage.setItem('legend',chosen.legend);
   if(chosen.hourFigures==='1'||chosen.hourFigures==='0')localStorage.setItem('hourFigures',chosen.hourFigures);
   if(Array.isArray(chosen.also))localStorage.setItem('also',chosen.also.filter(function(k){return k==='sun'||k==='moon';}).join(','));

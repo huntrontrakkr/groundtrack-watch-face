@@ -208,8 +208,9 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
       const set=p.messages.find(m=>m.Settings).Settings;
       assert.equal(JSON.stringify([set[0],set[13]|set[14]<<8,set[17],String.fromCharCode(...set.slice(18,21))]),JSON.stringify([2,25544,1|1<<1,'ISS']));
     }
-    {const p=phone(bundle,now,{timeZone:'UTC',body:'sat:25544',extra:'sat:20580,sat:48274'});p.listeners.ready({});await p.quiet();
-      assert.equal(String.fromCharCode(...p.messages.find(m=>m.Settings).Settings.slice(39)), 'HSTCSS');}
+    {const p=phone(bundle,now,{timeZone:'UTC',body:'sat:25544',extra:'sat:20580,sat:48274',tracks:'sat:48274'});p.listeners.ready({});await p.quiet();
+      assert.equal(String.fromCharCode(...p.messages.find(m=>m.Settings).Settings.slice(39)), 'HSTCSS');
+      assert.equal(p.messages.find(m=>m.Settings).Settings[29],8); }
     // How the tape's minutes fall on the route: the settings' 25th byte.
     for(const [transfer,code] of [['vernier',1],['comb',2],['chevrons',3],['wavy',0]]){
       const p=phone(bundle,now,{timeZone:'UTC',transfer});p.listeners.ready({});await p.quiet();
