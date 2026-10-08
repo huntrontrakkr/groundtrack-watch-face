@@ -37,7 +37,7 @@ typedef struct {
   uint8_t also;
   // The hour chart without its hour figures.
   uint8_t bare;
-  // Fuller overlays: bit 0 the scale bar, bit 1 local true-north marks.
+  // Overlays: bit 0 Fuller scale, bit 1 north, bits 2/3 companion tracks.
   uint8_t legend;
   // The watch's own state (the record's last byte, once the ticker's: zero
   // for older records): 1 a vibration when the phone goes out of reach, 2

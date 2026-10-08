@@ -73,7 +73,7 @@ void events_store(const uint8_t *b,size_t n){
 #define PASS_WHOSE 12
 static void whose(uint8_t *w,const WatchSettings *s){
   const int32_t v[3]={s->norad,s->lat100,s->lon100};
-  for(int k=0;k<3;k++)for(int j=0;j<4;j++)w[4*k+j]=(uint8_t)((uint32_t)v[k]>>(8*j));
+  memcpy(w,v,sizeof v);
 }
 void pass_blocks_store(const uint8_t *b,size_t n,const WatchSettings *s){
   if(n<5||n+PASS_WHOSE>256)return;
@@ -128,7 +128,7 @@ int32_t civil_date(int y,int m,int d){
 // the Moon), with ---- for a rise or set that doesn't happen that day.
 static void rise_text(const uint8_t *r,bool moon,char *left,char *right){
   const int a=moon?2:0;
-  const char *labels[4]={"SR","SS","MR","MS"};
+  static const char labels[4][2]={"SR","SS","MR","MS"};
   for(int k=0;k<2;k++){
     const unsigned v=(unsigned)(r[4+2*(a+k)]|r[5+2*(a+k)]<<8);char *p=k?right:left;
     if(!k){memcpy(p,"HOM ",4);p+=4;}
@@ -207,7 +207,13 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
   const struct tm *lt=localtime(&now);
   memset(&in,0,sizeof in);
   const bool sat=s->body==BODY_SATELLITE;
-  in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.numerals=s->numerals;in.zone_body=s->zone_body;in.tape=s->tape;in.transfer=s->transfer;in.also=s->also;in.bare=s->bare;in.legend=s->legend;in.figures=s->figures;in.corner=s->corner;in.clock24=s->clock24;
+  in.body=sat&&s->station?3:s->body;in.fuller=FACE_ROLL;memcpy(in.code,s->code,sizeof in.code);in.plate=s->plate;in.readout=s->readout;in.flag=s->readout==1;in.clock24=s->clock24;
+  _Static_assert(offsetof(ChartInput,legend)-offsetof(ChartInput,numerals)==8,"contiguous chart options");
+  _Static_assert(offsetof(WatchSettings,legend)-offsetof(WatchSettings,numerals)==8,"contiguous saved options");
+  #define OPTION_OFFSET(f) _Static_assert(offsetof(ChartInput,f)-offsetof(ChartInput,numerals)==offsetof(WatchSettings,f)-offsetof(WatchSettings,numerals),"matching option " #f)
+  OPTION_OFFSET(zone_body);OPTION_OFFSET(tape);OPTION_OFFSET(transfer);OPTION_OFFSET(figures);OPTION_OFFSET(corner);OPTION_OFFSET(also);OPTION_OFFSET(bare);
+  #undef OPTION_OFFSET
+  memcpy(&in.numerals,&s->numerals,9);
   _Static_assert(offsetof(ChartInput,extra_code)-offsetof(ChartInput,extra)==8,"contiguous companion fields");
   memcpy(in.extra,s->extra,sizeof in.extra+sizeof in.extra_code);in.local_hour=lt->tm_hour;
   in.weekday=lt->tm_wday;in.day=lt->tm_mday;in.month=lt->tm_mon+1;in.year=lt->tm_year+1900;in.day_of_year=lt->tm_yday+1;

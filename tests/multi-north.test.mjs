@@ -16,7 +16,7 @@ test('true north follows the local meridian across all 20 faces and eight rotati
 test('companion markers and north survive full and partial minute redraws',async()=>{
   const r=await renderer();
   for(const projection of ['chart','fuller'])for(const tape of ['fixed','slide']){
-    const state={body:'sat:25544',epoch,timeZone:'UTC',clock24:true,plate:'console',projection,tape,north:true,extra:['sat:20580','sat:48274']};
+    const state={body:'sat:25544',epoch,timeZone:'UTC',clock24:true,plate:'console',projection,tape,north:true,extra:['sat:20580','sat:48274'],tracks:['sat:20580','sat:48274']};
     r.render(state);const {slot}=r.last,first=r.core.render(20,slot);let frame=r.core.render(0,slot);
     for(let minute=1;minute<60;minute++){r.core.update(minute-1,minute,frame,slot);assert.deepEqual(frame,r.core.render(minute,slot),`${projection}/${tape}/${minute}`);}
     r.render({...state,extra:[]});assert.notDeepEqual(first,r.core.render(20,r.last.slot),'additional satellites must appear');
@@ -44,5 +44,22 @@ test('satellite identifiers are drawn for companions and the primary on both map
     let count=0;
     for(let i=0;i<frame.length;i++)if(frame[i]!==changed[i]){count++;assert.ok(i%200<30,'primary identifier uses the date margin');}
     assert.ok(count>0,'primary identifier must appear on each map');
+  }
+});
+
+test('companion tracks are optional, independent, and do not move the primary chart',async()=>{
+  const r=await renderer();
+  for(const projection of ['chart','fuller']){
+    const state={body:'sat:25544',epoch,timeZone:'UTC',clock24:true,plate:'console',projection,extra:['sat:20580','sat:48274']};
+    r.render(state);const off=r.last.frame.slice();
+    const frames=[];
+    for(const tracks of [['sat:20580'],['sat:48274'],state.extra]){
+      r.render({...state,tracks});const on=r.last.frame.slice();frames.push(on);
+      assert.notDeepEqual(on,off,'each track can be shown independently');
+      assert.ok(on.reduce((n,c,i)=>n+(c!==off[i]),0)<650,'comparison routes stay sparse');
+    }
+    assert.notDeepEqual(frames[0],frames[1]);
+    r.render({...state,tracks:['sat:999999']});assert.deepEqual(r.last.frame,off,'unselected bodies have no track');
+    r.render({...state,tracks:[]});assert.deepEqual(r.last.frame,off,'turning tracks off restores marker-only rendering');
   }
 });

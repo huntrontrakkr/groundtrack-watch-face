@@ -114,6 +114,7 @@
   .satellite-row .drop{margin:0 0 6px 46px}
   #bodies>h3{margin:10px 14px 2px;font-size:13px}
   #bodies .satellite-row label{min-width:120px}
+  .track-option{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;cursor:pointer;min-height:28px}
 </style>
 </head>
 <body>
@@ -276,7 +277,7 @@
   var s={},info={};
   ['body','face','plate','figures','readout','numerals','corner','margin','span','tape','transfer','hourFigures'].forEach(function(k){s[k]=config.settings[k];});
   if(s.hourFigures!=='0')s.hourFigures='1';
-  s.extra=(config.settings.extra||['','']).slice(0,2);s.north=config.settings.north==='1';
+  s.extra=(config.settings.extra||['','']).slice(0,2);s.north=config.settings.north==='1';s.tracks=(config.settings.tracks||[]).slice();
   s.legend=config.settings.legend==='1';s.vibe=config.settings.vibe==='1';s.fuel=config.settings.fuel!=='0';
   s.clock24=config.settings.clock24!=='0';
   s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
@@ -313,7 +314,7 @@
   function action(text,run,cls){var b=node('button',cls||'',text);b.type='button';b.addEventListener('click',run);return b;}
   function selection(){return [s.body].concat(s.extra);}
   function sayTracking(text){document.getElementById('tracking-notice').textContent=text;}
-  function applyTracking(next){if(!next)return false;s.body=next.body;s.extra=next.extra;s.also=next.also;return true;}
+  function applyTracking(next){if(!next)return false;s.body=next.body;s.extra=next.extra;s.also=next.also;s.tracks=s.tracks.filter(function(k){return selection().indexOf(k)>=0;});return true;}
   function shortName(key){return info[key].name.split(' · ')[0];}
   function focusSlot(slot){var b=document.querySelector('[data-slot="'+slot+'"] button');if(b)b.focus();}
   function beginReplace(slot){
@@ -365,7 +366,7 @@
       var c=node('div','tracking-card '+(slot===0?'primary':key?'':'empty'));c.dataset.slot=slot;c.dataset.key=key;
       if(!key)c.appendChild(action('+ Add a companion',function(){beginReplace(slot);},'add-companion'));
       else{
-        c.appendChild(node('div','tracking-role',slot===0?'Primary · route and clock':'Companion · marker only'));
+        c.appendChild(node('div','tracking-role',slot===0?'Primary · route and clock':'Companion · '+(s.tracks.indexOf(key)>=0?'dotted track':'marker only')));
         c.appendChild(node('div','tracking-title',info[key].name));var actions=node('div','tracking-actions');
         if(slot>0)actions.appendChild(action('Make primary',function(){
           var previous=s.body;applyTracking(RULES.trackingSelection(s,0,key));replacing=null;
@@ -374,10 +375,14 @@
         actions.appendChild(action('Replace',function(){beginReplace(slot);},'replace-tracked'));
         if(slot>0)actions.appendChild(action('Remove',function(){removeKey(key);focusSlot(slot);},'remove-tracked'));
         c.appendChild(actions);
+        if(slot>0){
+          var label=node('label','track-option'),toggle=node('input');toggle.type='checkbox';toggle.name='tracks';toggle.value=key;toggle.checked=s.tracks.indexOf(key)>=0;
+          toggle.setAttribute('aria-label','Show dotted track · '+shortName(key));label.appendChild(toggle);label.appendChild(document.createTextNode(' Show dotted track'));c.appendChild(label);
+        }
       }
       cards.appendChild(c);
     });
-    document.getElementById('tracking-help').textContent=full?'Both companion places are used. Replace a selection, or remove a companion.':'Check satellites to add companions. Use Make primary to change the route. Companions show labeled markers only.';
+    document.getElementById('tracking-help').textContent=(full?'Both companion places are used. Replace a selection, or remove a companion.':'Check satellites to add companions. Use Make primary to change the route.')+' Dotted tracks show this hour.';
     document.getElementById('picker-mode').hidden=replacing===null;
     document.getElementById('picker-title').textContent=replacing===null?'':selected[replacing]?'Replace '+info[selected[replacing]].name:'Add a companion';
     document.getElementById('bodies').hidden=replacing!==0;
@@ -457,6 +462,7 @@
     var t=e.target;
     if(t.name==='clock24')s.clock24=t.checked;
     else if(t.name==='north')s.north=t.checked;
+    else if(t.name==='tracks'){s.tracks=s.tracks.filter(function(k){return k!==t.value;});if(t.checked)s.tracks.push(t.value);}
     else if(t.name==='tracked'){if(t.checked){if(t.dataset.found){var entry=foundEntries.filter(function(x){return 'sat:'+x.norad===t.value;})[0];if(entry)choose(entry);}else chooseKey(t.value);}else removeKey(t.value);return;}
     else if(t.name==='legend')s.legend=t.checked;
     else if(t.name==='vibe')s.vibe=t.checked;
@@ -464,6 +470,7 @@
     else if(t.name==='also'){if(t.checked&&s.also.indexOf(t.value)<0)s.also.push(t.value);if(!t.checked)s.also=s.also.filter(function(k){return k!==t.value;});}
     else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;
     render();
+    if(t.name==='tracks')document.querySelector('input[name=tracks][value="'+t.value+'"]').focus();
   });
   // ---- Any other satellite, from CelesTrak: by name, by catalog number,
   // or by a CelesTrak link (to one satellite or to a list). Its answer is
@@ -655,7 +662,7 @@
   function inputNow(){
     var now=Date.now()+skew,minute=Number(GT.clockParts(now,PV.zone).m),start=Math.floor(now/60000)*60000-minute*60000;
     return {minute:minute,text:GT.chartInput({body:s.body,start:start,plate:s.plate,readout:s.readout==='off'?false:s.readout,numerals:s.numerals,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,
-      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,north:s.north,extra:s.extra})};
+      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,north:s.north,extra:s.extra,tracks:s.tracks})};
   }
   // A satellite's elements for the preview, asked of CelesTrak once.
   function need(n){
@@ -725,7 +732,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();
