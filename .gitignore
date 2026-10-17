@@ -19,6 +19,7 @@ native/host/settings_check
 native/host/fmath_test
 native/host/build_check
 native/host/build_check-*
+native/host/round_check-*
 native/host/*.o
 native/src/pkjs/index.js
 
