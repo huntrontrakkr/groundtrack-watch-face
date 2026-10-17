@@ -1158,7 +1158,7 @@ static int fuller_ground_step(ChartBuild *b,int budget){
 #if ENR_ROUND
 #define TAPE_X0 (W/2-ENR_ARC_X)
 #define TAPE_X1 (W/2+ENR_ARC_X)
-#define TAPE_BASELINE 62                // (the route's ruler, under the figures)
+#define TAPE_BASELINE ENR_RULER_B                // (the route's ruler, under the figures)
 #define TAPE_PANEL ENR_ARC_PANEL
 #define BAND_W 180
 #define BAND_BOTTOM ENR_BAND_BOTTOM
@@ -1776,7 +1776,7 @@ static bool finish_draw(ChartBuild *b){
     // smaller (the arc leaves no more room). The route's ruler, a straight
     // tape lower in the panel under the figures, its minutes each over that
     // minute's place on the route.
-    const int fsize=28,RB=62;(void)B;(void)X0;(void)X1;
+    const int fsize=28,RB=ENR_RULER_B;(void)B;(void)X0;(void)X1;
     if(!routed){
       const double R=ENR_ARC_R;
       for(int k=0;k<=ENR_ARC_DEG*8;k++){const double a=(-ENR_ARC_DEG+k*0.25)*RAD;plot(&cv,(int)js_round(W/2+R*f_sin(a)),(int)js_round(H/2-R*f_cos(a)),L_SPACE_INK);}
@@ -1812,15 +1812,16 @@ static bool finish_draw(ChartBuild *b){
     {const int hw=run_width(hour,fsize),nw=run_width(next,fsize),fy=routed?RB-6-figure(fsize,'0')->height:P-2-figure(fsize,'0')->height;
     int lo,hi,ca,cb;
     if(routed){
-      enr_span(fy,RB-6,3,&lo,&hi);
+      enr_span(fy,RB-6,7,&lo,&hi);   // (clear of the rim's diagonal lettering)
       // (Of a whole day, the hour's mark and the next's on the day's ruler.)
       const int hr=(int)q64(in->start-in->day_start,3600),i0=hr*12<count?hr*12:count-1,i1=(hr+1)*12<count?(hr+1)*12:count-1;
       ca=daily?(int)js_round(track[i0].a):ON_BAND(0)?(int)js_round(RX(0)):0;cb=daily?(int)js_round(track[i1].a):ON_BAND(60)?(int)js_round(RX(60)):W;
     }
     else{enr_arc_inside(fy,&lo,&hi);ca=0;cb=W;}
     int gx,nx;
-    // (On the ruler a wider gap: hours a few pixels apart would read as the time.)
-    if(forward||routed)enr_spread(ca,cb,hw,nw,routed?24:8,lo,hi,&gx,&nx);else enr_spread(ca,cb,nw,hw,8,lo,hi,&nx,&gx);
+    // (On the ruler as far apart as the panel lets them be, either side of
+    // their places: hours a few pixels apart would read as the time.)
+    if(forward||routed)enr_spread(ca,cb,hw,nw,routed?hi-lo+1-hw-nw:8,lo,hi,&gx,&nx);else enr_spread(ca,cb,nw,hw,8,lo,hi,&nx,&gx);
     Figures fig;if(!load_figures(src,fsize,hour,next,&fig,room,room_size))FAIL;
     FigureRun run;figure_run(hour,fsize,gx,fy,&run);figure_bind(&run,&fig,fsize);plot_figure(&cv,&run,0,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
     figure_run(next,fsize,nx,fy,&run);figure_bind(&run,&fig,fsize);plot_figure(&cv,&run,1,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);

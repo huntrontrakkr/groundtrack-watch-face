@@ -287,6 +287,9 @@ extern int enr_chart_r,enr_place_r;
 #define ENR_ARC_DEG 56
 #define ENR_ARC_X 81
 #define ENR_ARC_PANEL 86
+// The route's ruler (the Plotboard's other tape): its baseline, low in the
+// panel, its labels under it at the panel's foot.
+#define ENR_RULER_B 69
 #define ENR_BAND_BOTTOM 198
 #if ENR_ROUND
 typedef struct {uint8_t *row[ENR_H];int16_t x0[ENR_H],x1[ENR_H];} EnrFrame;

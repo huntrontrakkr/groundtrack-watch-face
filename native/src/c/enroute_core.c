@@ -1033,7 +1033,7 @@ static void set_time(Ctx *c,const Glyph *g,int n,int fx,int fy){
 }
 // The world band's tape panel (SCALE in enroute-render.js).
 #if ENR_ROUND
-#define TAPE_B 62
+#define TAPE_B ENR_RULER_B
 #define TAPE_P ENR_ARC_PANEL
 #else
 #define TAPE_B 46
