@@ -255,8 +255,19 @@ void enr_free(EnrScene *scene,void (*release)(void *));
 // are in place.
 void enr_ready(EnrScene *scene);
 
-// Draw minute 0-59 of the scene's hour into a 200x228 GColor8 frame buffer.
-// row_stride is the frame buffer's bytes per row.
+// The Round 2's frame buffer keeps each row's pixels alone, the glass's
+// (gbitmap_get_data_row_info): row y's pixel x at row[y][x], for x from
+// x0[y] to x1[y]. There the renderer is given one of these as its `frame`
+// (and row_stride is not read).
+#if ENR_ROUND
+typedef struct {uint8_t *row[ENR_H];int16_t x0[ENR_H],x1[ENR_H];} EnrFrame;
+// The glass's pixels in row y, as the Round 2's frame buffer keeps them.
+void enr_glass(int y,int *x0,int *x1);
+#endif
+
+// Draw minute 0-59 of the scene's hour into a 200x228 GColor8 frame buffer
+// (on the Round 2, an EnrFrame). row_stride is the frame buffer's bytes per
+// row.
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride);
 // The same minute, drawn over the frame as minute `from` of the same scene
 // left it: only what can have changed is drawn again. With from outside

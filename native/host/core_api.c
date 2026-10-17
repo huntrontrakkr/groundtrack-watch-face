@@ -96,8 +96,20 @@ int core_build(const char *text,size_t length,int slot){
   if(!s_scene[slot]){snprintf(s_why,sizeof s_why,"chart.c:%u",chart_failed_at);return 0;}
   return 1;
 }
-int core_render(int slot,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;enr_render(s,minute,frame,ENR_W);return 0;}
-int core_render_update(int slot,int from,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;return enr_render_update(s,from,minute,frame,ENR_W);}
+// (On the Round 2 the frame is a square of ENR_W-pixel rows, given to the
+// renderer as the watch's frame buffer is, each row cut to the glass; the
+// corners off it stay as they were.)
+#if ENR_ROUND
+static uint8_t *frame_of(uint8_t *frame){
+  static EnrFrame f;
+  for(int y=0;y<ENR_H;y++){int x0,x1;enr_glass(y,&x0,&x1);f.row[y]=frame+y*ENR_W;f.x0[y]=(int16_t)x0;f.x1[y]=(int16_t)x1;}
+  return (uint8_t *)&f;
+}
+#else
+#define frame_of(frame) (frame)
+#endif
+int core_render(int slot,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;enr_render(s,minute,frame_of(frame),ENR_W);return 0;}
+int core_render_update(int slot,int from,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;return enr_render_update(s,from,minute,frame_of(frame),ENR_W);}
 // The scene's layout, in the order src/core.js reads it.
 int core_layout(int32_t *out,int max){
   const int32_t v[]={

@@ -55,6 +55,9 @@ FACES = {
 # data are capped at 64 KB (PebbleOS #1873).
 MAX_RESOURCES = 256 * 1024
 MAX_BINARY = 64 * 1024
+# The watches each face is built for: the Time 2, and the Round 2 (its chart builder and renderer code blobs in its
+# resources: native/src/c/blob.h)
+PLATFORMS = ["emery", "gabbro"]
 CAPABILITIES = {"configurable", "location"}
 
 
@@ -74,21 +77,23 @@ def validate_pbw(path, version, face):
         if archive.testzip():
             raise ValueError("PBW archive is corrupt.")
         names = archive.namelist()
-        for name in ["appinfo.json", "pebble-js-app.js", "emery/pebble-app.bin", "emery/app_resources.pbpack", "emery/manifest.json"]:
+        for name in ["appinfo.json", "pebble-js-app.js"] + [f"{p}/{f}" for p in PLATFORMS
+                                                              for f in ("pebble-app.bin", "app_resources.pbpack", "manifest.json")]:
             if name not in names:
                 raise ValueError("PBW is missing " + name)
         info = json.loads(archive.read("appinfo.json"))
         if info.get("uuid", "").lower() != face.uuid or info.get("versionLabel") != version:
             raise ValueError("PBW UUID/version does not match this release of " + face.title + ".")
-        if info.get("targetPlatforms") != ["emery"] or not info.get("watchapp", {}).get("watchface"):
-            raise ValueError("This release must be an Emery-only watchface.")
+        if info.get("targetPlatforms") != PLATFORMS or not info.get("watchapp", {}).get("watchface"):
+            raise ValueError("This release must be a watchface for the Time 2 and the Round 2 (" + ", ".join(PLATFORMS) + ").")
         missing = CAPABILITIES - set(info.get("capabilities", []))
         if missing:
             raise ValueError("PBW lacks capabilities: " + ", ".join(sorted(missing)))
-        if archive.getinfo("emery/app_resources.pbpack").file_size > MAX_RESOURCES:
-            raise ValueError("Resources exceed the store's 256 KB.")
-        if archive.getinfo("emery/pebble-app.bin").file_size > MAX_BINARY:
-            raise ValueError("The app binary exceeds 64 KB.")
+        for p in PLATFORMS:
+            if archive.getinfo(p + "/app_resources.pbpack").file_size > MAX_RESOURCES:
+                raise ValueError(p + ": resources exceed the store's 256 KB.")
+            if archive.getinfo(p + "/pebble-app.bin").file_size > MAX_BINARY:
+                raise ValueError(p + ": the app binary exceeds 64 KB.")
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 

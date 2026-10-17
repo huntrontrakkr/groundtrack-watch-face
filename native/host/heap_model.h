@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 typedef struct {uint32_t at,size;uint8_t used;} HeapBlock;
 #define HEAP_BLOCKS 1024
@@ -36,11 +37,13 @@ static void *hm_malloc(size_t n){
   }
   HeapHeader *h=malloc(sizeof(HeapHeader)+n);if(!h)return NULL;
   h->n=n;h->at=at;hm_live+=need;if(hm_live>hm_peak)hm_peak=hm_live;
+  if(getenv("HEAP_TRACE"))fprintf(stderr,"+%zu %zu\n",n,(size_t)hm_live);   // (each block's size and what is then held)
   return h+1;
 }
 static void hm_release(void *p){
   if(!p)return;
   HeapHeader *h=(HeapHeader *)p-1;hm_live-=(uint32_t)((h->n+7)&~(size_t)7)+8;
+  if(getenv("HEAP_TRACE"))fprintf(stderr,"-%zu %zu\n",h->n,(size_t)hm_live);
   if(hm_size){
     int i=0;while(i<hm_n&&hm_blocks[i].at!=h->at)i++;
     if(i==hm_n||!hm_blocks[i].used)abort();

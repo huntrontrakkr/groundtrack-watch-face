@@ -26,26 +26,32 @@ test('each face asks for the settings page and the phone\'s location, with its o
   assert.notEqual(a.uuid,c.uuid);assert.deepEqual([a.displayName,c.displayName],['Groundtrack','Groundtrack Fuller']);
   assert.deepEqual(a.messageKeys,c.messageKeys);
   // Groundtrack reads the map; Fuller the faces' grids and the coastline
-  // instead; both the figures, the tables and the chart lettering.
-  assert.deepEqual(a.resources.media.map(m=>m.file),['map.pack','figures.bin','tables.bin','font.bin']);
-  assert.deepEqual(c.resources.media.map(m=>m.name),['FULLER_GRIDS','LAND_BITS','FIGURES','TABLES','FONT']);
+  // instead; both the figures, the tables and the chart lettering; and on
+  // the Round 2 each its own code blobs (native/src/c/blob.h).
+  assert.deepEqual(a.resources.media.map(m=>m.file),['map.pack','figures.bin','tables.bin','font.bin','builder_enroute.bin','renderer_enroute.bin']);
+  assert.deepEqual(c.resources.media.map(m=>m.name),['FULLER_GRIDS','LAND_BITS','FIGURES','TABLES','FONT','BUILDER_CODE','RENDERER_CODE']);
+  for(const p of [a,c]){
+    assert.deepEqual(p.targetPlatforms,['emery','gabbro']);
+    for(const m of p.resources.media)assert.deepEqual(m.targetPlatforms,/_CODE$/.test(m.name)?['gabbro']:undefined,m.name);
+  }
 });
 
 test('a package is checked for identity, platform, capabilities and the store\'s limits',()=>{
   python(`
 import io, json, zipfile, tempfile, os
-def pbw(info={}, resources=1000, binary=1000):
-    base={'uuid':release.FACES['enroute'].uuid,'versionLabel':'1.2.3','targetPlatforms':['emery'],'watchapp':{'watchface':True},'capabilities':['configurable','location']}
+def pbw(info={}, resources=1000, binary=1000, round_resources=1000, round_binary=1000):
+    base={'uuid':release.FACES['enroute'].uuid,'versionLabel':'1.2.3','targetPlatforms':['emery','gabbro'],'watchapp':{'watchface':True},'capabilities':['configurable','location']}
     base.update(info)
     path=tempfile.mktemp(suffix='.pbw')
     with zipfile.ZipFile(path,'w') as z:
         z.writestr('appinfo.json',json.dumps(base));z.writestr('pebble-js-app.js','')
         z.writestr('emery/pebble-app.bin',b'0'*binary);z.writestr('emery/app_resources.pbpack',b'0'*resources);z.writestr('emery/manifest.json','{}')
+        z.writestr('gabbro/pebble-app.bin',b'0'*round_binary);z.writestr('gabbro/app_resources.pbpack',b'0'*round_resources);z.writestr('gabbro/manifest.json','{}')
     return path
 release.validate_pbw(pbw(),'1.2.3',release.FACES['enroute'])
 for bad in [dict(info={'uuid':'9c30165f-5852-4e13-8806-9809ab3d4fe3'}),dict(info={'uuid':release.FACES['fuller'].uuid}),dict(info={'versionLabel':'1.2.4'}),
-            dict(info={'targetPlatforms':['emery','basalt']}),dict(info={'capabilities':['configurable']}),
-            dict(resources=256*1024+1),dict(binary=64*1024+1)]:
+            dict(info={'targetPlatforms':['emery','basalt']}),dict(info={'targetPlatforms':['emery']}),dict(info={'capabilities':['configurable']}),
+            dict(resources=256*1024+1),dict(binary=64*1024+1),dict(round_resources=256*1024+1),dict(round_binary=64*1024+1)]:
     try: release.validate_pbw(pbw(**bad),'1.2.3',release.FACES['enroute'])
     except ValueError: pass
     else: raise AssertionError('Accepted '+repr(bad))`);

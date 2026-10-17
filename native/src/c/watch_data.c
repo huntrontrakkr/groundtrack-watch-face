@@ -269,7 +269,12 @@ static ChartBuild *assemble(time_t now,const WatchSettings *s,Assembly *as){
     .segment=segment_for,.segment_context=d_,.satellite=sat_for,.satellite_context=d_,.extra=extra_for,
     .pass_line=pass_for,.pass_context=d_,.alloc=malloc,.release=free,.resize=realloc,.kept_read=persist_read_data,.kept_write=kept_write};
   #undef days
+  #if ENR_ROUND
+  ChartBuild *gt_chart_begin(const ChartInput *,const ChartSources *);   // (main.c: the builder's code blob)
+  ChartBuild *build=gt_chart_begin(&in,&src);
+  #else
   ChartBuild *build=chart_begin(&in,&src);
+  #endif
   if(!build){app_note("chart",0);local_chart_done();}
   return build;
   #undef in

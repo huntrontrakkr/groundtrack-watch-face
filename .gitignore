@@ -6,6 +6,9 @@ test-results/
 
 # Native builds
 native/build/
+# The Round 2's code blobs (tools/build-blobs.py), built by the watch build
+native/resources/builder_*.bin
+native/resources/renderer_*.bin
 native/.lock-waf*
 native/host/harness
 native/host/harness-float

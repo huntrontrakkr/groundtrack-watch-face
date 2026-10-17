@@ -25,6 +25,66 @@
 // dictionary's own framing.
 #define INBOX_SIZE 2100
 
+#if ENR_ROUND
+// The Round 2: the chart builder and the minute renderer are code blobs
+// (blob.h), loaded while each is wanted: the builder for a build (the
+// renderer let go first), the renderer the rest of the time. The core's
+// calls below go through them; what the renderer is told (its status and
+// the battery) is kept here for it, and told again when it is loaded.
+#include "blob.h"
+static const GtBuilderApi *s_builder;static uint8_t *s_builder_mem;
+static const GtRendererApi *s_renderer;static uint8_t *s_renderer_mem;
+static const uint8_t *s_font;static char s_enr_status[16];static int s_enr_power[2]={100,0};
+static unsigned s_chart_failed;
+static const void *blob_load(uint32_t id,uint8_t **mem){
+  const ResHandle h=resource_get_handle(id);GtBlobHeader hd;*mem=NULL;
+  if(resource_load_byte_range(h,0,(uint8_t *)&hd,sizeof hd)!=sizeof hd||hd.magic!=GT_BLOB_MAGIC)return NULL;
+  const uint32_t n=hd.image+hd.bss;
+  *mem=malloc(n+4);if(!*mem)return NULL;                 // (the heap gives 4-byte alignment; the code was linked for 8)
+  uint8_t *code=(uint8_t *)(((uintptr_t)*mem+7)&~(uintptr_t)7);
+  if(resource_load_byte_range(h,sizeof hd,code,hd.image)!=hd.image)goto fail;
+  memset(code+hd.image,0,hd.bss);
+  uint16_t at[32];                                       // (the relocations, a few at a time: the stack is small)
+  for(uint32_t i=0;i<hd.relocs;i+=32){
+    const uint32_t k=hd.relocs-i<32?hd.relocs-i:32;
+    if(resource_load_byte_range(h,sizeof hd+hd.image+2*i,(uint8_t *)at,2*k)!=2*k)goto fail;
+    for(uint32_t j=0;j<k;j++)((uint32_t *)code)[at[j]]+=(uint32_t)(uintptr_t)code;
+  }
+  memory_cache_flush(code,n);
+  {const uint32_t *api=(const uint32_t *)(code+hd.api);if(api[0]==GT_BLOB_MAGIC&&api[1]==GT_BLOB_LAYOUT)return api;}
+fail:
+  free(*mem);*mem=NULL;return NULL;
+}
+static bool renderer_load(void){
+  if(s_renderer)return true;
+  if(!(s_renderer=blob_load(RESOURCE_ID_RENDERER_CODE,&s_renderer_mem)))return false;
+  s_renderer->init(malloc,free,s_font);s_renderer->status(s_enr_status);s_renderer->power(s_enr_power[0],s_enr_power[1]);
+  return true;
+}
+static void renderer_let_go(void){free(s_renderer_mem);s_renderer_mem=NULL;s_renderer=NULL;}
+static void builder_let_go(void){free(s_builder_mem);s_builder_mem=NULL;s_builder=NULL;}
+ChartBuild *gt_chart_begin(const ChartInput *in,const ChartSources *src){
+  renderer_let_go();
+  if(!s_builder&&(s_builder=blob_load(RESOURCE_ID_BUILDER_CODE,&s_builder_mem)))s_builder->init(malloc,free,s_font);
+  if(!s_builder){s_chart_failed=1;return NULL;}
+  ChartBuild *b=s_builder->begin(in,src);
+  if(!b){s_chart_failed=*s_builder->failed_at;builder_let_go();}
+  return b;
+}
+static int gt_chart_step(ChartBuild *b){const int r=s_builder->step(b);if(r<0)s_chart_failed=*s_builder->failed_at;return r;}
+static EnrScene *gt_chart_finish(ChartBuild *b){EnrScene *s=s_builder->finish(b);s_chart_failed=*s_builder->failed_at;builder_let_go();return s;}
+static void gt_chart_abort(ChartBuild *b){s_builder->abort(b);builder_let_go();}
+#define enr_render_update(...) (renderer_load()?s_renderer->render_update(__VA_ARGS__):-1)
+#define enr_free(s,r) do{if(renderer_load())s_renderer->free(s,r);}while(0)
+#define enr_status(t) do{strncpy(s_enr_status,(t),sizeof s_enr_status-1);if(s_renderer)s_renderer->status(s_enr_status);}while(0)
+#define enr_power(p,st) do{s_enr_power[0]=(p);s_enr_power[1]=(st);if(s_renderer)s_renderer->power((p),(st));}while(0)
+#define enr_font_load(f) (s_font=(f))
+#define chart_step(b) gt_chart_step(b)
+#define chart_finish(b) gt_chart_finish(b)
+#define chart_abort(b) gt_chart_abort(b)
+#define chart_failed_at s_chart_failed
+#endif
+
 typedef struct {EnrScene *scene;} Chart;
 
 static Window *s_window;
@@ -193,13 +253,22 @@ static void update(Layer *layer,GContext *ctx){
   }
   GBitmap *frame=graphics_capture_frame_buffer(ctx);
   if(!frame)return;
-  // emery is rectangular: every row is a full row of GColor8 bytes.
+  // The Time 2's is rectangular: every row is a full row of GColor8 bytes.
+  // The Round 2's keeps each row's pixels on the glass alone: the renderer
+  // is told where each row lies and how far it runs.
+#if ENR_ROUND
+  static EnrFrame rows;
+  for(int y=0;y<ENR_H;y++){const GBitmapDataRowInfo ri=gbitmap_get_data_row_info(frame,y);rows.row[y]=ri.data;rows.x0[y]=ri.min_x;rows.x1[y]=ri.max_x;}
+  uint8_t *const pixels=(uint8_t *)&rows;const int stride=0;
+#else
+  uint8_t *const pixels=gbitmap_get_data(frame);const int stride=gbitmap_get_bytes_per_row(frame);
+#endif
   const int minute=(int)((now-s_now.scene->hour_start)/60);
   const bool partial=s_tick_redraw&&s_drawn_serial==s_chart_serial&&s_drawn_minute>=0&&s_drawn_minute<=minute;
-  int drawn=enr_render_update(s_now.scene,partial?s_drawn_minute:-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
+  int drawn=enr_render_update(s_now.scene,partial?s_drawn_minute:-1,minute,pixels,stride);
   // (Drawing over the last minute takes more memory than drawing the minute
   // whole: without it, the whole.)
-  if(drawn<0&&partial)drawn=enr_render_update(s_now.scene,-1,minute,gbitmap_get_data(frame),gbitmap_get_bytes_per_row(frame));
+  if(drawn<0&&partial)drawn=enr_render_update(s_now.scene,-1,minute,pixels,stride);
   graphics_release_frame_buffer(ctx,frame);
   // Without the memory to draw, the next tick tries the whole minute again.
   if(drawn<0){app_note("draw",0);s_drawn_minute=-1;s_tick_redraw=false;return;}

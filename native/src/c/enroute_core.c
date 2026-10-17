@@ -29,7 +29,7 @@ static int sign(enr_real v){return (v>0)-(v<0);}
 typedef struct {
   const EnrScene *s;
   const EnrMinute *m;
-  uint8_t *frame;
+  uint8_t *frame;                // (on the Round 2, an EnrFrame: PIXEL)
   int stride;
   // While the base is drawn, rows y-1, y and y+1 decoded.
   const uint8_t *rows[3];
@@ -297,6 +297,19 @@ static uint8_t late_ink(const EnrScene *s,int ground,int x,int y,int z){
   if(home_mark(s,x,y))return s->zoned[ENR_MARK][z];
   return ground==G_SPACE?s->space_ink:s->zoned[ENR_INK][z];
 }
+// A pixel of the frame, and whether the glass shows it (on the Time 2 every
+// pixel of the screen; on the Round 2 a row's from x0 to x1).
+#if ENR_ROUND
+#define PIXEL(c,x,y) (((const EnrFrame *)(c)->frame)->row[y][x])
+#define ON_GLASS(c,x,y) ((x)>=((const EnrFrame *)(c)->frame)->x0[y]&&(x)<=((const EnrFrame *)(c)->frame)->x1[y])
+void enr_glass(int y,int *x0,int *x1){
+  const int d=2*y+1-H;int half=(int)f_floor(f_sqrt((enr_real)(W*W-d*d))/2+(enr_real)0.5);if(half>W/2)half=W/2;
+  *x0=W/2-half;*x1=W/2+half-1;
+}
+#else
+#define PIXEL(c,x,y) ((c)->frame[(y)*(c)->stride+(x)])
+#define ON_GLASS(c,x,y) 1
+#endif
 // (The sliding band is the world round: its columns wrap.)
 static int sliding_x(const EnrScene *s,int x){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?((x%W)+W)%W:x;}
 // (Only the band's rows come round: what is drawn in the panel above them,
@@ -307,7 +320,8 @@ static void plot(Ctx *c,int x,int y,uint8_t color){
   x=PLOT_X(c,x,y);
   if(x<0||y<0||x>=W||y>=H)return;
   if(c->measure){touch(c,x,y);return;}
-  c->frame[y*c->stride+x]=color;
+  if(!ON_GLASS(c,x,y))return;
+  PIXEL(c,x,y)=color;
 }
 // A knockout: plain ground, without night's screen.
 static void clear(Ctx *c,int x,int y){
@@ -423,7 +437,8 @@ static int neighbours_again(Ctx *c,uint8_t *const row[3],int x,int y,bool anchor
   for(int k=0;k<4;k++){
     const int nx=x+NX[k],ny=y+NY[k];if(nx<0||nx>=W||ny<0||ny>=H)continue;
     const uint8_t cls=row[ny-y+1][nx];if((cls&15)==G_SPACE)continue;
-    drawn++;c->frame[ny*c->stride+nx]=base_pixel(c,nx,ny,cls,2,anchored);
+    if(!ON_GLASS(c,nx,ny))continue;
+    drawn++;PIXEL(c,nx,ny)=base_pixel(c,nx,ny,cls,2,anchored);
   }
   return drawn;
 }
@@ -465,7 +480,13 @@ static __attribute__((noinline)) int draw_base(Ctx *c,const uint64_t *mask,const
         known_row[b]=(uint8_t)v;
       }
     }
-    for(int x=0;x<W;x++){
+    // (Across the glass alone: on the Round 2 the corners are not kept.)
+    #if ENR_ROUND
+    const int gx0=((const EnrFrame *)c->frame)->x0[y],gx1=((const EnrFrame *)c->frame)->x1[y];
+    #else
+    const int gx0=0,gx1=W-1;
+    #endif
+    for(int x=gx0;x<=gx1;x++){
       const int b=x>>4;
       // The masks are in 4-pixel blocks (8 on the Round 2): a moving part's box costs less.
       if(mask&&!(mask[y]>>(x>>MS)&1)){
@@ -482,12 +503,12 @@ static __attribute__((noinline)) int draw_base(Ctx *c,const uint64_t *mask,const
         else if((cls>>4)<=L_WATERLINE)matters|=1;
         if(terminator)matters|=12;
         if(!((night_key(&old,x,y)^night_key(c,x,y))&matters))continue;
-        drawn++;c->frame[y*c->stride+x]=base_pixel(c,x,y,here[x],2,anchored);
+        drawn++;PIXEL(c,x,y)=base_pixel(c,x,y,here[x],2,anchored);
         if(terminator)drawn+=neighbours_again(c,row,x,y,anchored);
         continue;
       }
       drawn++;
-      c->frame[y*c->stride+x]=base_pixel(c,x,y,here[x],known_row[b],anchored);
+      PIXEL(c,x,y)=base_pixel(c,x,y,here[x],known_row[b],anchored);
       // A block drawn whole beside one change-tested: its changed pixels'
       // neighbours there read them too.
       if(terminator&&nmask&&(here[x]&15)!=G_SPACE&&night_key(&old,x,y)!=night_key(c,x,y))drawn+=neighbours_again(c,row,x,y,anchored);
@@ -1062,7 +1083,7 @@ _Static_assert(SLIDE_TOP==TAPE_P,"the band is turned from under the tape's panel
 #define SLIDE_BOTTOM (H-10)
 static int slide_offset(const EnrScene *s,const EnrMinute *m){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?(((int)js_round(m->mx)-W/2)%W+W)%W:0;}
 static void slide_rows(uint8_t *frame,int stride,int off){
-  if(!FACE_WORLD||!off)return;
+  if(!FACE_WORLD||ENR_ROUND||!off)return;    // (the Round 2 has no sliding world: its rows are cut to the glass)
   uint8_t *const turned=work->turned;
   for(int y=SLIDE_TOP;y<=SLIDE_BOTTOM;y++){
     uint8_t *row=frame+y*stride;

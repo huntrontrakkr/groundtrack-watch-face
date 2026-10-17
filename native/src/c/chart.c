@@ -344,6 +344,17 @@ typedef struct RunChunk {struct RunChunk *next;uint16_t used;uint8_t data[RUN_CH
 // dropped: chunks let go from the head, their rows read for the last time.
 typedef struct {uint8_t *arena;RunChunk *head,*tail;void *(*alloc)(size_t);uint16_t row_offset[H+1];unsigned n,cap,dropped;bool failed;} RunSink;
 static int row_runs(const uint8_t *row,uint8_t *out);
+#if ENR_ROUND
+// The Round 2's chart is a circle of CHART_R pixels about the screen's
+// middle (its rim and the corners are the margins'): the first pixel of row
+// y within it (and a pixel more), or W/2 for a row it does not reach.
+#define CHART_R 114
+static int circle_x0(int y){
+  const int d=2*y+1-H,r2=4*CHART_R*CHART_R-d*d;
+  int half=r2>0?(int)f_floor(f_sqrt((double)r2)/2)+2:0;if(half>W/2)half=W/2;
+  return W/2-half;
+}
+#endif
 // Runs appended to the sink: the arena first, then chunks.
 static void sink_put(RunSink *k,const uint8_t *runs,int n){
   // (The rows' offsets are 16 bits.)
@@ -361,7 +372,10 @@ static void sink_put(RunSink *k,const uint8_t *runs,int n){
   }
   k->n+=(unsigned)n;
 }
-static void sink_row(RunSink *k,int y,const uint8_t *row){
+static void sink_row(RunSink *k,int y,uint8_t *row){
+  #if ENR_ROUND
+  {const int x0=circle_x0(y);for(int x=0;x<x0;x++)row[x]=row[W-1-x]=G_SPACE;}   // (off the chart's circle: space)
+  #endif
   uint8_t runs[2*W];const int n=row_runs(row,runs);
   sink_put(k,runs,n);k->row_offset[y+1]=(uint16_t)k->n;
 }
@@ -577,14 +591,50 @@ static int ground_rows_end(Ground *g){
 // The ground stays in its row runs (the sink), read where the drawing
 // asks what lies under a pixel, and merged with the plane at the end.
 #define PLANE_BANDS 4
+#define ROWS_TABLE (H*(2*sizeof(enr_real)+2*sizeof(int32_t)))
+#if ENR_ROUND
+// On the Round 2 only the chart circle's pixels: row y from x0[y] to W-1-x0[y]
+// (all the glass shows, and a pixel more), the rows' bytes in bands of
+// about a quarter each, row y at byte off[y] of its band; the last band
+// big enough to become the rows' table. (Drawing off the circle is lost.)
+typedef struct {uint8_t *band[PLANE_BANDS];uint8_t x0[H];uint16_t off[H];int16_t end[PLANE_BANDS];uint16_t size[PLANE_BANDS];} Plane;
+static void plane_layout(Plane *p){
+  unsigned total=0;
+  for(int y=0;y<H;y++){
+    const int half=W/2-circle_x0(y);p->x0[y]=(uint8_t)(W/2-half);total+=(unsigned)half;
+  }
+  unsigned at=0,start=0;int k=0;
+  for(int y=0;y<H;y++){
+    if(k<PLANE_BANDS-1&&at>=total*(unsigned)(k+1)/PLANE_BANDS){p->size[k]=(uint16_t)(at-start);p->end[k]=(int16_t)y;start=at;k++;}
+    p->off[y]=(uint16_t)(at-start);at+=(unsigned)(W/2-p->x0[y]);
+  }
+  p->size[k]=(uint16_t)(at-start);p->end[k]=H;
+  if(p->size[PLANE_BANDS-1]<ROWS_TABLE)p->size[PLANE_BANDS-1]=(uint16_t)ROWS_TABLE;
+}
+static int band_of(const Plane *p,int y){int k=0;while(y>=p->end[k])k++;return k;}
+#define BAND_SIZE(p,k) ((p)->size[k])
+#define BAND_END(p,k) ((p)->end[k])
+static uint8_t *plane_byte(const Plane *p,int x,int y,int *half){
+  if((unsigned)y>=H||x<p->x0[y]||x>=W-p->x0[y])return NULL;
+  const int i=x-p->x0[y];*half=i&1;return &p->band[band_of(p,y)][p->off[y]+(i>>1)];
+}
+static int layer_at(const Plane *p,int x,int y){int h;const uint8_t *q=plane_byte(p,x,y,&h);return q?(*q>>(h*4))&15:0;}
+static void layer_set(const Plane *p,int x,int y,int layer){
+  int h;uint8_t *q=plane_byte(p,x,y,&h);if(!q)return;
+  *q=h?(uint8_t)((*q&0x0F)|layer<<4):(uint8_t)((*q&0xF0)|layer);
+}
+#else
 #define BAND_ROWS (H/PLANE_BANDS)
 #define BAND_BYTES ((W/2)*BAND_ROWS)
+#define BAND_SIZE(p,k) BAND_BYTES
+#define BAND_END(p,k) (((k)+1)*BAND_ROWS)
 typedef struct {uint8_t *band[PLANE_BANDS];} Plane;
 static int layer_at(const Plane *p,int x,int y){return (p->band[y/BAND_ROWS][(y%BAND_ROWS)*(W/2)+(x>>1)]>>((x&1)*4))&15;}
 static void layer_set(const Plane *p,int x,int y,int layer){
   uint8_t *q=&p->band[y/BAND_ROWS][(y%BAND_ROWS)*(W/2)+(x>>1)];
   *q=(x&1)?(uint8_t)((*q&0x0F)|layer<<4):(uint8_t)((*q&0xF0)|layer);
 }
+#endif
 // A byte of the ground's runs: the sink's arena, then its chunks (each
 // filled whole, in order).
 static uint8_t sink_byte(const RunSink *k,unsigned p){
@@ -1090,6 +1140,7 @@ static int fuller_ground_step(ChartBuild *b,int budget){
 ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   ChartBuild *b=src_->alloc(sizeof(ChartBuild));if(!b)return NULL;
   memset(b,0,sizeof *b);b->in=*in_;b->src=*src_;
+  if(ENR_ROUND&&b->in.tape==2)b->in.tape=1;    // (the Round 2's rows are cut to the glass: no sliding world, the sliding tape)
   const unsigned arena=RUN_ARENA;
   b->sink.arena=src_->alloc(arena);if(!b->sink.arena){src_->release(b);return NULL;}
   b->sink.cap=arena;
@@ -1429,7 +1480,10 @@ static bool finish_draw(ChartBuild *b){
   const size_t track_bytes=(sizeof(TrackPoint)*(size_t)count+7)&~(size_t)7,ARENA=track_bytes+sizeof(Draw)+FIGURE_ROOM;
   if(!(b->lists=alloc(ARENA)))FAIL;
   Notes *const notes=&b->notes;
-  for(int k=0;k<PLANE_BANDS;k++){if(!(b->plane.band[k]=alloc(BAND_BYTES)))FAIL;memset(b->plane.band[k],0,BAND_BYTES);}
+  #if ENR_ROUND
+  plane_layout(&b->plane);
+  #endif
+  for(int k=0;k<PLANE_BANDS;k++){if(!(b->plane.band[k]=alloc(BAND_SIZE(&b->plane,k))))FAIL;memset(b->plane.band[k],0,BAND_SIZE(&b->plane,k));}
   const Plane *const classes=&b->plane;
   // The track again, on the screen.
   TrackPoint *const track=(TrackPoint *)b->lists;
@@ -1843,7 +1897,7 @@ static bool finish_draw(ChartBuild *b){
     memcpy(out->run_piece[piece]+used,out_row,r);out->row_offset[y]=(uint16_t)(piece*ENR_RUN_PIECE+used);used+=r;
     sink_drop(&b->sink,b->sink.row_offset[y+1],release);
     // (The last band stays: it becomes the rows' lighting table.)
-    if((y+1)%BAND_ROWS==0&&y+1<H){release(b->plane.band[y/BAND_ROWS]);b->plane.band[y/BAND_ROWS]=NULL;}
+    for(int k=0;k<PLANE_BANDS-1;k++)if(y+1==BAND_END(&b->plane,k)){release(b->plane.band[k]);b->plane.band[k]=NULL;}
   }
   {const unsigned end=piece*ENR_RUN_PIECE+used;out->row_offset[H]=(uint16_t)(end>65535?65535:end);}
   // The last piece is cut to what it holds, where the heap can do that.
@@ -1855,7 +1909,9 @@ static bool finish_draw(ChartBuild *b){
   // is room for one.)
   if(RUN_ARENA>=60*sizeof(EnrMinute)+1024&&(!FACE_CHART||rolled)){EnrMinute *fit=alloc(60*sizeof(EnrMinute));if(fit){release(out->minutes);out->minutes=fit;}}
   memset(out->minutes,0,60*sizeof(EnrMinute));
-  _Static_assert(BAND_BYTES>=H*(2*sizeof(enr_real)+2*sizeof(int32_t)),"a band of the plane holds the rows' table");
+  #if !ENR_ROUND
+  _Static_assert(BAND_BYTES>=ROWS_TABLE,"a band of the plane holds the rows' table");
+  #endif
   if(FACE_CHART&&!rolled){
     out->rows_block=b->plane.band[PLANE_BANDS-1];b->plane.band[PLANE_BANDS-1]=NULL;
     out->row_cos=out->rows_block;out->row_sin=out->row_cos+H;out->row_q=(int32_t (*)[2])(out->row_sin+H);
