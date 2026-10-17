@@ -25,9 +25,9 @@
 // dictionary's own framing.
 #define INBOX_SIZE 2100
 
-#if ENR_ROUND
-// The Round 2: the chart builder and the minute renderer are code blobs
-// (blob.h), loaded while each is wanted: the builder for a build (the
+#if GT_BLOBS
+// The chart builder and the minute renderer are code blobs (blob.h; GT_BLOBS
+// is the watch app's build, not the host's), loaded while each is wanted: the builder for a build (the
 // renderer let go first), the renderer the rest of the time. The core's
 // calls below go through them; what the renderer is told (its status and
 // the battery) is kept here for it, and told again when it is loaded.

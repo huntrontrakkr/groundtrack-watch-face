@@ -26,13 +26,14 @@ test('each face asks for the settings page and the phone\'s location, with its o
   assert.notEqual(a.uuid,c.uuid);assert.deepEqual([a.displayName,c.displayName],['Groundtrack','Groundtrack Fuller']);
   assert.deepEqual(a.messageKeys,c.messageKeys);
   // Groundtrack reads the map; Fuller the faces' grids and the coastline
-  // instead; both the figures, the tables and the chart lettering; and on
-  // the Round 2 each its own code blobs (native/src/c/blob.h).
+  // instead; both the figures, the tables and the chart lettering; and
+  // each its code blobs (native/src/c/blob.h), a file for each platform
+  // (builder_enroute~emery.bin, ~gabbro: the SDK picks by the tag).
   assert.deepEqual(a.resources.media.map(m=>m.file),['map.pack','figures.bin','tables.bin','font.bin','builder_enroute.bin','renderer_enroute.bin']);
   assert.deepEqual(c.resources.media.map(m=>m.name),['FULLER_GRIDS','LAND_BITS','FIGURES','TABLES','FONT','BUILDER_CODE','RENDERER_CODE']);
   for(const p of [a,c]){
     assert.deepEqual(p.targetPlatforms,['emery','gabbro']);
-    for(const m of p.resources.media)assert.deepEqual(m.targetPlatforms,/_CODE$/.test(m.name)?['gabbro']:undefined,m.name);
+    for(const m of p.resources.media)assert.equal(m.targetPlatforms,undefined,m.name);
   }
 });
 

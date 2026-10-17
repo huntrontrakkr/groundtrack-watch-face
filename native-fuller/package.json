@@ -64,18 +64,12 @@
         {
           "type": "raw",
           "name": "BUILDER_CODE",
-          "file": "builder_fuller.bin",
-          "targetPlatforms": [
-            "gabbro"
-          ]
+          "file": "builder_fuller.bin"
         },
         {
           "type": "raw",
           "name": "RENDERER_CODE",
-          "file": "renderer_fuller.bin",
-          "targetPlatforms": [
-            "gabbro"
-          ]
+          "file": "renderer_fuller.bin"
         }
       ]
     }

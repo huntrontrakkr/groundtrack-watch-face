@@ -1,10 +1,11 @@
-"""Build the Round 2's code blobs (see native/src/c/blob.h): the chart builder and the minute renderer, each its
-own resource, which the Round 2's app loads only while it is wanted.
+"""Build a watch's code blobs (see native/src/c/blob.h): the chart builder and the minute renderer, each its own
+resource, which the app loads only while it is wanted.
 
-    python3 tools/build-blobs.py --face enroute|fuller --out DIR [--cc PATH-TO-arm-none-eabi-gcc]
+    python3 tools/build-blobs.py --face enroute|fuller --platform emery|gabbro --out DIR [--cc PATH-TO-arm-none-eabi-gcc]
 
-writes DIR/builder_FACE.bin and DIR/renderer_FACE.bin (the two apps share their resources). Each is compiled with the Pebble SDK's own compiler and
-flags (the watch app's: native/wscript), for the Round 2 (ENR_ROUND) and the face, its entry table first
+writes DIR/builder_FACE~PLATFORM.bin and DIR/renderer_FACE~PLATFORM.bin (the two apps share their resources; the SDK
+gives each platform its own, by the tag). Each is compiled with the Pebble SDK's own compiler and flags (the watch
+app's: native/wscript), for the platform's screen (on the Round 2, ENR_ROUND) and the face, its entry table first
 (native/blob/*_blob.c) and the C library's few functions it uses (native/blob/blob_libc.c), linked at address 0
 with libgcc's arithmetic (native/blob/blob.ld), and packed as
 
@@ -34,7 +35,7 @@ SDK = Path(os.environ.get("PEBBLE_SDK", Path.home() / ".local/share/pebble-sdk/S
 # fewer functions inlined and loops left as written (each stage of a build a frame of its own: the stack is 2 KB)
 CFLAGS = ["-mcpu=cortex-m3", "-mthumb", "-Os", "-std=gnu11", "-ffunction-sections", "-fdata-sections",
           "-ffp-contract=off", "-fno-common", "-Wall", "-Wno-unused-parameter", "-Wno-unused-function",
-          "-fno-tree-loop-distribute-patterns", "-flto", "-DPBL_SDK_3", "-DENR_ROUND=1", f"-I{SRC}",
+          "-fno-tree-loop-distribute-patterns", "-flto", "-DPBL_SDK_3", f"-I{SRC}",
           "-fno-inline-functions-called-once", "-fno-early-inlining", "-fno-partial-inlining", "-fno-tree-tail-merge",
           "-fno-tree-pre", "-fno-reorder-blocks", "-fno-move-loop-invariants", "-fno-tree-dominator-opts",
           "-fno-tree-loop-im", "-fno-tree-scev-cprop", "-fmerge-all-constants"]
@@ -58,6 +59,7 @@ def run(*args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--face", required=True, choices=["enroute", "fuller"])
+    ap.add_argument("--platform", required=True, choices=["emery", "gabbro"])
     ap.add_argument("--out", required=True)
     ap.add_argument("--cc", help="the SDK's arm-none-eabi-gcc")
     a = ap.parse_args()
@@ -68,10 +70,11 @@ def main():
     if not cc:
         sys.exit("build-blobs: no arm-none-eabi-gcc (install the Pebble SDK, or pass --cc)")
     tc = Path(cc).resolve().parent
-    work = ROOT / "native" / "build" / "blobs" / a.face
+    work = ROOT / "native" / "build" / "blobs" / a.platform / a.face
+    defines = ["-DFACE_" + a.face.upper()] + (["-DENR_ROUND=1"] if a.platform == "gabbro" else [])
     for name, table in BLOBS.items():
-        build(tc, work / name, f"{name}_{a.face}", [BLOB / table] + [SRC / f for f in CORE] + [BLOB / "blob_libc.c"],
-              ["-DFACE_" + a.face.upper()], Path(a.out))
+        build(tc, work / name, f"{name}_{a.face}~{a.platform}", [BLOB / table] + [SRC / f for f in CORE] +
+              [BLOB / "blob_libc.c"], defines, Path(a.out))
 
 
 def build(tc, work, name, sources, defines, out_dir):

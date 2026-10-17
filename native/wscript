@@ -16,15 +16,15 @@ def configure(ctx):
 
 def build(ctx):
     ctx.load('pebble_sdk')
-    # The Round 2's code blobs (native/src/c/blob.h), with the compiler the SDK
+    # Each watch's code blobs (native/src/c/blob.h), with the compiler the SDK
     # builds the app with: resources, packed with the rest.
     import os, shutil, subprocess, sys
-    if 'gabbro' in ctx.env.TARGET_PLATFORMS:
-        cc = ctx.all_envs['gabbro'].CC
+    for platform in ctx.env.TARGET_PLATFORMS:
+        cc = ctx.all_envs[platform].CC
         cc = shutil.which(cc[0] if isinstance(cc, list) else cc) or ''
         subprocess.check_call([sys.executable, os.path.join(ctx.path.abspath(), '..', 'tools', 'build-blobs.py'),
-                               '--face', 'enroute', '--out', os.path.join(ctx.path.abspath(), 'resources')] +
-                              (['--cc', cc] if cc else []))
+                               '--face', 'enroute', '--platform', platform,
+                               '--out', os.path.join(ctx.path.abspath(), 'resources')] + (['--cc', cc] if cc else []))
     binaries = []
     cached_env = ctx.env
     for platform in ctx.env.TARGET_PLATFORMS:
@@ -35,6 +35,8 @@ def build(ctx):
         # Optimised across the sources at link time: about 1.3 KB smaller,
         # and every byte of the app is a byte of its heap.
         ctx.env.append_value('CFLAGS', ['-ffp-contract=off', '-flto', '-D' + FACE])
+        # The chart builder and the minute renderer as code blobs (src/c/blob.h).
+        ctx.env.append_value('CFLAGS', ['-DGT_BLOBS=1'])
         # The Round 2's screen (src/c/enroute_core.h ENR_ROUND).
         if platform == 'gabbro':
             ctx.env.append_value('CFLAGS', ['-DENR_ROUND=1'])
@@ -64,11 +66,9 @@ def build(ctx):
         # Doubles throughout, as the JavaScript: the SDK builds for the
         # Cortex-M3, where floats are software too, and single precision
         # moves a pixel of the Moon's phase or of night now and then.
-        # (On the Round 2 the app is main.c, watch_data.c and passes.c: the chart builder
-        # and the minute renderer are its code blobs.)
-        sources = ctx.path.ant_glob('src/c/**/*.c')
-        if platform == 'gabbro':
-            sources = [n for n in sources if n.name in ('main.c', 'watch_data.c', 'passes.c')]
+        # (The app is main.c, watch_data.c and passes.c: the chart builder and
+        # the minute renderer are its code blobs.)
+        sources = [n for n in ctx.path.ant_glob('src/c/**/*.c') if n.name in ('main.c', 'watch_data.c', 'passes.c')]
         ctx.pbl_build(source=sources, target=app_elf, bin_type='app')
         binaries.append({'platform': platform, 'app_elf': app_elf})
     ctx.env = cached_env

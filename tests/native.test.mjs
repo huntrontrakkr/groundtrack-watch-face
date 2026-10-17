@@ -117,7 +117,7 @@ test('each face builds its hours on the Round 2 in what its builder leaves of th
     fuller:[['sat:25544',{projection:'fuller'}],['sun',{projection:'fuller'}],['moon',{projection:'fuller'}],['sat:36585',{projection:'fuller',plate:'airbrush'}]]
   };
   for(const [face,list] of Object.entries(cases)){
-    const blob=statSync(`native/resources/builder_${face}.bin`).size,limit=ROUND_HEAP-blob-5000;
+    const blob=statSync(`native/resources/builder_${face}~gabbro.bin`).size,limit=ROUND_HEAP-blob-5000;
     for(const rim of ['bezel','chords','instrument'])for(const [body,more] of list)for(const hour of [0,7,14,21]){
       const r=spawnSync(`native/host/round_check-${face}`,[],{input:input(body,at(hour),more.plate||'console','America/New_York',{flag:!more.readout,rim,...more}),env:{...process.env,HEAP_LIMIT:String(limit)},timeout:20000});
       assert.equal(r.status,0,`${face} ${rim} ${body} ${JSON.stringify(more)} hour ${hour}: no chart in a heap of ${limit} bytes: ${r.stdout}${r.stderr}${r.signal||''}`);

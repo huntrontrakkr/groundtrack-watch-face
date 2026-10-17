@@ -59,18 +59,12 @@
         {
           "type": "raw",
           "name": "BUILDER_CODE",
-          "file": "builder_enroute.bin",
-          "targetPlatforms": [
-            "gabbro"
-          ]
+          "file": "builder_enroute.bin"
         },
         {
           "type": "raw",
           "name": "RENDERER_CODE",
-          "file": "renderer_enroute.bin",
-          "targetPlatforms": [
-            "gabbro"
-          ]
+          "file": "renderer_enroute.bin"
         }
       ]
     }
