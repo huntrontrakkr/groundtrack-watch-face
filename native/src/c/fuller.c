@@ -4,11 +4,12 @@
 // multiply-adds.
 #include "fuller.h"
 #include "fmath.h"
+#include "enroute_core.h"
 #include <math.h>
 #include <string.h>
 
-#define W 200
-#define H 228
+#define W ENR_W
+#define H ENR_H
 #define TRACK_Y 140
 #define PI 3.14159265358979323846
 static const double RAD=PI/180;

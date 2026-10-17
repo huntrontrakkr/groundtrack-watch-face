@@ -5,6 +5,9 @@ import {cos,acos} from './fmath.js';
 import {RAD} from './geometry.js';
 
 export const W=200,H=228;
+// The Round 2 (gabbro): a circle in a 260 px square; its hour chart's span and track height (chart-render.js
+// SPAN, TRACK_Y on the Time 2)
+export const ROUND={W:260,H:260,SPAN:150,TRACK_Y:150};
 const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));
 const inks=list=>list.map(hex),SHELF_DEPTH=-200;
 // Printing plates. Each ink has a day, dusk and night value; paper plates

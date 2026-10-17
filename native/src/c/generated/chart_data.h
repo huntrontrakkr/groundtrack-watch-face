@@ -5,10 +5,12 @@
 #include <math.h>
 #include "../chart.h"
 
-#define CHART_W 200
-#define CHART_H 228
-#define CHART_SPAN 120
-#define CHART_TRACK_Y 150
+// (the screen's size is the core's, enroute_core.h; the Round 2's chart is
+// set lower and wider in its circle)
+#define CHART_W ENR_W
+#define CHART_H ENR_H
+#define CHART_SPAN (ENR_ROUND?150:120)
+#define CHART_TRACK_Y (ENR_ROUND?150:150)
 #define CHART_SHELF -200
 static const int CHART_CONTOURS[6]={500,1000,2000,3000,4000,5000};
 

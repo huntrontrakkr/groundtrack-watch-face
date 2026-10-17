@@ -54,6 +54,10 @@ typedef struct {
 #define MARGIN 64
 #endif
 #define BLOCKS ((W+15)/16)
+// A row's dirty mask, a bit for each 4 pixels (8 on the Round 2: 260 of them in a 64-bit word); a night block's 16
+// pixels, so many bits
+#define MS (ENR_ROUND?3:2)
+#define NIGHT_BITS (16>>MS)
 static int32_t q30(enr_real v){return (int32_t)(v*(enr_real)Q30);}
 // One minute's night: on the cylindrical charts P(x) in Q30 for each column
 // and its least and greatest in each 16-pixel block; on a Fuller sheet the
@@ -463,9 +467,9 @@ static __attribute__((noinline)) int draw_base(Ctx *c,const uint64_t *mask,const
     }
     for(int x=0;x<W;x++){
       const int b=x>>4;
-      // The masks are in 4-pixel blocks: a moving part's box costs less.
-      if(mask&&!(mask[y]>>(x>>2)&1)){
-        if(!(nmask[y]>>(x>>2)&1)){x|=3;continue;}
+      // The masks are in 4-pixel blocks (8 on the Round 2): a moving part's box costs less.
+      if(mask&&!(mask[y]>>(x>>MS)&1)){
+        if(!(nmask[y]>>(x>>MS)&1)){x|=(1<<MS)-1;continue;}
         // Only where night changed since `from` in a way this pixel's colour
         // reads: its zone, where the class's colour varies with it, or a
         // scan line or an outline plate's dot falls here; the paper
@@ -1069,7 +1073,7 @@ static void draw_moving(Ctx *c,int part){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;const bool world=VIEW_IS_WORLD(s->view),flag=(s->flags&ENR_MINUTE_FLAG)&&VIEW_IS_HOUR(s->view);
   if(part==PART_CIRCLE){draw_circle(c);return;}
   // The Sun and Moon beside the body, under it.
-  for(int k=0;k<4;k++)if((!part||part==PART_SUN+k)&&m->also[k][0]<255){
+  for(int k=0;k<4;k++)if((!part||part==PART_SUN+k)&&m->also[k][0]!=ENR_PX_NONE){
     int x=m->also[k][0],y=m->also[k][1];draw_mark(c,k<2?k:ENR_SATELLITE,x,y);
     if(k>=2)draw_text(c,s->extra_code[k-2],3,x<W-32?x+8:x-29,0,y+4);
   }
@@ -1179,13 +1183,13 @@ static __attribute__((noinline)) void night_blocks(const Ctx *a,const Ctx *b,uin
   // Night never shows over space.
   for(int y=0;y<H;y++)if(s->ground_rows[y>>3]>>(y&7)&1)for(int k=0;k<BLOCKS;k++){
     const int s0=block_state(a,y,k),s1=block_state(b,y,k);
-    if(s0==2||s1==2||s0!=s1)mask[y]|=(uint64_t)15<<(4*k);
+    if(s0==2||s1==2||s0!=s1)mask[y]|=(((uint64_t)1<<NIGHT_BITS)-1)<<(NIGHT_BITS*k);
   }
 }
 static void box_blocks(const int *box,uint64_t *mask){
   if(box[0]>box[2])return;
   const int x0=box[0]<0?0:box[0],x1=box[2]>W-1?W-1:box[2],y0=box[1]<0?0:box[1],y1=box[3]>H-1?H-1:box[3];
-  uint64_t bits=0;for(int b=x0>>2;b<=x1>>2;b++)bits|=(uint64_t)1<<b;
+  uint64_t bits=0;for(int b=x0>>MS;b<=x1>>MS;b++)bits|=(uint64_t)1<<b;
   for(int y=y0;y<=y1;y++)mask[y]|=bits;
 }
 static void moved(const EnrScene *scene,int from,int minute,uint8_t *frame,int row_stride);
@@ -1232,7 +1236,7 @@ static __attribute__((noinline)) void moved(const EnrScene *scene,int from,int m
   for(int k=0;k<2;k++)for(int part=PART_SUN;part<PARTS;part++){
     if(part==PART_CIRCLE&&!circle)continue;
     // (The Sun and Moon beside the body move a pixel in some minutes.)
-    if(part<PART_BODY&&!memcmp(scene->minutes[from].also[part-PART_SUN],scene->minutes[minute].also[part-PART_SUN],2))continue;
+    if(part<PART_BODY&&!memcmp(scene->minutes[from].also[part-PART_SUN],scene->minutes[minute].also[part-PART_SUN],2*sizeof(enr_px)))continue;
     Ctx c={scene,&scene->minutes[k?minute:from],frame,row_stride,{0,0,0},0,true,{W,H,-1,-1},NULL};
     c.n=k?&work->night[0]:&work->night[1];draw_moving(&c,part);box_blocks(c.box,mask);
   }

@@ -12,8 +12,30 @@
 #include <stdbool.h>
 #include "face.h"
 
+// The screen: the Time 2's (emery), or the Round 2's (gabbro: ENR_ROUND, set
+// by the watch build for it and by the host and WebAssembly builds asked for
+// it), a circle in a square, the chart and its margins laid out for it.
+#ifndef ENR_ROUND
+#define ENR_ROUND 0
+#endif
+#if ENR_ROUND
+#define ENR_W 260
+#define ENR_H 260
+#else
 #define ENR_W 200
 #define ENR_H 228
+#endif
+// A pixel's coordinate kept small, a byte on the Time 2 (two on the Round 2,
+// 260 across), and the value for none; a pixel's place packed as y*W+x.
+#if ENR_ROUND
+typedef uint16_t enr_px;
+typedef uint32_t enr_pack;
+#define ENR_PX_NONE 0xFFFF
+#else
+typedef uint8_t enr_px;
+typedef uint16_t enr_pack;
+#define ENR_PX_NONE 255
+#endif
 // The pieces a scene's runs are kept in (see EnrScene): their size, and
 // how many the class plane and a Fuller sheet's tiles may take.
 #define ENR_RUN_PIECE 2048
@@ -57,8 +79,9 @@ typedef struct {
   char corner[14];
   uint8_t circle;
   // Sun, Moon, and companion satellites 1 and 2: their pixels when
-  // selected and on this chart this minute, or x 255 when absent.
-  uint8_t also[4][2];
+  // selected and on this chart this minute (small: the record stays its
+  // size), or x ENR_PX_NONE when absent.
+  enr_px also[4][2];
 } EnrMinute;
 
 // A point of the route, rounded to the pixel, with the step from the one
@@ -156,7 +179,7 @@ typedef struct {
   // Home, whose mark is drawn over the body (x -1000 without), and its box.
   int16_t home_x,home_y,home_box[4];
   // Home's mark: the pixels drawn after the body in its ink, in order.
-  uint8_t mark_count,marks[128][2];
+  uint8_t mark_count;enr_px marks[128][2];
   // The day's time callout: the track's least x less 8, the top and bottom
   // it keeps within, the hour's figures, the lettering its leader breaks
   // for, and its figures (loaded apart from the scene's blob).
@@ -196,7 +219,7 @@ typedef struct {
   // Home's acquisition circles, each allocated on its own: circle k has
   // circle_n[k] points, (x, y) bytes at circle_px[k].
   uint8_t circle_count,circle_n[60];
-  uint8_t *circle_px[60];
+  enr_px *circle_px[60];
   uint16_t track_count;
   int32_t track_t0;
   int16_t track_step;
