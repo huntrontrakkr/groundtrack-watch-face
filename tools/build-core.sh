@@ -1,6 +1,7 @@
 #!/bin/sh
 # Compiles the core (the watch's chart builder and minute renderer, behind
-# native/host/core_api.c) to WebAssembly for the study: public/core.wasm.
+# native/host/core_api.c) to WebAssembly for the study: public/core.wasm, and
+# for the Round 2's screen (ENR_ROUND) public/core-round.wasm.
 # Needs wasi-sdk (WASI_SDK, or ~/.local/wasi/wasi-sdk-*). Arithmetic as the
 # watch's: no fused multiply-adds; doubles throughout.
 set -e
@@ -14,4 +15,8 @@ for e in $exports; do flags="$flags -Wl,--export=$e"; done
   -Wl,--no-entry -Wl,--strip-all -Wl,--export-memory -Wl,--initial-memory=4194304 $flags \
   -o public/core.wasm native/host/core_api.c native/src/c/chart.c native/src/c/fuller.c native/src/c/enroute_core.c \
   native/src/c/departure_font.c native/src/c/map_pack.c native/src/c/segments.c native/src/c/fmath.c native/src/c/passes.c
-ls -l public/core.wasm
+"$sdk/bin/clang" --target=wasm32-wasi -std=gnu11 -Oz -ffp-contract=off -mexec-model=reactor \
+  -Wl,--no-entry -Wl,--strip-all -Wl,--export-memory -Wl,--initial-memory=4194304 $flags \
+  -DENR_ROUND=1 -o public/core-round.wasm native/host/core_api.c native/src/c/chart.c native/src/c/fuller.c native/src/c/enroute_core.c \
+  native/src/c/departure_font.c native/src/c/map_pack.c native/src/c/segments.c native/src/c/fmath.c native/src/c/passes.c
+ls -l public/core.wasm public/core-round.wasm

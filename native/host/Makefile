@@ -17,6 +17,11 @@ build_check: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../s
 build_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
 	$(CC) $(CFLAGS) -std=gnu11 -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
 
+# The same for each face's Round 2 builder (the builder blob's code):
+# round_check-enroute, -fuller.
+round_check-%: build_check.c heap_model.h core_api.h $(CORE) ../src/c/fmath.c ../src/c/chart.h ../src/c/generated/chart_data.h
+	$(CC) $(CFLAGS) -std=gnu11 -DENR_ROUND=1 -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ build_check.c $(CORE) ../src/c/fmath.c -lm
+
 # Host check of the shared sine and cosine.
 fmath_test: fmath_test.c ../src/c/fmath.c ../src/c/fmath.h
 	$(CC) $(CFLAGS) -o $@ fmath_test.c ../src/c/fmath.c -lm
@@ -74,5 +79,5 @@ watch_sim-%: watch_sim.c heap_model.h ../src/c/main.c ../src/c/watch_data.c $(fi
 	$(CC) $(SIMFLAGS) -DFACE_$(shell echo $* | tr a-z A-Z) -o $@ watch_sim.c ../src/c/main.c ../src/c/watch_data.c $(filter-out core_api.c,$(CORE)) ../src/c/fmath.c -lm
 
 clean:
-	rm -f harness harness-exact harness-float map_test segments_test fmath_test settings_check build_check build_check-* san-* watch_sim-* *.o
+	rm -f harness harness-exact harness-float map_test segments_test fmath_test settings_check build_check build_check-* round_check-* san-* watch_sim-* *.o
 .PHONY: arm shim-check clean

@@ -220,6 +220,12 @@ typedef struct {
   // circle_n[k] points, (x, y) bytes at circle_px[k].
   uint8_t circle_count,circle_n[60];
   enr_px *circle_px[60];
+  #if ENR_ROUND
+  // The rim (ENR_RIM_*), and what it letters all hour: home's rise and set,
+  // and the date (the minute's own, its Zulu time, corner and pass line,
+  // are the minute's).
+  uint8_t rim;char rim_rise[28],rim_date[12];
+  #endif
   uint16_t track_count;
   int32_t track_t0;
   int16_t track_step;
@@ -259,10 +265,47 @@ void enr_ready(EnrScene *scene);
 // (gbitmap_get_data_row_info): row y's pixel x at row[y][x], for x from
 // x0[y] to x1[y]. There the renderer is given one of these as its `frame`
 // (and row_stride is not read).
+// (The Round 2's layout's measures, named on either screen: read only
+// where ENR_ROUND is.) The chart's radius is the style's (enr_rim_style):
+// within the rim, or for chords, the whole glass; and the radius within
+// which its labels and figures are placed (for chords, clear of the glass's
+// edge).
+#if ENR_ROUND
+extern int enr_chart_r,enr_place_r;
+#define ENR_CHART_R enr_chart_r
+#define ENR_PLACE_R enr_place_r
+#else
+#define ENR_CHART_R 114
+#define ENR_PLACE_R 114
+#endif
+#define ENR_RIM_R 122
+// The Plotboard's tape: an arc about the middle over the world band, its
+// minutes from ENR_ARC_DEG left of the top to as far right (the hour
+// forward; backward, the other way), ticked inward from its baseline,
+// labelled outside it; the panel's foot, the band under it.
+#define ENR_ARC_R 98
+#define ENR_ARC_DEG 56
+#define ENR_ARC_X 81
+#define ENR_ARC_PANEL 82
+#define ENR_BAND_BOTTOM 198
 #if ENR_ROUND
 typedef struct {uint8_t *row[ENR_H];int16_t x0[ENR_H],x1[ENR_H];} EnrFrame;
 // The glass's pixels in row y, as the Round 2's frame buffer keeps them.
 void enr_glass(int y,int *x0,int *x1);
+// The Round 2's layout: the chart a circle of ENR_CHART_R pixels about the
+// screen's middle; round it the rim, the margins' (ENR_RIM_R the middle of
+// its lettering), in one of three styles (ChartInput.legend's bits 4-5):
+// lettering round the rim, a bezel (0); straight lines across the top and
+// bottom, chords (1); or the bezel with the minutes ticked round its sides,
+// an instrument (2).
+enum {ENR_RIM_BEZEL,ENR_RIM_CHORDS,ENR_RIM_INSTRUMENT};
+// Sets the chart's radius for a style: the bezel's and instrument's within
+// their rim, 114; chords', the glass's, 130 (their lettering lies over the
+// chart), its labels and figures 6 in from it. The builder sets it for its input; the renderer, its scene's.
+void enr_rim_style(int rim);
+// The columns of the chart's circle at rows y0 to y1 (the narrowest of
+// them), `margin` in from its edge: x from *lo to *hi (lo > hi for none).
+void enr_span(int y0,int y1,int margin,int *lo,int *hi);
 #endif
 
 // Draw minute 0-59 of the scene's hour into a 200x228 GColor8 frame buffer

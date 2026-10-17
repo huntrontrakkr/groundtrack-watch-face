@@ -306,6 +306,21 @@ void enr_glass(int y,int *x0,int *x1){
   const int d=2*y+1-H;int half=(int)f_floor(f_sqrt((enr_real)(W*W-d*d))/2+(enr_real)0.5);if(half>W/2)half=W/2;
   *x0=W/2-half;*x1=W/2+half-1;
 }
+int enr_chart_r=114,enr_place_r=114;
+void enr_rim_style(int rim){enr_chart_r=rim==ENR_RIM_CHORDS?W/2:114;enr_place_r=rim==ENR_RIM_CHORDS?W/2-6:114;}
+// Whether a box lies on the chart's circle (its corners do).
+static bool on_chart(int x,int y,int w,int h){
+  const int xs[2]={x,x+w-1},ys[2]={y,y+h-1},r=ENR_PLACE_R-1;
+  for(int i=0;i<2;i++)for(int j=0;j<2;j++){const int dx=2*xs[i]+1-W,dy=2*ys[j]+1-H;if(dx*dx+dy*dy>4*r*r)return false;}
+  return true;
+}
+void enr_span(int y0,int y1,int margin,int *lo,int *hi){
+  // (The row of them farthest from the middle, its middle twice as far.)
+  const int a=2*y0+1-H,b=2*y1+1-H,d=y0<=H/2&&y1>=H/2?0:abs(a)>abs(b)?abs(a):abs(b),r=ENR_PLACE_R-margin,r2=4*r*r-d*d;
+  if(r<=0||r2<=0){*lo=W/2;*hi=W/2-1;return;}
+  const int half=(int)f_floor(f_sqrt((enr_real)r2)/2);
+  *lo=W/2-half;*hi=W/2+half-1;
+}
 #else
 #define PIXEL(c,x,y) ((c)->frame[(y)*(c)->stride+(x)])
 #define ON_GLASS(c,x,y) 1
@@ -314,7 +329,7 @@ void enr_glass(int y,int *x0,int *x1){
 static int sliding_x(const EnrScene *s,int x){return FACE_WORLD&&(s->flags&ENR_SLIDING_WORLD)?((x%W)+W)%W:x;}
 // (Only the band's rows come round: what is drawn in the panel above them,
 // the tape's labels a little past its ends say, is cut off at the edge.)
-#define SLIDE_TOP 67
+#define SLIDE_TOP (ENR_ROUND?ENR_ARC_PANEL:67)
 #define PLOT_X(c,x,y) ((y)>=SLIDE_TOP?sliding_x((c)->s,(x)):(x))
 static void plot(Ctx *c,int x,int y,uint8_t color){
   x=PLOT_X(c,x,y);
@@ -531,7 +546,7 @@ static void bold_pixel(Ctx *c,int x,int y,void *arg){
   const bool steep=*(bool *)arg,heavy=FACE_ROLL&&c->s->heavy;x=sliding_x(c->s,x);const int bx=sliding_x(c->s,steep?(heavy?x-1:x+1):x),by=steep?y:(heavy?y+1:y-1);
   if(bx<0||by<0||bx>=W||by>=H)return;
   // (On the world band, within the band: the builder's route stops there.)
-  if(VIEW_IS_WORLD(c->s->view)&&(by<c->s->height_baseline+6||by>H-10))return;
+  if(VIEW_IS_WORLD(c->s->view)&&(by<c->s->height_baseline+6||by>(ENR_ROUND?ENR_BAND_BOTTOM:H-10)))return;
   const int layer=class_at(c,bx,by)>>4;
   // Only what was drawn before the route (ground, grid, the network's ink
   // and knockouts, a one-ink plate's casing) lies under the bold line.
@@ -554,6 +569,9 @@ static void draw_circle(Ctx *c){
   if(k>=s->circle_count)return;
   for(int i=0;i<s->circle_n[k];i++){
     const int x=s->circle_px[k][2*i],y=s->circle_px[k][2*i+1],layer=class_at(c,x,y)>>4;
+    #if ENR_ROUND
+    if((2*x+1-W)*(2*x+1-W)+(2*y+1-H)*(2*y+1-H)>4*ENR_CHART_R*ENR_CHART_R)continue;   // (on the chart's circle)
+    #endif
     if(layer<=L_WATERLINE||layer==L_GRID)plot(c,x,y,s->zoned[ENR_MARK][zone(c,x,y)]);
   }
 }
@@ -660,10 +678,24 @@ void enr_power(int percent,int state){s_power[0]=(uint8_t)(percent<0?0:percent>1
 // fuel gauge is; broken
 // into dashes while the phone is out of reach, as a position is drawn
 // without a fix.
+#if ENR_ROUND
+static void rim_point(enr_real deg,enr_real r,int *x,int *y);
+#endif
 static __attribute__((noinline)) void draw_fuel(Ctx *c){
   const EnrScene *s=c->s;const int f=s_power[1],e=s_power[0]*W/100;
   if(f&ENR_NO_FUEL)return;
   const uint8_t fill=s->zoned[f&ENR_CHARGING?ENR_INK:s_power[0]<=20?ENR_MARK:ENR_ROUTE][0];
+  #if ENR_ROUND
+  // (On the Round 2 an arc by the glass's edge over the octagon's top side,
+  // 20 degrees either side of the top, its quarters ticked.)
+  (void)e;
+  for(int k=0;k<=80;k++){
+    const enr_real deg=-20+k*(enr_real)0.5;const bool on=k*100<s_power[0]*80&&!((f&ENR_NO_LINK)&&k%8>5);int x,y;
+    rim_point(deg,ENR_RIM_R+6,&x,&y);if(on||!(k&1))plot(c,x,y,on?fill:s->zoned[ENR_GRID][0]);
+    if(on||(k%20==0&&k&&k<80)){rim_point(deg,ENR_RIM_R+5-!on,&x,&y);plot(c,x,y,fill);}
+  }
+  return;
+  #endif
   for(int x=0;x<W;x++){
     const bool on=x<e&&!((f&ENR_NO_LINK)&&x%6>3);
     if(on||!(x&1))plot(c,x,0,on?fill:s->zoned[ENR_GRID][0]);
@@ -677,7 +709,10 @@ static void draw_flag(Ctx *c){
   const int tw=enr_text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
   const enr_real room=s->forward>0?s->c1x-mx:mx-s->c1x;
   const int sx=js_round(mx+nx*20),top=js_round(my+ny*20)-(ny<=0?4:0)-(ny>0?fh-4:0);
-  const int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
+  int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
+  #if ENR_ROUND
+  if(!on_chart(d>0?sx+1:sx-fw-point,top,fw+point,fh))d=-d;   // (the pennant on the chart's circle)
+  #endif
   // Measured for the study, the pennant alone (no staff).
   Px *px=scratch;int n=s_figures_only?0:circuit(mx,my,sx,ny<=0?top:top+fh-1,8,px);
   for(int y=0;y<fh;y++){
@@ -727,6 +762,153 @@ static void draw_text(Ctx *c,const char *text,int max,int x,int right,int baseli
   if(right)x=right-enr_text_width(text,len);
   letter(c,scratch,enr_text_pixels(text,len,x,baseline,scratch),ENR_INK,1);
 }
+#if ENR_ROUND
+// ---------------------------------------------------- the Round 2's rim
+// The margins round the chart's circle (enroute_core.h). The bezel and the
+// instrument letter it as an octagon's sides: the two upper diagonals carry
+// home's rise and set or the minute's pass line (its first word over the
+// top), and along the bottom the date's day and month on the lower left,
+// the day of the week (or the satellite) and the time across the bottom, the
+// corner on the lower right. Letters on a diagonal are the font's own
+// turned as strokes (diag_pixels). Across chords, straight lines knocked out
+// of what lies under them. The battery is an arc over the top by the
+// glass's edge; the instrument ticks the minutes round its edge and marks
+// the minute with a wedge.
+static int text_len(const char *t,int max){int n=0;while(n<max&&t[n])n++;return n;}
+static void rim_point(enr_real deg,enr_real r,int *x,int *y){*x=js_round(W/2+r*f_sin(deg*(enr_real)0.017453292519943295));*y=js_round(H/2-r*f_cos(deg*(enr_real)0.017453292519943295));}
+// A filled triangle (its pixels whose middles lie within it).
+static void fill_triangle(Ctx *c,int ax,int ay,int bx,int by,int cx,int cy,uint8_t col){
+  const int x0=ax<bx?(ax<cx?ax:cx):(bx<cx?bx:cx),x1=ax>bx?(ax>cx?ax:cx):(bx>cx?bx:cx),y0=ay<by?(ay<cy?ay:cy):(by<cy?by:cy),y1=ay>by?(ay>cy?ay:cy):(by>cy?by:cy);
+  for(int y=y0;y<=y1;y++)for(int x=x0;x<=x1;x++){
+    const long d1=(long)(x-bx)*(ay-by)-(long)(ax-bx)*(y-by),d2=(long)(x-cx)*(by-cy)-(long)(bx-cx)*(y-cy),d3=(long)(x-ax)*(cy-ay)-(long)(cx-ax)*(y-ay);
+    if(!((d1<0||d2<0||d3<0)&&(d1>0||d2>0||d3>0)))plot(c,x,y,col);
+  }
+}
+// A wedge at `deg`, its tip at radius r0 pointing in, its base at r1 (and
+// half as wide either side as it is long, in degrees at r1).
+static void rim_wedge(Ctx *c,enr_real deg,enr_real r0,enr_real r1,uint8_t col){
+  const enr_real half=(r1-r0)*(enr_real)57.29577951308232/r1*(enr_real)0.7;int ax,ay,bx,by,cx,cy;
+  rim_point(deg,r0,&ax,&ay);rim_point(deg-half,r1,&bx,&by);rim_point(deg+half,r1,&cx,&cy);fill_triangle(c,ax,ay,bx,by,cx,cy,col);
+}
+// Letters on a diagonal, centred at (cx, cy): read down to the right (cw:
+// each letter turned clockwise) or up to the right, a letter's advance
+// apart along it. The letters are the font's turned as strokes
+// (font.bin's diagonal glyphs, tools/generate-diagonal-font.py), about
+// their middles; turned the other way a quarter back.
+static int diag_pixels(const char *t,int n,int cx,int cy,bool cw,Px *out){
+  const int adv=enr_text_width("0",1),sy=cw?1:-1;int count=0;
+  for(int k=0;k<n;k++){
+    const int g=enr_font_index(t[k]);
+    if(g<0||t[k]==' ')continue;
+    // (Its middle: the advance times (k - (n - 1) / 2) along the diagonal, 362 / 512 of it each way.)
+    const int along=(2*k-n+1)*adv*362,off=along>=0?(along+512)/1024:-((-along+512)/1024),ox=cx+off,oy=cy+sy*off;
+    const uint8_t *px=enr_font_diag+ENR_FONT_GLYPH_COUNT;
+    for(int j=0;j<g;j++)px+=enr_font_diag[j];
+    for(int i=0;i<enr_font_diag[g]&&count<SCRATCH-200;i++){
+      const int x=(px[i]>>4)-8,y=(px[i]&15)-8;
+      out[count++]=(Px){(int16_t)(ox+(cw?x:y)),(int16_t)(oy+(cw?y:-x))};
+    }
+  }
+  return count;
+}
+// The octagon's sides: their middles' distance from the screen's, and each
+// side's lettering: across the top (0) or bottom (4), or a diagonal (1 upper
+// right, 3 lower right, 5 lower left, 7 upper left).
+#define SIDE_R 118
+#define DIAG_R 117
+static void side_text(Ctx *c,const char *t,int n,int side){
+  if(n<=0)return;
+  int count;
+  if(side==0||side==4){const int w=enr_text_width(t,n);count=enr_text_pixels(t,n,W/2-w/2,side?H/2+SIDE_R+4:H/2-SIDE_R+4,scratch);}
+  else{int x,y;rim_point(side*45,DIAG_R,&x,&y);count=diag_pixels(t,n,x,y,side==1||side==5,scratch);}
+  letter(c,scratch,count,ENR_INK,1);
+}
+// A line over the top: its first word across the top, the rest shared
+// between the upper diagonals at the space that balances them best.
+static void top_line(Ctx *c,const char *t,int max){
+  const int n=text_len(t,max);int a=0;while(a<n&&t[a]!=' ')a++;
+  side_text(c,t,a,0);
+  int b=a;while(b<n&&t[b]==' ')b++;
+  if(b>=n)return;
+  int best=-1,score=1<<20;
+  for(int k=b;k<n;k++)if(t[k]==' '&&t[k-1]!=' '){int e=k;while(e<n&&t[e]==' ')e++;const int d=abs((k-b)-(n-e));if(d<score){score=d;best=k;}}
+  if(best<0){side_text(c,t+b,n-b,1);return;}
+  int e=best;while(e<n&&t[e]==' ')e++;
+  side_text(c,t+b,best-b,7);side_text(c,t+e,n-e,1);
+}
+// The chords' lines: over the top; and along the bottom the date and the
+// time, the corner under them.
+#define CHORD_TOP 30
+#define CHORD_DATE 238
+#define CHORD_CORNER 249
+// (On the Plotboard the top is its tape's: the line goes under the band,
+// over the date.)
+#define CHORD_OVER(s) (VIEW_IS_WORLD((s)->view)?226:CHORD_TOP)
+static void chord_line(Ctx *c,const char *t,int max,int baseline){
+  const int n=text_len(t,max),w=enr_text_width(t,n);
+  if(!n)return;
+  for(int y=baseline-9;y<=baseline+2;y++)for(int x=W/2-w/2-3;x<=W/2+(w+1)/2+2;x++)plot(c,x,y,c->s->space);
+  letter(c,scratch,enr_text_pixels(t,n,W/2-w/2,baseline,scratch),ENR_INK,1);
+}
+// Where the date and the time stand in their chord: the date's left, the
+// time's (both set as for the widest time).
+static void chord_date_at(const EnrScene *s,int *dx,int *zx){
+  const int dw=enr_text_width(s->rim_date,text_len(s->rim_date,sizeof s->rim_date)),zw=enr_text_width("0000Z",5),gap=2*enr_text_width("0",1);
+  *dx=W/2-(dw+gap+zw)/2;*zx=*dx+dw+gap;
+}
+// The date's first word (the day of the week, or the satellite's code), and
+// the rest (the day and month).
+static int date_word(const EnrScene *s,int *rest){
+  const int n=text_len(s->rim_date,sizeof s->rim_date);int a=0;while(a<n&&s->rim_date[a]!=' ')a++;
+  int b=a;while(b<n&&s->rim_date[b]==' ')b++;*rest=b;return a;
+}
+// The bottom's day of the week and time: where the time stands.
+static int bottom_time_x(const EnrScene *s){
+  int rest;const int a=date_word(s,&rest),aw=enr_text_width(s->rim_date,a),zw=enr_text_width("0000Z",5),gap=enr_text_width("0",1);
+  return W/2-(aw+gap+zw)/2+aw+gap;
+}
+// What stays all hour: the instrument's ticks, the bands and lettering that
+// do not change (drawn after the base each time, over what it drew again).
+static void rim_hour(Ctx *c){
+  const EnrScene *s=c->s;
+  if(s->rim==ENR_RIM_CHORDS){
+    if(s->rim_rise[0])chord_line(c,s->rim_rise,sizeof s->rim_rise,CHORD_OVER(s));
+    int dx,zx;chord_date_at(s,&dx,&zx);
+    const int zw=enr_text_width("0000Z",5);
+    for(int y=CHORD_DATE-9;y<=CHORD_DATE+2;y++)for(int x=dx-3;x<=zx+zw+2;x++)plot(c,x,y,s->space);
+    letter(c,scratch,enr_text_pixels(s->rim_date,text_len(s->rim_date,sizeof s->rim_date),dx,CHORD_DATE,scratch),ENR_INK,1);
+    return;
+  }
+  if(s->rim_rise[0])top_line(c,s->rim_rise,sizeof s->rim_rise);
+  int rest;const int a=date_word(s,&rest),aw=enr_text_width(s->rim_date,a),zw=enr_text_width("0000Z",5),gap=enr_text_width("0",1);
+  side_text(c,s->rim_date+rest,text_len(s->rim_date+rest,(int)sizeof s->rim_date-rest),5);
+  letter(c,scratch,enr_text_pixels(s->rim_date,a,W/2-(aw+gap+zw)/2,H/2+SIDE_R+4,scratch),ENR_INK,1);
+  if(s->rim==ENR_RIM_INSTRUMENT)
+    // (Down the octagon's left and right sides, clear of the lettering.)
+    for(int m=0;m<60;m++){
+      const int deg=m*6;if(!((deg>=66&&deg<=114)||(deg>=246&&deg<=294)))continue;
+      const enr_real r0=m%5?ENR_RIM_R+5:ENR_RIM_R+3;
+      for(enr_real r=r0;r<=ENR_RIM_R+7;r+=(enr_real)0.5){int x,y;rim_point(deg,r,&x,&y);plot(c,x,y,s->space_ink);}
+    }
+}
+// The minute's: its time (and on the instrument, the minute marked at the
+// glass's edge), the pass line where home's rise and set are not, the corner.
+static void rim_zulu(Ctx *c){
+  const EnrScene *s=c->s;
+  if(s->rim==ENR_RIM_CHORDS){int dx,zx;chord_date_at(s,&dx,&zx);letter(c,scratch,enr_text_pixels(c->m->zulu,text_len(c->m->zulu,5),zx,CHORD_DATE,scratch),ENR_INK,1);return;}
+  letter(c,scratch,enr_text_pixels(c->m->zulu,text_len(c->m->zulu,5),bottom_time_x(s),H/2+SIDE_R+4,scratch),ENR_INK,1);
+  if(s->rim==ENR_RIM_INSTRUMENT)rim_wedge(c,(enr_real)(c->m-s->minutes)*6,ENR_RIM_R+1,ENR_RIM_R+8,s->zoned[ENR_ROUTE][0]);
+}
+static void rim_top(Ctx *c){
+  const EnrScene *s=c->s;if(s->rim_rise[0])return;
+  if(s->rim==ENR_RIM_CHORDS)chord_line(c,c->m->top,sizeof c->m->top,CHORD_OVER(s));
+  else top_line(c,c->m->top,sizeof c->m->top);
+}
+static void rim_corner(Ctx *c,const char *t,int max){
+  if(c->s->rim==ENR_RIM_CHORDS)chord_line(c,t,max,CHORD_CORNER);
+  else side_text(c,t,text_len(t,max),3);
+}
+#endif
 // The day's time callout (renderEnroute's callout() with `aside`, in the
 // 'colon' figures): the hour in Jost, a colon and the minutes smaller on
 // the same baseline, set in open map at the left, level with the body; its
@@ -835,8 +1017,13 @@ static void set_time(Ctx *c,const Glyph *g,int n,int fx,int fy){
   }
 }
 // The world band's tape panel (SCALE in enroute-render.js).
+#if ENR_ROUND
+#define TAPE_B 62
+#define TAPE_P ENR_ARC_PANEL
+#else
 #define TAPE_B 46
 #define TAPE_P 67
+#endif
 // The sliding tape: the index stands still in the middle and the tape runs
 // past it, three pixels a minute, the hour figures riding their marks (this
 // hour's pinned at the left until the next pushes it off), cut off at the
@@ -926,8 +1113,15 @@ static void draw_panel_clock(Ctx *c){
   const EnrScene *s=c->s;
   if(!s->fig_bits)return;
   Glyph g[8];int n,fh,fw=time_figure(s,c->m,2,1,g,&n,&fh);
+  #if ENR_ROUND
+  // (On the Round 2 at the panel's foot, where the circle is widest, the
+  // largest that fit across it there.)
+  {int lo,hi;enr_span(TAPE_P-4-fh,TAPE_P-5,3,&lo,&hi);if(fw>hi-lo+1)fw=time_figure(s,c->m,1,0,g,&n,&fh);}
+  const int fx=(W-fw)/2,fy=TAPE_P-4-fh;
+  #else
   if(fw>W-12)fw=time_figure(s,c->m,1,0,g,&n,&fh);
   const int fx=(W-fw)/2,fy=(TAPE_P-1-fh)/2;
+  #endif
   for(int i=0;i<n;i++){
     int x0,y0,w,h;glyph_box(s,&g[i],&x0,&y0,&w,&h);
     for(int gy=y0;gy<y0+h;gy++)for(int gx=x0;gx<x0+w;gx++){
@@ -938,6 +1132,61 @@ static void draw_panel_clock(Ctx *c){
     }
   }
 }
+#if ENR_ROUND
+// ------------------------------------------------- the Round 2's tape
+// The Plotboard's tape round an arc over the band (enroute_core.h
+// ENR_ARC_*): a minute's place on it in degrees from the top, the hour run
+// from left to right (or, backward, right to left); the route's ink along it
+// to the minute and the index's wedge over it, pointing in from outside; the
+// minute's figures beside the index, outside the arc; the sliding tape, the
+// arc turning under the index at its top, two degrees a minute.
+#define ARC_PXD 2
+static enr_real arc_deg(const EnrScene *s,enr_real m){return s->forward>0?-ENR_ARC_DEG+2*(enr_real)ENR_ARC_DEG*m/60:ENR_ARC_DEG-2*(enr_real)ENR_ARC_DEG*m/60;}
+static void arc_wedge(Ctx *c,enr_real deg){rim_wedge(c,deg,ENR_ARC_R,ENR_ARC_R+8,c->s->space);rim_wedge(c,deg,ENR_ARC_R+1,ENR_ARC_R+7,c->s->space_ink);}
+static void arc_index(Ctx *c){
+  const EnrScene *s=c->s;const enr_real to=arc_deg(s,(enr_real)(c->m-s->minutes)),from=arc_deg(s,0);const uint8_t fill=s->zoned[ENR_ROUTE][0];
+  for(enr_real d=from<to?from:to;d<=(from<to?to:from);d+=(enr_real)0.25){int x,y;rim_point(d,ENR_ARC_R-1,&x,&y);if((class_at(c,x,y)>>4)==L_PLAIN)plot(c,x,y,fill);}
+  arc_wedge(c,to);
+}
+static void arc_readout(Ctx *c){
+  const EnrScene *s=c->s;int x,y;rim_point(arc_deg(s,(enr_real)(c->m-s->minutes)),ENR_ARC_R+16,&x,&y);
+  const int lw=enr_text_width(c->m->minute,2);
+  letter(c,scratch,enr_text_pixels(c->m->minute,2,x-lw/2,y+4,scratch),ENR_INK,1);
+}
+// This hour's figure and the next's under the arc's top (as the builder sets
+// them on the fixed tape), the next outlined.
+static void arc_figures(Ctx *c){
+  const EnrScene *s=c->s;const uint8_t ink=s->space_ink;
+  if(!s->fig_bits)return;
+  int hn=0,nn=0;while(hn<3&&s->tape_hour[hn])hn++;
+  while(nn<3&&s->tape_next[nn])nn++;
+  const int hw=run_width(s,s->tape_hour,hn,1),nw=run_width(s,s->tape_next,nn,1),left=W/2-(hw+8+nw)/2;
+  Glyph g[6];const int n=figure_run(s,s->tape_hour,hn,1,left,50,G_SOLID,g),k=figure_run(s,s->tape_next,nn,1,left+hw+8,50,G_HOLLOW,g+n);
+  for(int i=0;i<n+k;i++){
+    int x0,y0,w,h;glyph_box(s,&g[i],&x0,&y0,&w,&h);
+    for(int gy=y0;gy<y0+h;gy++)for(int gx=x0;gx<x0+w;gx++){
+      const int x=g[i].x+gx,y=g[i].y+gy;
+      if(!glyph_bit(s,&g[i],gx,gy))continue;
+      if(g[i].group==G_HOLLOW&&solid_at(s,g+n,k,G_HOLLOW,x+1,y)&&solid_at(s,g+n,k,G_HOLLOW,x-1,y)&&solid_at(s,g+n,k,G_HOLLOW,x,y+1)&&solid_at(s,g+n,k,G_HOLLOW,x,y-1))continue;
+      plot(c,x,y,ink);
+    }
+  }
+}
+static void arc_sliding(Ctx *c){
+  const EnrScene *s=c->s;const int now=(int)(c->m-s->minutes);const uint8_t fill=s->zoned[ENR_ROUTE][0],ink=s->space_ink;
+  // (The panel within the chart's circle: the rim is the margins'.)
+  for(int y=0;y<TAPE_P;y++){int lo,hi;enr_span(y,y,0,&lo,&hi);for(int x=lo;x<=hi;x++)plot(c,x,y,s->space);}
+  for(enr_real d=-ENR_ARC_DEG;d<=ENR_ARC_DEG;d+=(enr_real)0.25){int x,y;rim_point(d,ENR_ARC_R,&x,&y);plot(c,x,y,ink);if(d<=0){rim_point(d,ENR_ARC_R-1,&x,&y);plot(c,x,y,fill);}}
+  for(int m=now-ENR_ARC_DEG/ARC_PXD;m<=now+ENR_ARC_DEG/ARC_PXD;m++){
+    const enr_real d=(enr_real)((m-now)*ARC_PXD);const int mm=((m%60)+60)%60,len=mm==0?12:mm%15==0?6:mm%5==0?4:2;
+    for(enr_real r=ENR_ARC_R-len;r<ENR_ARC_R+(mm==0?(enr_real)6.5:0);r+=(enr_real)0.5){int x,y;rim_point(d,r,&x,&y);plot(c,x,y,ink);}
+    if(mm%15==0&&mm){char label[2]={(char)('0'+mm/10),(char)('0'+mm%10)};int x,y;rim_point(d,ENR_ARC_R+9,&x,&y);const int lw=enr_text_width(label,2),n=enr_text_pixels(label,2,x-lw/2,y+4,scratch);for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,ink);}
+  }
+  arc_figures(c);
+  draw_transfer(c);
+  arc_wedge(c,0);
+}
+#endif
 // The time callout (renderEnroute's callout()): on the whole-day chart set
 // aside in open map at the left, level with the body, with its shoulder
 // under it; on the hour chart hung under the body on whichever side keeps
@@ -946,6 +1195,23 @@ static void draw_panel_clock(Ctx *c){
 // Where the callout goes this minute: its glyphs, the figure's top left,
 // and its leader (in scratch, the pixels clear of lettering: *shown).
 // The hour and Fuller day use the same choice of side and leader.
+#if ENR_ROUND
+// (On the Round 2 the figure is kept on the chart's circle across the rows
+// it stands in, below sy or, up, above it.)
+static __attribute__((noinline)) int callout_side_round(const EnrScene *s,int bx,int by,int sy,int fw,int fh,bool up,int *shown){
+  int lo,hi;if(up)enr_span(sy-3-fh,sy-3,3,&lo,&hi);else enr_span(sy+3,sy+3+fh,3,&lo,&hi);
+  int best=0,score[2];
+  for(int k=0;k<2;k++){
+    const int side=k?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<hi-fw+1?f:hi-fw+1;f=f>lo?f:lo;
+    int open;const int len=leader(s,bx,by,sx,sy,side>0?f+fw:f-1,scratch,&open);
+    const bool fits=side>0?sx+2+fw<=hi+1:sx-2-fw>=lo;
+    score[k]=(fits?0:1000)+(len-open)*10+(side==(bx<W/2?1:-1)?0:1);
+  }
+  if(score[1]<score[0])best=1;
+  const int side=best?-1:1,sx=bx+side*10;int f=side>0?sx+2:sx-2-fw;f=f<hi-fw+1?f:hi-fw+1;f=f>lo?f:lo;
+  leader(s,bx,by,sx,sy,side>0?f+fw:f-1,scratch,shown);return f;
+}
+#endif
 static __attribute__((noinline)) int callout_side(const EnrScene *s,int bx,int by,int sy,int fw,int *shown){
   int best=0,score[2];
   for(int k=0;k<2;k++){
@@ -972,20 +1238,33 @@ static bool callout_place(Ctx *c,Glyph *g,int *n,int *fx,int *fy,int *shown){
     const double mid=(net-head-fs)/2,low=f_floor(mid);
     const int reach=room?by-(head+(int)(mid-low>=0.5?low+1:low)+fs+3):26,sy=up?by-reach:by+reach;
     const int fw=time_figure(s,m,2,1,g,n,&fh);
+    #if ENR_ROUND
+    *fx=callout_side_round(s,bx,by,sy,fw,fh,up,shown);*fy=up?sy-3-fh:sy+3;
+    #else
     *fx=callout_side(s,bx,by,sy,fw,shown);*fy=up?sy-3-fh:sy+3;
+    #endif
   }else if(VIEW_IS_DAY(s->view)){
     const bool big=time_figure(s,m,2,1,g,n,&fh)<=s->callout_left-6;
     const int fw=time_figure(s,m,big?2:1,big?1:0,g,n,&fh);
     *fy=by-fh;if(*fy>s->callout_bottom-fh-3)*fy=s->callout_bottom-fh-3;
     if(*fy<s->callout_top)*fy=s->callout_top;
-    *fx=6;const int y=*fy+fh+3,ex=*fx+fw+1;
+    #if ENR_ROUND
+    {int lo,hi;enr_span(*fy,*fy+fh+3,3,&lo,&hi);*fx=lo;}   // (at the chart's circle's left, across its rows)
+    #else
+    *fx=6;
+    #endif
+    const int y=*fy+fh+3,ex=*fx+fw+1;
     // circuitPath() to the shoulder's near end, then the shoulder.
     int k=circuit(bx,by,ex,y,9,line);
     for(int x=*fx-1;x<=ex&&k<SCRATCH;x++)line[k++]=(Px){(int16_t)x,(int16_t)y};
     *shown=0;for(int i=0;i<k;i++)if(open_at(s,line[i]))line[(*shown)++]=line[i];
   }else{
     const int fw=time_figure(s,m,1,0,g,n,&fh),sy=by+26;
+    #if ENR_ROUND
+    *fx=callout_side_round(s,bx,by,sy,fw,fh,false,shown);*fy=sy+3;
+    #else
     *fx=callout_side(s,bx,by,sy,fw,shown);*fy=sy+3;
+    #endif
   }
   return true;
 }
@@ -1034,7 +1313,10 @@ static int minute_boxes(Ctx *c,Box *out){
     const int tw=enr_text_width(m->minute,2)-1,fh=11,fw=tw+6,point=6,ahead=s->forward>0?1:-1;
     const enr_real room=s->forward>0?s->c1x-mx:mx-s->c1x;
     const int sx=js_round(mx+nx*20),top=js_round(my+ny*20)-(ny<=0?4:0)-(ny>0?fh-4:0);
-    const int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
+    int d=fabs(nx)>0.5?sign(nx):room<fw+point+8?-ahead:ahead;
+  #if ENR_ROUND
+  if(!on_chart(d>0?sx+1:sx-fw-point,top,fw+point,fh))d=-d;   // (the pennant on the chart's circle)
+  #endif
     out[n++]=(Box){d>0?sx+1:sx-fw-point,top,fw+point,fh};
   }else if(VIEW_IS_WORLD(s->view)&&(s->flags&ENR_SLIDING_TAPE)&&s->fig_bits){
     const int IX=W/2,PX=3,now=(int)(m-s->minutes);int hn=0,nn=0;while(hn<3&&s->tape_hour[hn])hn++;
@@ -1110,14 +1392,30 @@ static void draw_moving(Ctx *c,int part){
     // (Over what the hour's layer drew late, as the flag is: it is the time.)
     draw_callout(c);
   }
+  #if ENR_ROUND
+  // (The Round 2's tape round its arc; the route's ruler as ever.)
+  const bool ruler=s->tape_x0>s->tape_x1;
+  if(world&&(!part||part==PART_INDEX)){if(s->clock)draw_panel_clock(c);else if(s->flags&ENR_SLIDING_TAPE)arc_sliding(c);else if(ruler)draw_index(c);else{arc_index(c);draw_transfer(c);}}
+  if(world&&!s->clock&&!(s->flags&ENR_SLIDING_TAPE)&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT)){if(ruler)draw_readout(c);else arc_readout(c);}
+  #else
   if(world&&(!part||part==PART_INDEX)){if(s->clock)draw_panel_clock(c);else if(s->flags&ENR_SLIDING_TAPE)draw_sliding_tape(c);else draw_index(c);}
   if(world&&!s->clock&&!(s->flags&ENR_SLIDING_TAPE)&&(s->flags&ENR_MINUTE_FLAG)&&(!part||part==PART_READOUT))draw_readout(c);
+  #endif
   if(!part||part==PART_EVENTS)draw_events(c);
+  #if ENR_ROUND
+  // (Round the rim: the minute's time, pass line and corner, or in the
+  // corner's place the watch's state.)
+  if(!part||part==PART_ZULU)rim_zulu(c);
+  if(!part||part==PART_TOP)rim_top(c);
+  if(!part||part==PART_HEIGHT)rim_corner(c,s_status[0]?s_status:m->corner,s_status[0]?(int)sizeof s_status:(int)sizeof m->corner);
+  const int off=0;
+  #else
   if(!part||part==PART_ZULU)draw_text(c,m->zulu,5,s->zulu_x,0,s->zulu_baseline);
   if(!part||part==PART_TOP)draw_text(c,m->top,sizeof m->top,s->top_x,0,s->top_baseline);
   const int off=slide_offset(s,m);
   // The margins' corner, or in its place the watch's state.
   if(s->height_right&&(!part||part==PART_HEIGHT))draw_text(c,s_status[0]?s_status:m->corner,s_status[0]?(int)sizeof s_status:(int)sizeof m->corner,0,s->height_right+off,s->height_baseline);
+  #endif
   if(world&&(s->flags&ENR_SLIDING_WORLD)&&(!part||part==PART_SOURCE))draw_text(c,s->source,sizeof s->source,s->top_x+off,0,s->height_baseline);
   // The minute flag over everything: it is the time.
   if(flag&&!part)draw_flag(c);
@@ -1129,6 +1427,9 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
   Ctx c={scene,&scene->minutes[minute],frame,row_stride,{0,0,0},0,false,{0,0,0,0},NULL};
   night_ready(scene,&work->night[0],c.m);c.n=&work->night[0];
   const int drawn=draw_base(&c,mask,nmask,from);
+  #if ENR_ROUND
+  rim_hour(&c);          // (the rim's own, over what the base drew again)
+  #endif
   draw_circle(&c);
   draw_bold_route(&c,minute);
   draw_moving(&c,PART_ALL);
@@ -1137,6 +1438,9 @@ static int render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride
 }
 static void work_end(void);
 static bool work_begin(const EnrScene *s,bool masks){
+  #if ENR_ROUND
+  enr_rim_style(s->rim);
+  #endif
   work=malloc(sizeof(Work));if(!work)return false;
   memset(work,0,sizeof *work);
   work->scratch_px=malloc(sizeof(Px)*(SCRATCH+DIGITS));work->night=malloc(sizeof(Night)*2);
@@ -1156,6 +1460,9 @@ void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride){
 __attribute__((optimize("no-schedule-insns2","no-ipa-cp","no-ipa-cp-clone","no-tree-sra","no-forward-propagate","no-delete-null-pointer-checks","no-ira-hoist-pressure","no-optimize-sibling-calls")))
 #endif
 void enr_ready(EnrScene *s){
+  #if ENR_ROUND
+  enr_rim_style(s->rim);
+  #endif
   if(!ROLLED(s))for(int y=0;y<H;y++){s->row_q[y][0]=q30(s->row_cos[y]);s->row_q[y][1]=q30(s->row_sin[y]);}
   // Night's thresholds: sunrise, civil twilight, the zones' dither for each
   // Bayer value (t*16 > b + 0.5) and the paper screen's (t*4 > b, and t > 0).

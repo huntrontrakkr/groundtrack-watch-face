@@ -43,6 +43,7 @@
   /* The preview stays at the top of the screen while the settings scroll under it. */
   .preview{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;gap:12px;align-items:center;justify-content:center;padding:8px 12px;background:var(--water);border-bottom:1px solid var(--line)}
   .preview canvas{width:140px;height:160px;flex:none;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .preview canvas.round{width:160px;height:160px;border-radius:50%}
   .preview .side{flex:0 1 150px;min-width:0;font-size:12px}
   .preview .side p{margin:6px 0 4px;opacity:.75}
   body{padding-top:178px}
@@ -217,6 +218,11 @@
     <div class="group" id="legend-group"><h3>In the sheet's open space</h3>
       <label class="row"><input type="checkbox" name="legend"><span class="name">A scale bar<span class="note">A round length of the ground at the sheet's scale, where the net leaves room for it</span></span></label>
     </div>
+    <div class="group" id="rim-group" hidden><h3>Round the edge</h3>
+      <label class="row"><input type="radio" name="rim" value="bezel"><span class="name">Bezel<span class="note">The margins lettered round an octagon's sides, the diagonals turned to match</span></span></label>
+      <label class="row"><input type="radio" name="rim" value="chords"><span class="name">Chords<span class="note">Straight lines over the chart and under it, knocked out of the map</span></span></label>
+      <label class="row"><input type="radio" name="rim" value="instrument"><span class="name">Instrument<span class="note">The bezel with the minutes ticked down its sides and the minute marked at the edge</span></span></label>
+    </div>
     <div class="group"><h3>The bottom right corner</h3>
       <label class="row"><input type="radio" name="corner" value="day"><span class="name" id="corner-day">Day of the year<span class="note">DAY 270</span></span></label>
       <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
@@ -279,6 +285,8 @@
   if(s.hourFigures!=='0')s.hourFigures='1';
   s.extra=(config.settings.extra||['','']).slice(0,2);s.north=config.settings.north==='1';s.tracks=(config.settings.tracks||[]).slice();
   s.legend=config.settings.legend==='1';s.vibe=config.settings.vibe==='1';s.fuel=config.settings.fuel!=='0';
+  // (On a Round 2, its rim: round the octagon, across chords, or the instrument.)
+  s.rim=['bezel','chords','instrument'].indexOf(config.settings.rim)>=0?config.settings.rim:'bezel';var round=!!config.settings.round;
   s.clock24=config.settings.clock24!=='0';
   s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
   config.bodies.forEach(function(b){info[b[0]]={name:b[1],note:b[2],view:b[3],period:b[4],group:b[5],plot:b[6]};});
@@ -416,6 +424,7 @@
   function rules(){return RULES.settingsFor(face(),s.body,info[s.body].view,{span:s.span,readout:s.readout,tape:s.tape,plot:info[s.body].plot,bare:s.hourFigures==='0'});}
   function render(){
     var r=rules(),kind=KINDS[r.chart],world=r.chart==='world'||r.chart==='worldday',daily=r.chart==='worldday',sat=s.body.indexOf('sat:')===0;
+    hide('rim-group',!round);show('rim',s.rim);
     if(!fuller){
       // A satellite too fast for Enroute is on the Plotboard, and says why.
       var why=RULES.unsuited('enroute',info[s.body].view,info[s.body].period);
@@ -432,7 +441,9 @@
     document.getElementById('chart-title').textContent=FACES[face()];
     document.getElementById('chart-note').textContent=kind[0]+'. '+kind[1];
     hide('span-group',!r.span);show('span',s.span);
-    hide('tape-group',!r.tape);show('tape',s.tape);
+    // (A Round 2's rows are cut to its glass: the world cannot slide under its tape.)
+    if(round&&s.tape==='slide')s.tape='tape';
+    hide('tape-group',!r.tape);show('tape',s.tape,round?['fixed','tape','clock','route']:null);
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
     hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;form.elements.vibe.checked=s.vibe;form.elements.fuel.checked=s.fuel;
@@ -624,7 +635,9 @@
   // here, once, and its elements go to the phone with the settings. Shown
   // as the watch's reflective screen shows its colours (Pebble's Sunlight
   // mapping), or as drawn. The minute is kept up while the page is open.
-  var PV=__PREVIEW__,W=200,H=228,core=null,framePtr=0,GT=null,skew=(PV&&PV.now||Date.now())-Date.now(),screen=true,built=null,drawnMinute=-1,fetching={},failed={};
+  var PV=__PREVIEW__,W=round?260:200,H=round?260:228,core=null,framePtr=0,GT=null,skew=(PV&&PV.now||Date.now())-Date.now(),screen=true,built=null,drawnMinute=-1,fetching={},failed={};
+  // (A Round 2's preview is its round screen.)
+  if(round){var cv0=document.getElementById('preview');cv0.width=W;cv0.height=H;cv0.className='round';}
   function note(text){document.getElementById('preview-note').textContent=text||'';}
   // (Without a preview the bar stays, saying why.)
   function blank(on){document.getElementById('preview').style.visibility=on?'hidden':'';document.getElementById('colours').hidden=on;document.getElementById('colours-now').hidden=on;}
@@ -635,7 +648,8 @@
     return new Response(gz).arrayBuffer().then(function(buf){
       var all=new Uint8Array(buf),wasm=null;
       PV.assets.parts.forEach(function(p){
-        if(p[0]===-1)wasm=all.subarray(p[1],p[1]+p[2]);
+        // (The core for the watch's screen: the Round 2's its own.)
+        if(p[0]===(round?-3:-1))wasm=all.subarray(p[1],p[1]+p[2]);
         // (The script that makes the chart inputs: it leaves GroundtrackInput.)
         if(p[0]===-2)(0,eval)(new TextDecoder().decode(all.subarray(p[1],p[1]+p[2]))+'\n;window.GroundtrackInput=GroundtrackInput;');
       });
@@ -662,7 +676,7 @@
   function inputNow(){
     var now=Date.now()+skew,minute=Number(GT.clockParts(now,PV.zone).m),start=Math.floor(now/60000)*60000-minute*60000;
     return {minute:minute,text:GT.chartInput({body:s.body,start:start,plate:s.plate,readout:s.readout==='off'?false:s.readout,numerals:s.numerals,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,
-      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,north:s.north,extra:s.extra,tracks:s.tracks})};
+      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,north:s.north,extra:s.extra,tracks:s.tracks,rim:s.rim})};
   }
   // A satellite's elements for the preview, asked of CelesTrak once.
   function need(n){
@@ -732,7 +746,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',rim:s.rim,vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

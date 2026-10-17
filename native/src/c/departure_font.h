@@ -9,7 +9,15 @@ typedef struct {int8_t advance,left,top;uint16_t first,count;} EnrGlyph;
 // native/resources/font.bin: the glyphs (8 bytes each: advance, left, top,
 // a pad byte, first and count little-endian), then the runs (3 bytes each),
 // as the structs lie in memory.
+// Then the diagonal glyphs: a pixel count each, then their pixels (a byte
+// each: x + 8 in the high four bits, y + 8 in the low), turned clockwise
+// about the glyph's middle; loaded on the Round 2 only.
+#define ENR_FONT_DIAG_PIXELS 573
+#if defined(ENR_ROUND)&&ENR_ROUND
+#define ENR_FONT_BYTES (8*ENR_FONT_GLYPH_COUNT+3*ENR_FONT_RUN_COUNT+ENR_FONT_GLYPH_COUNT+ENR_FONT_DIAG_PIXELS)
+#else
 #define ENR_FONT_BYTES (8*ENR_FONT_GLYPH_COUNT+3*ENR_FONT_RUN_COUNT)
+#endif
 _Static_assert(sizeof(EnrGlyph)==8&&sizeof(EnrRun)==3,"font.bin is the structs as they lie in memory");
 extern const char ENR_FONT_CHARS[41];
 // A character's place among them, or -1.
@@ -20,5 +28,8 @@ extern const EnrGlyph *enr_font_glyphs;
 extern const EnrRun *enr_font_runs;
 #define ENR_FONT_GLYPHS enr_font_glyphs
 #define ENR_FONT_RUNS enr_font_runs
+#if defined(ENR_ROUND)&&ENR_ROUND
+extern const uint8_t *enr_font_diag;
+#endif
 // Points the lettering at font.bin's ENR_FONT_BYTES bytes.
 void enr_font_load(const uint8_t *bytes);

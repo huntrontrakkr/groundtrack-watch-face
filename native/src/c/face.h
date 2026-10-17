@@ -3,21 +3,10 @@
 // satellites) or Groundtrack Fuller (FACE_FULLER: rolling Fuller sheets of
 // the hour and the whole day). Each leaves out the other's code, as
 // constants the compiler can see; the host harnesses (neither defined)
-// keep both. On the Round 2 (ENR_ROUND, set by its build) an app holds
-// less beside its round layout, and Groundtrack is two: Enroute alone
-// (FACE_ENROUTE) and the Plotboard alone (FACE_PLOTBOARD: native-plotboard/).
+// keep both. (On the Round 2 the same, its builder and renderer kept as code
+// blobs out of the app's size: native/src/c/blob.h.)
 #pragma once
-#if defined(FACE_ENROUTE)&&defined(ENR_ROUND)&&ENR_ROUND
-#define FACE_HOUR 1
-#define FACE_WORLD 0
-#define FACE_ROLL 0
-#define FACE_CHART 1
-#elif defined(FACE_PLOTBOARD)
-#define FACE_HOUR 0
-#define FACE_WORLD 1
-#define FACE_ROLL 0
-#define FACE_CHART 1
-#elif defined(FACE_ENROUTE)
+#if defined(FACE_ENROUTE)
 #define FACE_HOUR 1
 #define FACE_WORLD 1
 #define FACE_ROLL 0

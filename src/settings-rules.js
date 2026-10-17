@@ -16,6 +16,10 @@
 // or 'still' for a satellite that stands over one place: its day is a map
 // of where it stands, and its hour is nothing); plot: what the Plotboard
 // shows of it (plotOf: 'hour' or 'day').
+// The Round 2's rim (native/src/c/enroute_core.h ENR_RIM_*), in the overlay byte's bits 4-5: lettering round an
+// octagon's sides (a bezel), straight lines over and under (chords), or the bezel with the minutes ticked (an
+// instrument). The Time 2 takes no notice of them.
+export const RIMS=['bezel','chords','instrument'];
 export function chartOf(face,body,view,span,plot){
   const sat=body.indexOf('sat:')===0;
   if(face==='fuller')return !sat||view==='still'||(view==='day'&&span!=='hour')?'day':'hour';

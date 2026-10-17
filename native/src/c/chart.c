@@ -345,12 +345,11 @@ typedef struct RunChunk {struct RunChunk *next;uint16_t used;uint8_t data[RUN_CH
 typedef struct {uint8_t *arena;RunChunk *head,*tail;void *(*alloc)(size_t);uint16_t row_offset[H+1];unsigned n,cap,dropped;bool failed;} RunSink;
 static int row_runs(const uint8_t *row,uint8_t *out);
 #if ENR_ROUND
-// The Round 2's chart is a circle of CHART_R pixels about the screen's
+// The Round 2's chart is a circle of ENR_CHART_R pixels about the screen's
 // middle (its rim and the corners are the margins'): the first pixel of row
 // y within it (and a pixel more), or W/2 for a row it does not reach.
-#define CHART_R 114
 static int circle_x0(int y){
-  const int d=2*y+1-H,r2=4*CHART_R*CHART_R-d*d;
+  const int d=2*y+1-H,r2=4*ENR_CHART_R*ENR_CHART_R-d*d;
   int half=r2>0?(int)f_floor(f_sqrt((double)r2)/2)+2:0;if(half>W/2)half=W/2;
   return W/2-half;
 }
@@ -687,6 +686,27 @@ static void clear(Canvas *cv,double fx,double fy){
 }
 typedef EnrPx Px;
 typedef struct {int x,y,w,h;} Box;
+#if ENR_ROUND
+// Whether a box lies within the Round 2's chart circle, `margin` in from
+// its edge (its corners are).
+static bool in_circle(Box b,int margin){
+  const int r=ENR_PLACE_R-margin,xs[2]={b.x,b.x+b.w-1},ys[2]={b.y,b.y+b.h-1};
+  for(int i=0;i<2;i++)for(int j=0;j<2;j++){const int dx=2*xs[i]+1-W,dy=2*ys[j]+1-H;if(dx*dx+dy*dy>4*r*r)return false;}
+  return true;
+}
+#define ON_CHART(b,margin) in_circle(b,margin)
+// A box w by h at (*x, *y) moved onto the chart's circle, `margin` in:
+// across, or where the circle is too narrow there, toward its middle first.
+static void fit_circle(int *x,int *y,int w,int h,int margin){
+  for(int k=0;k<H;k++){
+    int lo,hi;enr_span(*y,*y+h-1,margin,&lo,&hi);
+    if(hi-lo+1>=w){*x=*x<lo?lo:*x>hi-w+1?hi-w+1:*x;return;}
+    *y+=*y+h/2<H/2?1:-1;
+  }
+}
+#else
+#define ON_CHART(b,margin) true
+#endif
 // letter(): a halo of knockout round every pixel, then the ink; over space
 // the ink is the space ink.
 static void letter(Canvas *cv,const Px *px,int n,int layer,int halo){
@@ -1132,15 +1152,33 @@ static int fuller_ground_step(ChartBuild *b,int budget){
   }
   return ground_rows_end(g);
 }
-// The world band's instrument tape (SCALE in enroute-render.js).
+// The world band's instrument tape (SCALE in enroute-render.js). On the
+// Round 2 an arc over the band (enroute_core.h ENR_ARC_*), the band below
+// its panel fitted to the chart's circle.
+#if ENR_ROUND
+#define TAPE_X0 (W/2-ENR_ARC_X)
+#define TAPE_X1 (W/2+ENR_ARC_X)
+#define TAPE_BASELINE 62                // (the route's ruler, under the figures)
+#define TAPE_PANEL ENR_ARC_PANEL
+#define BAND_W 180
+#define BAND_BOTTOM ENR_BAND_BOTTOM
+#define BAND_TOP (TAPE_PANEL+8)
+#else
 #define TAPE_X0 10
 #define TAPE_X1 190
 #define TAPE_BASELINE 46
 #define TAPE_PANEL 67
+#define BAND_W (W-16)
+#define BAND_BOTTOM (H-10)
+#define BAND_TOP (TAPE_PANEL+25)
+#endif
 ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
   ChartBuild *b=src_->alloc(sizeof(ChartBuild));if(!b)return NULL;
   memset(b,0,sizeof *b);b->in=*in_;b->src=*src_;
   if(ENR_ROUND&&b->in.tape==2)b->in.tape=1;    // (the Round 2's rows are cut to the glass: no sliding world, the sliding tape)
+  #if ENR_ROUND
+  enr_rim_style((b->in.legend>>4)&3);
+  #endif
   const unsigned arena=RUN_ARENA;
   b->sink.arena=src_->alloc(arena);if(!b->sink.arena){src_->release(b);return NULL;}
   b->sink.cap=arena;
@@ -1188,14 +1226,21 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     cam.day=cam.wide=true;cam.lat0=(ahi+alo)/2;cam.k=f_cos(cam.lat0*RAD);cam.lonMid=(bhi+blo)/2;
     // (A shape that hardly moves, a satellite standing still, is not drawn
     // larger than twelve degrees to the chart: there is no map so near.)
+    #if ENR_ROUND
+    // (On the Round 2 set right of the middle in the chart's circle, the
+    // day's callout at its left.)
+    {const double w=(bhi-blo)*cam.k,sa=124/(w>12?w:12),h=ahi-alo,sb=150/(h>12?h:12);cam.scale=sa<sb?sa:sb;}
+    cam.y0=H/2;cam.x0=W/2+30;
+    #else
     {const double w=(bhi-blo)*cam.k,sa=(W*.5)/(w>12?w:12),h=ahi-alo,sb=(H-70)/(h>12?h:12);cam.scale=sa<sb?sa:sb;}
     cam.y0=(14+H-16)/2;cam.x0=W-16-(bhi-blo)*cam.k*cam.scale/2;
+    #endif
     h0=0;h1=count-1;
   }
   else if(VIEW_IS_WORLD(in->view)){
     // The whole world in a band, fitted to the hour's longitudes, in true
     // proportion.
-    cam.world=true;cam.scale=(W-16)/(maxlon-minlon>180?maxlon-minlon:180);cam.k=1;cam.y0=H-10;
+    cam.world=true;cam.scale=BAND_W/(maxlon-minlon>180?maxlon-minlon:180);cam.k=1;cam.y0=BAND_BOTTOM;
     cam.lonMid=(maxlon+minlon)/2;cam.x0=W/2;
     // With the world sliding under the tape, the band is the whole world
     // round, W columns to 360 degrees: the minute renderer turns it under
@@ -1206,8 +1251,8 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
     // and would else run off it through the date above and the line below.
     // (The band leaves room under the panel for its date and, over that,
     // the strip of the transfer's marks: at most 126 rows of it.)
-    {const double most=(H-10-(TAPE_PANEL+25))/(double)(WORLD_NORTH-WORLD_SOUTH);if(cam.scale>most)cam.scale=most;}
-    {const double room=(H-10-(TAPE_PANEL+25))/cam.scale-(WORLD_NORTH-WORLD_SOUTH),extra=room>36?36:room>0?room:0;
+    {const double most=(BAND_BOTTOM-BAND_TOP)/(double)(WORLD_NORTH-WORLD_SOUTH);if(cam.scale>most)cam.scale=most;}
+    {const double room=(BAND_BOTTOM-BAND_TOP)/cam.scale-(WORLD_NORTH-WORLD_SOUTH),extra=room>36?36:room>0?room:0;
     cam.lat0=WORLD_SOUTH-extra*2/3;
     cam.top=(int)f_ceil(sy(&cam,WORLD_NORTH+extra/3));cam.bottom=(int)f_floor(sy(&cam,cam.lat0));}
   }
@@ -1233,7 +1278,7 @@ ChartBuild *chart_begin(const ChartInput *in_,const ChartSources *src_){
       if(ny>0){nx=-nx;ny=-ny;}
       if(fabs(ny)<.3&&nx>0){nx=-nx;ny=-ny;}
       cam.slow=true;cam.nx=nx;cam.ny=ny;
-      cam.x0=W/2-nx*30;cam.y0=(14+H-16)/2+8-ny*30;
+      cam.x0=W/2-nx*30;cam.y0=(ENR_ROUND?H/2:(14+H-16)/2)+8-ny*30;
       if(!POLAR||cam.pole||(glat(&cam,0)<=80&&glat(&cam,H)>=-80))break;
       // The plane unturned, and the hour's middle on it; north there is up
       // (an hour about the pole itself is turned as its middle falls, a hair
@@ -1317,7 +1362,7 @@ static __attribute__((noinline)) void scale_bar(Canvas *cv,const FullerCam *fc,c
   char label[10];memcpy(put_int(label,km,1)," KM",4);
   const int lw=text_width(label),w=(len>lw?len:lw)+6;
   for(int y=H-22;y>=40;y-=6)for(int x=6;x+w<W;x+=6){
-    const Box box={x-3,y-16,w,20};bool open=!overlaps(taken,taken_n,box)&&!overlaps(figs,nfigs,box);
+    const Box box={x-3,y-16,w,20};bool open=ON_CHART(box,2)&&!overlaps(taken,taken_n,box)&&!overlaps(figs,nfigs,box);
     for(int dy=0;dy<=20&&open;dy+=10)for(int dx=0;dx<=w&&open;dx+=12)open=fuller_locate(fc,box.x+dx,box.y+dy,NULL)<0;
     if(!open)continue;
     // (Its pixels gathered, then plotted in one place: the code is small.)
@@ -1538,7 +1583,8 @@ static bool finish_draw(ChartBuild *b){
     double x=sx(cam,lon),y=sy(cam,lat);if(polar)project(cam,lat,lon,&x,&y);x=js_round(x);y=js_round(y);if(!(y>=top&&y<=bottom))continue;
     for(int d=-2;d<=2;d++){plot(&cv,x+d,y,L_GRID);plot(&cv,x,y+d,L_GRID);}
   }}
-  if(!polar){
+  // (The Round 2's chart has no edge to tick: its rim is the margins'.)
+  if(!polar&&!ENR_ROUND){
   for(double lon=f_ceil(g0lon/minor)*minor;lon<=g1lon;lon+=minor){
     const double x=js_round(sx(cam,lon));const int len=f_mod(lon,step)==0?4:2;
     for(int d=0;d<len;d++){plot(&cv,x,top+d,L_GRID);plot(&cv,x,bottom-d,L_GRID);}
@@ -1554,12 +1600,23 @@ static bool finish_draw(ChartBuild *b){
   // The lettering the day's callout breaks its leader for.
   Box *const avoid=notes->avoid;int avoid_n=0;
   #define AVOID(b) do{if(avoid_n<24)avoid[avoid_n++]=(b);}while(0)
+  #if ENR_ROUND
+  // (The Round 2's margins are its rim's; across chords, their lines'.)
+  if(((in->legend>>4)&3)==ENR_RIM_CHORDS){if(!world)taken[taken_n++]=(Box){0,0,W,32};taken[taken_n++]=(Box){0,world?215:227,W,H-(world?215:227)};}
+  #else
   if(!world){taken[taken_n++]=(Box){0,H-16,W,16};if(in->home)taken[taken_n++]=(Box){0,0,W,14};}
+  #endif
   bool home_mark=false;int hx=0,hy=0;Box home_box={0,0,0,0};enr_pack *const marks=notes->marks;int mark_n=0;Px *const home_code=draw->home_code;int home_code_n=0;
   if(in->home){
     double qx,qy;project(cam,in->home_lat,in->home_lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
-    const int w=text_width("HOM");const bool right=x+7+w<W-3;const Box box={right?x-5:x-8-w,y-6,w+13,13};
-    if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&!(rolled&&fuller_locate(b->fc,x,y,NULL)<0)&&!overlaps(taken,taken_n,box)){
+    const int w=text_width("HOM");
+    #if ENR_ROUND
+    const bool right=ON_CHART(((Box){x-5,y-6,w+13,13}),2);
+    #else
+    const bool right=x+7+w<W-3;
+    #endif
+    const Box box={right?x-5:x-8-w,y-6,w+13,13};
+    if(x>=4&&x<=W-5&&y>=top+6&&y<=bottom-6&&ON_CHART(box,2)&&!(rolled&&fuller_locate(b->fc,x,y,NULL)<0)&&!overlaps(taken,taken_n,box)){
       home_code_n=text_pixels("HOM",right?x+7:x-7-w,y+4,home_code);taken[taken_n++]=box;home_mark=true;hx=x;hy=y;home_box=box;
       AVOID(bounds_of(home_code,home_code_n));
     }
@@ -1579,8 +1636,14 @@ static bool finish_draw(ChartBuild *b){
     Station st;{uint8_t t[20];if(src->tables(src->table_source,TABLE_STATION_AT(s),t,20)!=20)FAIL;memcpy(st.code,t,4);st.code[3]=0;memcpy(&st.lat,t+4,8);memcpy(&st.lon,t+12,8);}
     double qx,qy;project(cam,st.lat,st.lon,&qx,&qy);const int x=(int)js_round(qx),y=(int)js_round(qy);
     if(x<4||x>W-5||y<top+6||y>bottom-6)continue;
-    const int w=text_width(st.code);const bool right=x+5+w<W-3;const Box box={right?x-3:x-6-w,y-5,w+9,11};
-    if(overlaps(taken,taken_n,box))continue;
+    const int w=text_width(st.code);
+    #if ENR_ROUND
+    const bool right=ON_CHART(((Box){x-3,y-5,w+9,11}),2);
+    #else
+    const bool right=x+5+w<W-3;
+    #endif
+    const Box box={right?x-3:x-6-w,y-5,w+9,11};
+    if(!ON_CHART(box,2)||overlaps(taken,taken_n,box))continue;
     if(taken_n<TAKEN)taken[taken_n++]=box;
     if(nshown<32){shown[nshown][0]=(int16_t)x;shown[nshown][1]=(int16_t)y;shown_table[nshown]=(uint8_t)s;nshown++;}
     if(ringed){const int n=circle_pixels(cam,st.lat,st.lon,acquisition,5,FACE_CHART?draw->sb:NULL,FACE_CHART?draw->cb:NULL,ring);for(int i=0;i<n;i++)plot(&cv,ring[2*i],ring[2*i+1],L_GRID);}
@@ -1706,6 +1769,51 @@ static bool finish_draw(ChartBuild *b){
     #define RX(m) (track[AT_ROUTE(m)].a)
     #define ON_BAND(m) (ON(m)&&RX(m)>=0&&RX(m)<W)
     cv.panel=P;for(int y=0;y<P;y++)for(int x=0;x<W;x++)layer_set(classes,x,y,0);
+    #if ENR_ROUND
+    // The Round 2's tape: the minutes round an arc over the band, ticked in
+    // from its baseline, every fifteenth labelled outside it, the hour's
+    // marks long both ways; this hour's figure and the next's under its top,
+    // smaller (the arc leaves no more room). The route's ruler, a straight
+    // tape lower in the panel under the figures, its minutes each over that
+    // minute's place on the route.
+    const int fsize=28,RB=62;(void)B;(void)X0;(void)X1;
+    if(!routed){
+      const double R=ENR_ARC_R;
+      for(int k=0;k<=ENR_ARC_DEG*8;k++){const double a=(-ENR_ARC_DEG+k*0.25)*RAD;plot(&cv,(int)js_round(W/2+R*f_sin(a)),(int)js_round(H/2-R*f_cos(a)),L_SPACE_INK);}
+      for(int m=0;m<=60;m++){
+        const double a=(forward?-ENR_ARC_DEG+2.0*ENR_ARC_DEG*m/60:ENR_ARC_DEG-2.0*ENR_ARC_DEG*m/60)*RAD,sa=f_sin(a),ca=f_cos(a);
+        const int len=m%60==0?12:m%15==0?6:m%5==0?4:2;
+        for(double r=R-len;r<R+(m%60==0?6.5:0);r+=0.5)plot(&cv,(int)js_round(W/2+r*sa),(int)js_round(H/2-r*ca),L_SPACE_INK);
+        if(m%15==0&&m%60){
+          char label[3]={(char)('0'+m/10),(char)('0'+m%10),0};const int lw=text_width(label);
+          const int cx=(int)js_round(W/2+(R+9)*sa),cy=(int)js_round(H/2-(R+9)*ca),n=text_pixels(label,cx-lw/2,cy+4,scratch);
+          for(int i=0;i<n;i++)plot(&cv,scratch[i].x,scratch[i].y,L_SPACE_INK);
+        }
+      }
+    }else{
+      for(int x=0;x<W;x++)plot(&cv,x,RB,L_SPACE_INK);
+      uint64_t labelled=0;
+      const bool hours=daily;
+      for(int m=0;m<=60;m++){
+        if(hours?m*12>=count:!ON_BAND(m))continue;
+        const double x=js_round(hours?track[m*12].a:RX(m));const int len=hours?(m%6==0?6:m%3==0?4:2):m%60==0?12:m%15==0?6:m%5==0?4:2;
+        for(int d=1;d<=len;d++)plot(&cv,x,RB+d,L_SPACE_INK);
+        const int col=(int)x>>3;
+        if((hours?m%6==0:m%15==0&&m%60)&&col>=0&&col<W/8&&!(labelled>>col&7)){
+          labelled|=(uint64_t)2<<col;
+          const int v=hours?HOUR_SHOWN(m):m;char label[4];label[0]=(char)('0'+v/10);label[1]=(char)('0'+v%10);label[2]=0;
+          const int lw=text_width(label),n=text_pixels(label,(int)x-(int)f_floor(lw/2.0)+1,RB+17,scratch);
+          for(int i=0;i<n;i++)plot(&cv,scratch[i].x,scratch[i].y,L_SPACE_INK);
+        }
+      }
+    }
+    {const int hw=run_width(hour,fsize),nw=run_width(next,fsize),tw=hw+8+nw,left=W/2-tw/2,fy=routed?RB-6-figure(fsize,'0')->height:50;
+    const int gx=forward?left:left+nw+8,nx=forward?left+hw+8:left;
+    Figures fig;if(!load_figures(src,fsize,hour,next,&fig,room,room_size))FAIL;
+    FigureRun run;figure_run(hour,fsize,gx,fy,&run);figure_bind(&run,&fig,fsize);plot_figure(&cv,&run,0,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
+    figure_run(next,fsize,nx,fy,&run);figure_bind(&run,&fig,fsize);plot_figure(&cv,&run,1,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
+    tape_lo=0;tape_hi=(int16_t)(W-1);}
+    #else
     for(int x=0;x<W;x++)plot(&cv,x,P-1,L_SPACE_INK);
     for(int x=routed?0:X0;x<=(routed?W-1:X1);x++)plot(&cv,x,B,L_SPACE_INK);
     // (The columns its labels have taken, by eights.)
@@ -1738,6 +1846,7 @@ static bool finish_draw(ChartBuild *b){
     FigureRun run;figure_run(hour,size,gx,4,&run);figure_bind(&run,&fig,size);plot_figure(&cv,&run,0,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
     figure_run(next,size,nx,4,&run);figure_bind(&run,&fig,size);plot_figure(&cv,&run,1,L_SPACE_INK);figs[nfigs++]=figure_bounds(&run);
     tape_lo=(int16_t)((gx+hw<nx+nw?gx+hw:nx+nw)+3);tape_hi=(int16_t)((gx>nx?gx:nx)-3-text_width("00"));
+    #endif
     // (How its minutes fall on the route, the transfer, is the minute's.)
       #undef ON_BAND
       #undef RX
@@ -1759,7 +1868,11 @@ static bool finish_draw(ChartBuild *b){
         int widest=0;for(int d=0;d<10;d++)if(figure(ms,(char)('0'+d))->width>widest)widest=figure(ms,(char)('0'+d))->width;
         const int cs=figure(small,'0')->height/7;
         extra=gap_for(size)+(mono?3+26:in->numerals==ENR_COLON?1+(cs>3?cs:3)+gap_for(size)+1+2*widest+gap_for(small):3+2*widest+gap_for(ms));
+        #if ENR_ROUND
+        {const int fh_=figure(size,'0')->height;int lo,hi;enr_span(c0y-26-fh_,c0y-26,3,&lo,&hi);if(run_width(hour,size)+extra>hi-lo+1&&!try)extra=0;}
+        #else
         if(run_width(hour,size)+extra>W-8&&!try)extra=0;
+        #endif
       }
       counter=(uint8_t)(size==72?2:1);
     }
@@ -1780,7 +1893,15 @@ static bool finish_draw(ChartBuild *b){
     }
     // (The time, wider than the hour alone, can reach the next hour's
     // figure: that one then stands on the other side of the route.)
-    if(counter&&hx0<nx0+nw&&nx0<hx0+hw&&hy0<ny0+fh&&ny0<hy0+fh){ny0=ny0<c1y?c1y+26:c1y-26-fh;ny0=ny0<4?4:ny0>H-18-fh?H-18-fh:ny0;}
+    #if ENR_ROUND
+    // (Each wholly on the chart's circle.)
+    fit_circle(&hx0,&hy0,hw,fh,3);fit_circle(&nx0,&ny0,nw,fh,3);
+    #endif
+    if(counter&&hx0<nx0+nw&&nx0<hx0+hw&&hy0<ny0+fh&&ny0<hy0+fh){ny0=ny0<c1y?c1y+26:c1y-26-fh;ny0=ny0<4?4:ny0>H-18-fh?H-18-fh:ny0;
+      #if ENR_ROUND
+      fit_circle(&nx0,&ny0,nw,fh,3);
+      #endif
+    }
     FigureRun run;figure_run(hour,size,hx0,hy0,&run);figure_bind(&run,&fig,size);
     if(counter)figs[nfigs++]=(Box){hx0,hy0,hw,fh};else{letter_figure(&cv,&run,0,L_INK);figs[nfigs++]=figure_bounds(&run);}
     figure_run(next,size,nx0,ny0,&run);figure_bind(&run,&fig,size);letter_figure(&cv,&run,2,L_INK);figs[nfigs++]=figure_bounds(&run);
@@ -1803,9 +1924,12 @@ static bool finish_draw(ChartBuild *b){
     if(i>=count||JUMP(i-1,i))continue;
     const double f=(double)(t-T_OF(b,i-1))/((T_OF(b,i)-T_OF(b,i-1))?(double)(T_OF(b,i)-T_OF(b,i-1)):1);
     const int x=(int)js_round(track[i-1].a+(track[i].a-track[i-1].a)*f),y=(int)js_round(track[i-1].b+(track[i].b-track[i-1].b)*f);
-    if(x<5||x>W-6||y<top+8||y>bottom-4)continue;
+    if(x<5||x>W-6||y<top+8||y>bottom-4||!ON_CHART(((Box){x-5,y-5,11,9}),1))continue;
     symbol(&cv,&FIX,x,y-1);
     const char *name=in->events[e].name;const int lw=text_width(name);int lx=x-lw/2;lx=lx<W-4-lw?lx:W-4-lw;lx=lx>4?lx:4;
+    #if ENR_ROUND
+    {int lo,hi;enr_span(y-15,y-8,3,&lo,&hi);lx=lx>hi-lw+1?hi-lw+1:lx;lx=lx<lo?lo:lx;}   // (its name on the chart's circle)
+    #endif
     const Box bx=bounds_of(scratch,text_pixels(name,lx,y-7,scratch));
     bool clear_=bx.y>=(in->home?14:2);
     #define CLEAR_OF(o) (!((o).x+(o).w+1<=bx.x||bx.x+bx.w+1<=(o).x||(o).y+(o).h+1<=bx.y||bx.y+bx.h+1<=(o).y))
@@ -1835,7 +1959,13 @@ static bool finish_draw(ChartBuild *b){
     int kept=0;for(int i=0;i<mark_n;i++)if(!kept||marks[kept-1]!=marks[i])marks[kept++]=marks[i];mark_n=kept;
   }
   int16_t top_x=6,top_baseline=11,height_right=0,height_baseline=0;
+  #if ENR_ROUND
+  // (The Round 2's margins are its rim's, lettered by the minute renderer:
+  // the scene is given what it letters all hour, below.)
+  if(0){
+  #else
   if(world){
+  #endif
     // Over the band, the local date; at its right the minute's corner (the
     // satellite's height or ground point). Under it, the pass line and
     // Zulu time.
@@ -1844,7 +1974,11 @@ static bool finish_draw(ChartBuild *b){
     if(cv.wrap)memcpy(b->source,source,sizeof b->source);
     else{const int n=text_pixels(source,6,top-6,scratch);letter(&cv,scratch,n,L_INK,1);}
     zulu_x=(int16_t)(W-6-text_width("0000Z"));zulu_baseline=H-1;top_baseline=H-1;height_right=W-6;height_baseline=(int16_t)(top-6);
-  }else{
+  }
+  #if ENR_ROUND
+  if(world)height_baseline=(int16_t)(top-6);   // (the band's top: the body is shown below it)
+  #endif
+  if(!ENR_ROUND&&!world){
     // Margins: the local date and day of the week, the minute's corner (the
     // day of the year, the body's ground point or the Moon's light), Zulu
     // time between them, centred as for the widest corner; over the chart,
@@ -1882,6 +2016,16 @@ static bool finish_draw(ChartBuild *b){
   // own, none of them large (by now the heap is in pieces).
   out=alloc(sizeof(EnrScene));if(!out)FAIL;
   memset(out,0,sizeof *out);memcpy(out->extra_code,in->extra_code,sizeof out->extra_code);
+  #if ENR_ROUND
+  // The rim, and what it letters all hour: home's rise and set over the top
+  // (else the minute's pass line), the date at the left of the bottom.
+  out->rim=(uint8_t)((in->legend>>4)&3);
+  {char date[24];date_label(date,in);memcpy(out->rim_date,date,sizeof out->rim_date-1);}
+  if(in->home&&in->rise_left[0]){
+    char *p=out->rim_rise;const int a=(int)strlen(in->rise_left),r=(int)strlen(in->rise_right);
+    if(a+3+r<(int)sizeof out->rim_rise){memcpy(p,in->rise_left,a);memcpy(p+a,"   ",3);memcpy(p+a+3,in->rise_right,r);}
+  }
+  #endif
   // Its class plane as row runs: each row the ground's classes with what
   // was drawn laid over them, into pieces a row never straddles; the
   // ground's chunks and the plane's bands let go as their rows are done, so
@@ -2013,7 +2157,7 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
       int xi=(int)js_round(x);const int yi=(int)js_round(y);
       // (Round the sliding world, its place on the band.)
       if(world&&in->tape==2)xi=(xi%W+W)%W;
-      if(xi>=0&&xi<W&&yi>=cam->top+7&&yi<=cam->bottom-8){a[0]=(enr_px)xi;a[1]=(enr_px)yi;}
+      if(xi>=0&&xi<W&&yi>=cam->top+7&&yi<=cam->bottom-8&&ON_CHART(((Box){xi-6,yi-6,13,13}),0)){a[0]=(enr_px)xi;a[1]=(enr_px)yi;}
     }
     const Segment *seg=src->segment(src->segment_context,(int32_t)q64(t,86400));if(!seg)FAIL;
     bool waxing;double fraction;seg_moon_light(seg,t,&fraction,&waxing);e->moon_fraction=(enr_real)fraction;e->waxing=waxing;
@@ -2062,7 +2206,12 @@ static bool finish_minutes(ChartBuild *b,int m0,int m1){
       e->circle=(uint8_t)k;
     }
     if(world){
+      #if ENR_ROUND
+      // (On the Round 2 the arc's point at the minute: its column.)
+      if(!in->tape)e->index=(int16_t)js_round(W/2+ENR_ARC_R*f_sin((forward?-ENR_ARC_DEG+2.0*ENR_ARC_DEG*m/60:ENR_ARC_DEG-2.0*ENR_ARC_DEG*m/60)*RAD));
+      #else
       if(!in->tape)e->index=(int16_t)js_round(forward?TAPE_X0+(double)(TAPE_X1-TAPE_X0)*m/60:TAPE_X1-(double)(TAPE_X1-TAPE_X0)*m/60);
+      #endif
       else if(in->tape==4)e->index=(int16_t)((((int)js_round(e->mx))%W+W)%W);
       if(in->home){
         const int n=circle_pixels(cam,in->home_lat,in->home_lon,REACH(altitude),3,b->sb,b->cb,ring);int k=0;

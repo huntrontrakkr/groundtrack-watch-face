@@ -30,8 +30,8 @@ const data={
 // itself (src/page-input.js, a script of its own): one gzip of them all, in
 // base64, with each part's kind (core_api.h's CORE_MAP ... CORE_LAND; -1
 // the core, -2 the script) and place.
-const PARTS={enroute:[[-1,'public/core.wasm'],[0,'native/resources/map.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']],
-  fuller:[[-1,'public/core.wasm'],[3,'public/fuller.bin'],[4,'native/resources/land.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']]}[face];
+const PARTS={enroute:[[-1,'public/core.wasm'],[-3,'public/core-round.wasm'],[0,'native/resources/map.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']],
+  fuller:[[-1,'public/core.wasm'],[-3,'public/core-round.wasm'],[3,'public/fuller.bin'],[4,'native/resources/land.pack'],[1,'native/resources/figures.bin'],[2,'native/resources/tables.bin']]}[face];
 const pageAssets={
   name:'groundtrack-page-assets',
   setup(b){

@@ -6,13 +6,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
+import {statSync} from 'node:fs';
 import {chartInput} from '../src/chart-input.js';
 import {HOMES} from '../src/home.js';
 import {registerLiveFixture} from './tle-fixture.mjs';
 import {registerNominal} from '../src/nominal.js';
 import {nameCode} from '../src/events.js';
 
-let cc=true;try{execFileSync('make',['-s','-C','native/host','harness','harness-exact','build_check','build_check-enroute','build_check-fuller'],{stdio:'pipe'});}catch{cc=false;}
+let cc=true;try{execFileSync('make',['-s','-C','native/host','harness','harness-exact','build_check','build_check-enroute','build_check-fuller','round_check-enroute','round_check-fuller'],{stdio:'pipe'});}catch{cc=false;}
 registerLiveFixture();registerNominal();
 const ev=(iso,title)=>({epoch:Date.parse(iso),label:nameCode(title)});
 const input=(body,iso,plate,zone,more={})=>{const home=zone?HOMES[zone]||null:null;return chartInput({body,start:Date.parse(iso),plate,zone:zone||'UTC',home,...more});};
@@ -101,6 +102,26 @@ test('each face builds its hours in less than the watch\'s heap, modelled as the
     assert.equal(r.status,0,`${what}: no chart in a heap of ${HEAPS[face]-5000} bytes: ${r.stdout}${r.stderr}`);
     const out=JSON.parse(r.stdout.toString());
     assert.ok(out.kept<=KEPT[face],`${what}: the hour keeps ${out.kept} bytes (budget ${KEPT[face]})`);
+  }
+});
+
+// The same on the Round 2, in each rim style: there the builder is a code
+// blob (native/src/c/blob.h) loaded for the build, so the build has what
+// the heap holds when it begins (112,716 bytes on the gabbro emulator, the
+// lettering's glyphs already loaded) less the blob, again 5 KB short.
+const ROUND_HEAP=112716;
+test('each face builds its hours on the Round 2 in what its builder leaves of the heap, in every rim style',{skip:!cc&&'no C compiler'},()=>{
+  const day=Date.parse('2026-09-30T00:00:00Z'),at=h=>new Date(day+h*3600e3).toISOString();
+  const cases={
+    enroute:[['sun',{}],['moon',{}],['sat:36585',{}],['sat:42738',{}],['sat:25544',{}],['sat:43013',{tape:'tape'}],['sat:25544',{tape:'clock'}],['moon',{plate:'airbrush',readout:'callout'}],['sat:36585',{plate:'airbrush'}],['sat:25544',{face:'plotboard'}],['sat:36585',{face:'plotboard',tape:'route'}]],
+    fuller:[['sat:25544',{projection:'fuller'}],['sun',{projection:'fuller'}],['moon',{projection:'fuller'}],['sat:36585',{projection:'fuller',plate:'airbrush'}]]
+  };
+  for(const [face,list] of Object.entries(cases)){
+    const blob=statSync(`native/resources/builder_${face}.bin`).size,limit=ROUND_HEAP-blob-5000;
+    for(const rim of ['bezel','chords','instrument'])for(const [body,more] of list)for(const hour of [0,7,14,21]){
+      const r=spawnSync(`native/host/round_check-${face}`,[],{input:input(body,at(hour),more.plate||'console','America/New_York',{flag:!more.readout,rim,...more}),env:{...process.env,HEAP_LIMIT:String(limit)},timeout:20000});
+      assert.equal(r.status,0,`${face} ${rim} ${body} ${JSON.stringify(more)} hour ${hour}: no chart in a heap of ${limit} bytes: ${r.stdout}${r.stderr}${r.signal||''}`);
+    }
   }
 });
 
