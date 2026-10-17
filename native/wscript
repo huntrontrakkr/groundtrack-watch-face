@@ -15,9 +15,10 @@ def configure(ctx):
 
 
 def build(ctx):
-    ctx.load('pebble_sdk')
     # Each watch's code blobs (native/src/c/blob.h), with the compiler the SDK
-    # builds the app with: resources, packed with the rest.
+    # builds the app with: resources, packed with the rest. Built before the
+    # SDK is loaded, which looks for them then (on a fresh checkout they
+    # would not be there yet).
     import os, shutil, subprocess, sys
     for platform in ctx.env.TARGET_PLATFORMS:
         cc = ctx.all_envs[platform].CC
@@ -25,6 +26,9 @@ def build(ctx):
         subprocess.check_call([sys.executable, os.path.join(ctx.path.abspath(), '..', 'tools', 'build-blobs.py'),
                                '--face', 'enroute', '--platform', platform,
                                '--out', os.path.join(ctx.path.abspath(), 'resources')] + (['--cc', cc] if cc else []))
+    # (Only now the SDK: it finds each platform's resources, the tagged
+    # blobs among them, as it loads.)
+    ctx.load('pebble_sdk')
     binaries = []
     cached_env = ctx.env
     for platform in ctx.env.TARGET_PLATFORMS:
