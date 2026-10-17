@@ -32,6 +32,8 @@ int main(int argc,char **argv){
   for(;;){if(len==cap){cap*=2;text=realloc(text,cap);}const size_t got=fread(text+len,1,cap-len,stdin);if(!got)break;len+=got;}
   if(!core_build(text,len,0)){fprintf(stderr,"build failed (%s)\n",core_failure());return 1;}
   uint8_t *frame=malloc(ENR_W*ENR_H);
+  // (BATTERY=percent for the fuel line; NO_LINK=1 the phone out of reach.)
+  if(getenv("BATTERY"))core_power(atoi(getenv("BATTERY")),getenv("NO_LINK")?ENR_NO_LINK:0);
   if(!strcmp(argv[1],"-b")){
     struct timespec a,b;clock_gettime(CLOCK_MONOTONIC,&a);
     for(int rep=0;rep<10;rep++)for(int m=0;m<60;m++)core_render(0,m,frame);

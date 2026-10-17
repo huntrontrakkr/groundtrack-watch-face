@@ -701,13 +701,29 @@ static __attribute__((noinline)) void draw_fuel(Ctx *c){
   if(f&ENR_NO_FUEL)return;
   const uint8_t fill=s->zoned[f&ENR_CHARGING?ENR_INK:s_power[0]<=20?ENR_MARK:ENR_ROUTE][0];
   #if ENR_ROUND
-  // (On the Round 2 an arc by the glass's edge over the octagon's top side,
-  // 20 degrees either side of the top, its quarters ticked.)
+  // (On the Round 2 a bar bent round the glass's edge over the octagon's
+  // top side, 20 degrees either side of the top, 4 pixels deep: solid to the
+  // charge from the left, the rest an empty bar, outlined and hatched; out
+  // of the phone's reach, the solid broken. Pixel by pixel: those whose
+  // middles lie in it, the angle's sine against the ends'.)
   (void)e;
-  for(int k=0;k<=80;k++){
-    const enr_real deg=-20+k*(enr_real)0.5;const bool on=k*100<s_power[0]*80&&!((f&ENR_NO_LINK)&&k%8>5);int x,y;
-    rim_point(deg,ENR_RIM_R+6,&x,&y);if(on||!(k&1))plot(c,x,y,on?fill:s->zoned[ENR_GRID][0]);
-    if(on||(k%20==0&&k&&k<80)){rim_point(deg,ENR_RIM_R+5-!on,&x,&y);plot(c,x,y,fill);}
+  {
+    const enr_real r0=(enr_real)124.5,r1=(enr_real)128.5,end=(enr_real)0.3420201433256687,to=f_sin((-20+40*(enr_real)s_power[0]/100)*(enr_real)0.017453292519943295);
+    const uint8_t empty=s->zoned[ENR_GRID][0];
+    for(int y=0;y<16;y++)for(int x=W/2-48;x<W/2+48;x++){
+      const enr_real dx=(enr_real)x+(enr_real)0.5-W/2,dy=H/2-((enr_real)y+(enr_real)0.5),r=f_sqrt(dx*dx+dy*dy);
+      if(r<r0||r>r1||dy<=0)continue;
+      const enr_real sn=dx/r;
+      if(sn<-end||sn>end)continue;
+      if(s_power[0]>0&&sn<=to){
+        // (Out of reach: a gap each eighth of the bar.)
+        if((f&ENR_NO_LINK)&&(int)((sn+end)/(2*end)*40)%5==4)continue;
+        plot(c,x,y,fill);
+      }else{
+        const bool edge=r<r0+1||r>r1-1||sn>end-1/r||sn<to+1/r;
+        if(edge||(x+y)%4==0)plot(c,x,y,empty);
+      }
+    }
   }
   return;
   #endif
