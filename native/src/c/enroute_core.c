@@ -321,6 +321,21 @@ void enr_span(int y0,int y1,int margin,int *lo,int *hi){
   const int half=(int)f_floor(f_sqrt((enr_real)r2)/2);
   *lo=W/2-half;*hi=W/2+half-1;
 }
+void enr_spread(int a,int b,int wa,int wb,int gap,int lo,int hi,int *xa,int *xb){
+  int l=a-wa/2,r=b-wb/2;
+  // (Too near: each moved away from the other alike; then onto lo to hi.)
+  if(r<l+wa+gap){const int need=l+wa+gap-r;l-=need/2;r+=need-need/2;}
+  if(l<lo){r+=lo-l;l=lo;}
+  if(r+wb-1>hi){const int over=r+wb-1-hi;r-=over;if(l>r-wa-gap)l=r-wa-gap;}
+  if(l<lo)l=lo;
+  *xa=l;*xb=r;
+}
+void enr_arc_inside(int y,int *lo,int *hi){
+  // (Its ticks reach 6 pixels in, and 2 more clear of them.)
+  const int r=ENR_ARC_R-8,d=2*y+1-H,r2=4*r*r-d*d;
+  if(r2<=0){*lo=W/2;*hi=W/2-1;return;}
+  const int half=(int)f_floor(f_sqrt((enr_real)r2)/2);*lo=W/2-half;*hi=W/2+half-1;
+}
 #else
 #define PIXEL(c,x,y) ((c)->frame[(y)*(c)->stride+(x)])
 #define ON_GLASS(c,x,y) 1
@@ -1153,15 +1168,22 @@ static void arc_readout(Ctx *c){
   const int lw=enr_text_width(c->m->minute,2);
   letter(c,scratch,enr_text_pixels(c->m->minute,2,x-lw/2,y+4,scratch),ENR_INK,1);
 }
-// This hour's figure and the next's under the arc's top (as the builder sets
-// them on the fixed tape), the next outlined.
+// This hour's figure and the next's inside the arc, each as near as it can
+// be under its own hour's mark as the arc turns (as the builder sets them
+// on the fixed tape, at the arc's ends), the next outlined.
 static void arc_figures(Ctx *c){
   const EnrScene *s=c->s;const uint8_t ink=s->space_ink;
   if(!s->fig_bits)return;
   int hn=0,nn=0;while(hn<3&&s->tape_hour[hn])hn++;
   while(nn<3&&s->tape_next[nn])nn++;
-  const int hw=run_width(s,s->tape_hour,hn,1),nw=run_width(s,s->tape_next,nn,1),left=W/2-(hw+8+nw)/2;
-  Glyph g[6];const int n=figure_run(s,s->tape_hour,hn,1,left,50,G_SOLID,g),k=figure_run(s,s->tape_next,nn,1,left+hw+8,50,G_HOLLOW,g+n);
+  const int hw=run_width(s,s->tape_hour,hn,1),nw=run_width(s,s->tape_next,nn,1),fh=fig_height(s,1,'0'),fy=TAPE_P-2-fh,now=(int)(c->m-s->minutes);
+  int lo,hi,ax,bx,hx,nx;enr_arc_inside(fy,&lo,&hi);
+  rim_point((enr_real)(-now*ARC_PXD),ENR_ARC_R,&ax,&hx);rim_point((enr_real)((60-now)*ARC_PXD),ENR_ARC_R,&bx,&nx);
+  // (A mark past the arc's end: as far that way as there is room.)
+  if(-now*ARC_PXD<-90)ax=0;
+  if((60-now)*ARC_PXD>90)bx=W;
+  enr_spread(ax,bx,hw,nw,8,lo,hi,&hx,&nx);
+  Glyph g[6];const int n=figure_run(s,s->tape_hour,hn,1,hx,fy,G_SOLID,g),k=figure_run(s,s->tape_next,nn,1,nx,fy,G_HOLLOW,g+n);
   for(int i=0;i<n+k;i++){
     int x0,y0,w,h;glyph_box(s,&g[i],&x0,&y0,&w,&h);
     for(int gy=y0;gy<y0+h;gy++)for(int gx=x0;gx<x0+w;gx++){
@@ -1178,7 +1200,8 @@ static void arc_sliding(Ctx *c){
   for(int y=0;y<TAPE_P;y++){int lo,hi;enr_span(y,y,0,&lo,&hi);for(int x=lo;x<=hi;x++)plot(c,x,y,s->space);}
   for(enr_real d=-ENR_ARC_DEG;d<=ENR_ARC_DEG;d+=(enr_real)0.25){int x,y;rim_point(d,ENR_ARC_R,&x,&y);plot(c,x,y,ink);if(d<=0){rim_point(d,ENR_ARC_R-1,&x,&y);plot(c,x,y,fill);}}
   for(int m=now-ENR_ARC_DEG/ARC_PXD;m<=now+ENR_ARC_DEG/ARC_PXD;m++){
-    const enr_real d=(enr_real)((m-now)*ARC_PXD);const int mm=((m%60)+60)%60,len=mm==0?12:mm%15==0?6:mm%5==0?4:2;
+    // (The hour's mark as long as a quarter's inside, where its figure hangs under it.)
+    const enr_real d=(enr_real)((m-now)*ARC_PXD);const int mm=((m%60)+60)%60,len=mm%15==0?6:mm%5==0?4:2;
     for(enr_real r=ENR_ARC_R-len;r<ENR_ARC_R+(mm==0?(enr_real)6.5:0);r+=(enr_real)0.5){int x,y;rim_point(d,r,&x,&y);plot(c,x,y,ink);}
     if(mm%15==0&&mm){char label[2]={(char)('0'+mm/10),(char)('0'+mm%10)};int x,y;rim_point(d,ENR_ARC_R+9,&x,&y);const int lw=enr_text_width(label,2),n=enr_text_pixels(label,2,x-lw/2,y+4,scratch);for(int i=0;i<n;i++)plot(c,scratch[i].x,scratch[i].y,ink);}
   }

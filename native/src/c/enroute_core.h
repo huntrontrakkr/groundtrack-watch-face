@@ -286,7 +286,7 @@ extern int enr_chart_r,enr_place_r;
 #define ENR_ARC_R 98
 #define ENR_ARC_DEG 56
 #define ENR_ARC_X 81
-#define ENR_ARC_PANEL 82
+#define ENR_ARC_PANEL 86
 #define ENR_BAND_BOTTOM 198
 #if ENR_ROUND
 typedef struct {uint8_t *row[ENR_H];int16_t x0[ENR_H],x1[ENR_H];} EnrFrame;
@@ -306,6 +306,12 @@ void enr_rim_style(int rim);
 // The columns of the chart's circle at rows y0 to y1 (the narrowest of
 // them), `margin` in from its edge: x from *lo to *hi (lo > hi for none).
 void enr_span(int y0,int y1,int margin,int *lo,int *hi);
+// Two figures side by side, wa and wb wide, set each as near as it can be
+// to its own place (its middle at a, and b to the right of it), gap or more
+// apart and within lo to hi: their left edges.
+void enr_spread(int a,int b,int wa,int wb,int gap,int lo,int hi,int *xa,int *xb);
+// The columns inside the Plotboard's arc at row y, clear of its ticks.
+void enr_arc_inside(int y,int *lo,int *hi);
 #endif
 
 // Draw minute 0-59 of the scene's hour into a 200x228 GColor8 frame buffer
