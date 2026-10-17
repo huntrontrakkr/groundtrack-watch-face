@@ -8,27 +8,30 @@
 // of phosphor behind it; the sort, a band in which each row's runs of
 // pixels are sorted by their light, so that light smears across it; the
 // reacquiring, a sort that breaks the rows into blocks and resolves them
-// pixel by pixel behind it; the tear, blocks of rows thrown sideways, their
+// pixel by pixel behind it, a box in the middle saying so (LOSS OF SIGNAL,
+// REACQUIRING, blinking; SIGNAL ACQUIRED as it ends); the tear, blocks of rows thrown sideways, their
 // red apart from the rest, as a picture losing its hold. The pulses are a
 // ring opening about a point: the body as it steps each minute (a blink
 // first), or home as the satellite rises into view.
 #include "enroute_core.h"
 #include "fmath.h"
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define W ENR_W
 #define H ENR_H
 // (At most this many rows changed at once.)
-#define FX_ROWS 40
+#define FX_ROWS 52
 typedef struct {int y0,y1;} Span;
 typedef struct {
   int kind,step,steps;uint32_t seed;
   bool up,left;                            // a scan's way: up the screen; a sort's light to the left
   int cx,cy;                               // a pulse's middle
-  uint8_t accent;                          // the plate's bright ink
+  uint8_t accent,ground,ink;               // the plate's bright ink, and its space and lettering on it
   Span held[4];int nheld;                  // the rows kept, as strips
   uint8_t rows[FX_ROWS][W];                // and their pixels
+  EnrPx text[480];                         // the reacquiring's box's lettering
 } Fx;
 static Fx *fx;
 
@@ -93,6 +96,34 @@ static const uint8_t *kept(int y){
   return NULL;
 }
 
+// Rows y0 to y1 kept where they are not already (the strips between).
+static void hold_rows(uint8_t *frame,int stride,int y0,int y1){
+  for(int y=y0;y<=y1;){
+    if(kept(y)){y++;continue;}
+    int e=y;while(e+1<=y1&&!kept(e+1))e++;
+    hold(frame,stride,y,e);y=e+1;
+  }
+}
+// The reacquiring's box in the middle of the screen: its words by how far
+// the sweep has gone, blinking (four frames lit, four not) but the last.
+static void signal_box(uint8_t *frame,int stride){
+  const int left=fx->steps-fx->step;
+  const char *t=left<=6?"SIGNAL ACQUIRED":fx->step<fx->steps/2?"LOSS OF SIGNAL":"REACQUIRING";
+  // (The box as wide as the longest, its words centred in it.)
+  const int n=(int)strlen(t),w=enr_text_width("SIGNAL ACQUIRED",15)+10,h=13,x0=W/2-w/2,y0=H/2-h/2;
+  hold_rows(frame,stride,y0,y0+h-1);
+  const bool lit=left<=6||(fx->step/4)%2==0;
+  const int count=lit?enr_text_pixels(t,n,W/2-enr_text_width(t,n)/2,y0+10,fx->text):0;
+  for(int y=y0;y<y0+h;y++){
+    int a,b;uint8_t *r=row_of(frame,stride,y,&a,&b);if(!kept(y))continue;
+    for(int x=x0;x<x0+w;x++)if(x>=a&&x<=b)r[x]=y==y0||y==y0+h-1||x==x0||x==x0+w-1?fx->accent:fx->ground;
+  }
+  for(int i=0;i<count&&i<(int)(sizeof fx->text/sizeof fx->text[0]);i++){
+    const int x=fx->text[i].x,y=fx->text[i].y;int a,b;
+    if(y<y0||y>=y0+h)continue;
+    uint8_t *r=row_of(frame,stride,y,&a,&b);if(x>=a&&x<=b)r[x]=fx->ink;
+  }
+}
 // A row's runs of pixels at least `at` light sorted by their light, the
 // lightest to the right: a counting sort, steady. (On a dark plate the
 // runs are of what is at most 12 - at, the dark ground with them: its
@@ -133,7 +164,7 @@ static void refresh(uint8_t *frame,int stride){
 static void pixel_sort(uint8_t *frame,int stride,bool resolving){
   // The band 24 rows (the reacquiring 40, its last 28 resolving), 6 rows a
   // frame; the threshold lowest at its middle, where the runs are longest.
-  const int band=resolving?40:28,head=resolving?12:28,lead=fx->step*6;
+  const int band=resolving?36:28,head=resolving?12:28,lead=fx->step*6;
   {const int a=scan_row(lead,0),b=scan_row(lead,band-1);if(hold(frame,stride,a<b?a:b,a<b?b:a)<0)return;}
   const bool dark=light(fx->accent)>6;
   for(int k=0;k<band;k++){
@@ -206,13 +237,13 @@ bool enr_fx_begin(const EnrScene *s,int kind,int minute,uint32_t seed){
   enr_fx_end(NULL,0);
   if(kind<0||kind>=ENR_FX_KINDS||minute<0||minute>59)return false;
   if(!(fx=malloc(sizeof(Fx))))return false;
-  memset(fx,0,sizeof(Fx)-sizeof fx->rows);
+  memset(fx,0,offsetof(Fx,rows));
   fx->kind=kind;fx->seed=seed|1;
   #if ENR_ROUND
   enr_rim_style(s->rim);
   #endif
   fx->up=kind<=ENR_FX_REACQUIRE&&(rnd()&1);fx->left=rnd()&1;
-  fx->accent=s->zoned[ENR_ROUTE][0];
+  fx->accent=s->zoned[ENR_ROUTE][0];fx->ground=s->space;fx->ink=s->space_ink;
   static const int8_t steps[ENR_FX_KINDS]={33,48,50,8,9,6};   // (the scans' through the screen and past)
   fx->steps=steps[kind]+(ENR_ROUND&&kind<=ENR_FX_REACQUIRE?6:0);
   if(kind==ENR_FX_PULSE_BODY){fx->cx=(int)f_floor(s->minutes[minute].mx+(enr_real)0.5);fx->cy=(int)f_floor(s->minutes[minute].my+(enr_real)0.5);}
@@ -227,7 +258,7 @@ int enr_fx_frame(uint8_t *frame,int stride){
   switch(fx->kind){
     case ENR_FX_REFRESH:refresh(frame,stride);break;
     case ENR_FX_SORT:pixel_sort(frame,stride,false);break;
-    case ENR_FX_REACQUIRE:pixel_sort(frame,stride,true);break;
+    case ENR_FX_REACQUIRE:pixel_sort(frame,stride,true);signal_box(frame,stride);break;
     case ENR_FX_TEAR:tear(frame,stride);break;
     default:pulse(frame,stride);break;
   }
