@@ -1164,8 +1164,18 @@ static void arc_index(Ctx *c){
   arc_wedge(c,to);
 }
 static void arc_readout(Ctx *c){
-  const EnrScene *s=c->s;int x,y;rim_point(arc_deg(s,(enr_real)(c->m-s->minutes)),ENR_ARC_R+16,&x,&y);
+  // (On the quarters' labels' ring, a little outside it: clear of the
+  // index's wedge and of the rim's lettering over the top.)
+  const EnrScene *s=c->s;int x,y;rim_point(arc_deg(s,(enr_real)(c->m-s->minutes)),ENR_ARC_R+12,&x,&y);
   const int lw=enr_text_width(c->m->minute,2);
+  // (A quarter's label it would stand on, as the builder letters them
+  // outside the arc, gives way to it: knocked out in the panel's space.)
+  for(int q=15;q<60;q+=15){
+    int lx,ly;rim_point(arc_deg(s,(enr_real)q),ENR_ARC_R+9,&lx,&ly);
+    char label[2]={(char)('0'+q/10),(char)('0'+q%10)};const int qw=enr_text_width(label,2),l0=lx-qw/2-1,l1=lx-qw/2+qw,r0=x-lw/2-1,r1=x-lw/2+lw;
+    if(l0>r1||r0>l1||ly-4>y+4||y-4>ly+4)continue;
+    for(int yy=ly-4;yy<=ly+4;yy++)for(int xx=l0;xx<=l1;xx++)plot(c,xx,yy,s->space);
+  }
   letter(c,scratch,enr_text_pixels(c->m->minute,2,x-lw/2,y+4,scratch),ENR_INK,1);
 }
 // This hour's figure and the next's inside the arc, each as near as it can
