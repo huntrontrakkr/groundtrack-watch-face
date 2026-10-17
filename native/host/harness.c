@@ -39,6 +39,18 @@ int main(int argc,char **argv){
     printf("{\"ms_per_minute\":%.3f}\n",((b.tv_sec-a.tv_sec)*1e3+(b.tv_nsec-a.tv_nsec)/1e6)/600);
     return 0;
   }
+  // -x <kind> <minute> [seed]: an animation over the minute (enr_fx_*), every
+  // frame (the minute first, and last as the screen is left), raw on
+  // stdout; and on stderr whether the screen was left as it was.
+  if(!strcmp(argv[1],"-x")&&argc>3){
+    const int m=atoi(argv[3]);core_render(0,m,frame);
+    uint8_t *before=malloc(ENR_W*ENR_H);memcpy(before,frame,ENR_W*ENR_H);fwrite(frame,1,ENR_W*ENR_H,stdout);
+    if(!core_fx_begin(0,atoi(argv[2]),m,argc>4?(uint32_t)atol(argv[4]):1)){fprintf(stderr,"{\"begun\":false}\n");return 1;}
+    int frames=0;while(core_fx_frame(frame)){fwrite(frame,1,ENR_W*ENR_H,stdout);frames++;}
+    fwrite(frame,1,ENR_W*ENR_H,stdout);
+    fprintf(stderr,"{\"frames\":%d,\"restored\":%s}\n",frames,memcmp(before,frame,ENR_W*ENR_H)?"false":"true");
+    return 0;
+  }
   if(!strcmp(argv[1],"-a")){for(int m=0;m<60;m++){core_render(0,m,frame);fwrite(frame,1,ENR_W*ENR_H,stdout);}return 0;}
   if(!strcmp(argv[1],"-u")){
     uint8_t *whole=malloc(ENR_W*ENR_H);long differ=0,drawn=0,updates=0;

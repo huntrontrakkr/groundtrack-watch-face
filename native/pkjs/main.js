@@ -13,7 +13,8 @@
 //   own), also ('sun', 'moon' or both, comma-separated: marked beside the
 //   body), hourFigures ('1' or '0': the hour chart with or without its hour
 //   figures), legend ('1': a Fuller sheet's scale bar), vibe ('1': a double
-//   pulse when the phone goes out of reach), fuel ('0': no fuel line), sats (JSON [{norad, name, code, period, ecc, still}]: satellites added
+//   pulse when the phone goes out of reach), fuel ('0': no fuel line), fx
+//   and fxRate (the animations: src/settings-rules.js EFFECTS), sats (JSON [{norad, name, code, period, ecc, still}]: satellites added
 //   from CelesTrak on the settings page),
 //   plate, readout ('off', 'flag' or 'callout'; before it, flag '1' or
 //   '0'), numerals (the callout's figures: colon, plain, even, mono, accent),
@@ -31,7 +32,7 @@
 import {HOMES} from '../../src/home.js';
 import {PLATES,PLATE_ORDER,FIGURE_SETS} from '../../src/plates.js';
 import {registerElements,elementsFor,viewOf,plotOf,periodOf,CATALOG,GROUPS,catalogEntry,bodyId,addSatellite,forgetSatellites,addedSatellites} from '../../src/satellites.js';
-import {chartOf,faceFor,VIEW_CODES,RIMS} from '../../src/settings-rules.js';
+import {chartOf,faceFor,VIEW_CODES,RIMS,EFFECTS,EFFECTS_DEFAULT,FX_RATES,fxBits} from '../../src/settings-rules.js';
 import {segmentFor,encodeSegment,DAY,satelliteSegmentFor,encodeSatelliteSegment,satelliteSpan} from '../../src/segments.js';
 import {riseSet,encodePassBlock,PASS_BLOCK} from '../../src/home.js';
 import {localDay,localDate} from '../../src/chart-text.js';
@@ -157,6 +158,10 @@ function watchSettings(){
     (setting('vibe','0')==='1'?1:0)|(setting('fuel','1')==='0'?2:0));
   for(var j=0;j<2;j++)i32(companions[j]?Number(companions[j].slice(4)):0);
   for(var j=0;j<2;j++){var c=companions[j]?catalogEntry(companions[j]).code:'';for(var k=0;k<3;k++)bytes.push(k<c.length?c.charCodeAt(k):0);}
+  // The animations (src/settings-rules.js EFFECTS): their bits, and how
+  // often the scans run.
+  var fx=fxBits(setting('fx',EFFECTS_DEFAULT)),rate=FX_RATES.indexOf(setting('fxRate','2'));
+  bytes.push(fx&255,fx>>8,rate<0?2:rate);
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -415,7 +420,7 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),extra:extra(),tracks:tracks(),north:setting('north','0'),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),rim:setting('rim','bezel'),round:round(),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),extra:extra(),tracks:tracks(),north:setting('north','0'),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),rim:setting('rim','bezel'),round:round(),fx:setting('fx',EFFECTS_DEFAULT),fxRate:setting('fxRate','2'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
@@ -463,6 +468,8 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(Array.isArray(chosen.tracks))localStorage.setItem('tracks',chosen.tracks.filter(function(b){return typeof b==='string'&&b.indexOf('sat:')===0&&known(b);}).slice(0,3).join(','));
   if(chosen.legend==='1'||chosen.legend==='0')localStorage.setItem('legend',chosen.legend);
   if(RIMS.indexOf(chosen.rim)>=0)localStorage.setItem('rim',chosen.rim);
+  if(typeof chosen.fx==='string')localStorage.setItem('fx',chosen.fx.split(',').filter(function(k){return EFFECTS.indexOf(k)>=0;}).join(','));
+  if(FX_RATES.indexOf(chosen.fxRate)>=0)localStorage.setItem('fxRate',chosen.fxRate);
   if(chosen.hourFigures==='1'||chosen.hourFigures==='0')localStorage.setItem('hourFigures',chosen.hourFigures);
   if(Array.isArray(chosen.also))localStorage.setItem('also',chosen.also.filter(function(k){return k==='sun'||k==='moon';}).join(','));
   if(PLATES[chosen.plate])localStorage.setItem('plate',chosen.plate);

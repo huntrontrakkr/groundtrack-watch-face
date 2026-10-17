@@ -8,15 +8,15 @@ set -e
 cd "$(dirname "$0")/.."
 sdk="${WASI_SDK:-$(ls -d "$HOME"/.local/wasi/wasi-sdk-* 2>/dev/null | tail -1)}"
 [ -x "$sdk/bin/clang" ] || { echo "wasi-sdk not found: set WASI_SDK" >&2; exit 1; }
-exports="core_alloc core_free core_source core_build core_failure core_keep core_kept core_scene core_layout core_render core_render_update core_measure core_text_box core_text_width core_class core_zone core_status core_power"
+exports="core_alloc core_free core_source core_build core_failure core_keep core_kept core_scene core_layout core_render core_render_update core_measure core_text_box core_text_width core_class core_zone core_status core_power core_fx_begin core_fx_frame core_fx_end core_fx_aos"
 flags=""
 for e in $exports; do flags="$flags -Wl,--export=$e"; done
 "$sdk/bin/clang" --target=wasm32-wasi -std=gnu11 -Oz -ffp-contract=off -mexec-model=reactor \
   -Wl,--no-entry -Wl,--strip-all -Wl,--export-memory -Wl,--initial-memory=4194304 $flags \
-  -o public/core.wasm native/host/core_api.c native/src/c/chart.c native/src/c/fuller.c native/src/c/enroute_core.c \
+  -o public/core.wasm native/host/core_api.c native/src/c/chart.c native/src/c/fuller.c native/src/c/enroute_core.c native/src/c/effects.c \
   native/src/c/departure_font.c native/src/c/map_pack.c native/src/c/segments.c native/src/c/fmath.c native/src/c/passes.c
 "$sdk/bin/clang" --target=wasm32-wasi -std=gnu11 -Oz -ffp-contract=off -mexec-model=reactor \
   -Wl,--no-entry -Wl,--strip-all -Wl,--export-memory -Wl,--initial-memory=4194304 $flags \
-  -DENR_ROUND=1 -o public/core-round.wasm native/host/core_api.c native/src/c/chart.c native/src/c/fuller.c native/src/c/enroute_core.c \
+  -DENR_ROUND=1 -o public/core-round.wasm native/host/core_api.c native/src/c/chart.c native/src/c/fuller.c native/src/c/enroute_core.c native/src/c/effects.c \
   native/src/c/departure_font.c native/src/c/map_pack.c native/src/c/segments.c native/src/c/fmath.c native/src/c/passes.c
 ls -l public/core.wasm public/core-round.wasm

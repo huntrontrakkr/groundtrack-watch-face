@@ -20,6 +20,7 @@ native/host/fmath_test
 native/host/build_check
 native/host/build_check-*
 native/host/round_check-*
+native/host/harness-round
 native/host/*.o
 native/src/pkjs/index.js
 

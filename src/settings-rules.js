@@ -20,6 +20,18 @@
 // octagon's sides (a bezel), straight lines over and under (chords), or the bezel with the minutes ticked (an
 // instrument). The Time 2 takes no notice of them.
 export const RIMS=['bezel','chords','instrument'];
+// The watch's animations, each a bit of its settings in this order
+// (native/src/c/watch_data.h GT_FX_*): the body blinking as it steps each
+// minute, home's pulse as the satellite rises into view, a scan as the
+// hour's chart appears, a scan at a flick of the wrist, the four scans
+// (refresh, pixel sort, reacquire, tear), and the scans on every plate
+// rather than the screens' alone. Kept on the phone as a comma-separated
+// list; fxRate is how often the scans run of themselves ('0' never, '1'
+// once an hour, '2' twice, '3' four times).
+export const EFFECTS=['body','rise','hour','flick','refresh','sort','reacquire','tear','everyplate'];
+export const EFFECTS_DEFAULT='body,rise,hour,flick,refresh,sort,reacquire,tear';
+export const FX_RATES=['0','1','2','3'];
+export function fxBits(list){return String(list).split(',').reduce(function(m,k){var i=EFFECTS.indexOf(k);return i<0?m:m|1<<i;},0);}
 export function chartOf(face,body,view,span,plot){
   const sat=body.indexOf('sat:')===0;
   if(face==='fuller')return !sat||view==='still'||(view==='day'&&span!=='hour')?'day':'hour';

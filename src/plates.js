@@ -12,6 +12,8 @@ const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));
 const inks=list=>list.map(hex),SHELF_DEPTH=-200;
 // Printing plates. Each ink has a day, dusk and night value; paper plates
 // keep their day colors and take a dot screen through twilight and night.
+// digital: a screen's (a display, not paper), where the watch's scans run
+// (the animations' refresh, sort, reacquiring and tear: effects.c).
 export const PLATES={
   enroute:{name:'Enroute',note:'IFR chart: white paper, blue and black',night:'screen',
     water:inks(['#AAFFFF','#55AAAA','#0055AA']),land:inks(['#FFFFFF','#AAAAAA','#555555']),coast:inks(['#0055AA','#005555','#55AAFF']),
@@ -23,7 +25,7 @@ export const PLATES={
     contour:inks(['#AAAA55','#555500','#0055AA']),shelf:inks(['#55AAFF','#0055AA','#0055AA']),grid:inks(['#0055AA','#005555','#0055AA']),
     route:inks(['#FF00AA','#AA0055','#FF55FF']),ink:inks(['#0055AA','#000055','#AAFFFF']),mark:inks(['#000055','#000055','#FFFFAA']),
     screen:hex('#000055'),space:hex('#FFFFFF'),spaceInk:hex('#0055AA')},
-  console:{name:'Console',note:'Mission control: lit lines on dark glass',night:'zones',
+  console:{name:'Console',note:'Mission control: lit lines on dark glass',digital:true,night:'zones',
     water:inks(['#000055','#000055','#000000']),land:inks(['#005555','#005555','#000055']),coast:inks(['#55AAAA','#55AAAA','#0055AA']),
     contour:inks(['#00AAAA','#00AAAA','#0055AA']),shelf:inks(['#0055AA','#0055AA','#000055']),grid:inks(['#0055AA','#0055AA','#0055AA']),
     route:inks(['#FFAA00','#FFAA00','#FFAA00']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFAA']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
@@ -38,14 +40,14 @@ export const PLATES={
     screen:hex('#000055'),space:hex('#FFFFFF'),spaceInk:hex('#000055')},
   // Red cockpit lighting, which keeps the eye's night vision: reds only,
   // drawn as outlines on black; coasts dim where it is night.
-  red:{name:'Night red',note:'Cockpit red: every ink a red, nothing to dazzle',night:'zones',terminator:hex('#FF5555'),nightDots:hex('#AA0000'),
+  red:{name:'Night red',note:'Cockpit red: every ink a red, nothing to dazzle',digital:true,night:'zones',terminator:hex('#FF5555'),nightDots:hex('#AA0000'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#AA0000','#AA0000','#550000']),
     contour:inks(['#550000','#550000','#550000']),shelf:inks(['#550000','#550000','#550000']),grid:inks(['#550000','#550000','#550000']),
     route:inks(['#FF0000','#FF0000','#FF0000']),ink:inks(['#FF5555','#FF5555','#FF5555']),mark:inks(['#FFAAAA','#FFAAAA','#FFAAAA']),
     space:hex('#000000'),spaceInk:hex('#FF5555')},
   // The green phosphor of the consoles: one green at several brightnesses,
   // and night drawn with dark scan lines, dusk with every fourth line.
-  crt:{name:'Green CRT',note:'Console phosphor: one green, night in scan lines',night:'zones',scan:true,terminator:hex('#55FF55'),
+  crt:{name:'Green CRT',note:'Console phosphor: one green, night in scan lines',digital:true,night:'zones',scan:true,terminator:hex('#55FF55'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#005500','#005500','#005500']),coast:inks(['#00AA00','#00AA00','#00AA00']),
     contour:inks(['#00AA00','#00AA00','#00AA00']),shelf:inks(['#005500','#005500','#005500']),grid:inks(['#005500','#005500','#005500']),
     route:inks(['#00FF00','#00FF00','#00FF00']),ink:inks(['#AAFFAA','#AAFFAA','#AAFFAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
@@ -68,7 +70,7 @@ export const PLATES={
   // The amber of plasma and early flight displays: amber at a few
   // brightnesses on black; night dims every ink a step, dusk dithered
   // between, with the terminator drawn.
-  amber:{name:'Amber',note:'Plasma display: amber on black, night dimmed',night:'zones',terminator:hex('#FFAA00'),
+  amber:{name:'Amber',note:'Plasma display: amber on black, night dimmed',digital:true,night:'zones',terminator:hex('#FFAA00'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#550000','#550000','#000000']),coast:inks(['#FFAA00','#AA5500','#AA5500']),
     contour:inks(['#AA5500','#550000','#550000']),shelf:inks(['#550000','#550000','#550000']),grid:inks(['#AA5500','#550000','#550000']),
     route:inks(['#FFFF55','#FFFF55','#FFAA00']),ink:inks(['#FFAA55','#FFAA55','#FFAA00']),mark:inks(['#FFFFAA','#FFFFAA','#FFFFAA']),
@@ -87,7 +89,7 @@ export const PLATES={
   // The world as points of light, as on a mission wall: a lattice of dots
   // whose size is the land's height and whose brightness falls with the
   // night; the sea a grid of faint points.
-  dotmatrix:{name:'Dot matrix',note:'Mission wall: the world in points of light',night:'zones',lattice:true,
+  dotmatrix:{name:'Dot matrix',note:'Mission wall: the world in points of light',digital:true,night:'zones',lattice:true,
     tints:[[500,hex('#00AAAA')],[2000,hex('#55FFFF')],[Infinity,hex('#FFFFFF')]],
     water:inks(['#0000AA','#000055','#000055']),land:inks(['#55FFFF','#00AAAA','#005555']),coast:inks(['#00AAAA','#00AAAA','#005555']),
     contour:inks(['#00AAAA','#00AAAA','#005555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#0000AA','#0000AA','#000055']),
@@ -97,7 +99,7 @@ export const PLATES={
   // dawn blazing along its rim (twilight drawn as the brightest ground,
   // day dim, night black); Discovery's displays, white line on black
   // glass; and the Sun as HAL 9000's eye.
-  odyssey:{name:'Odyssey',note:'2001: dawn on a dark Earth, the Sun as HAL',night:'zones',hal:true,terminator:hex('#FFFFAA'),
+  odyssey:{name:'Odyssey',note:'2001: dawn on a dark Earth, the Sun as HAL',digital:true,night:'zones',hal:true,terminator:hex('#FFFFAA'),
     water:inks(['#000000','#AA5500','#000000']),land:inks(['#555555','#FFAA00','#000000']),coast:inks(['#AAAAAA','#FFFFAA','#555555']),
     contour:inks(['#AAAAAA','#FFFF55','#0000AA']),shelf:inks(['#000055','#AA5500','#000000']),grid:inks(['#555555','#AA5500','#555555']),
     route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#AAAAAA']),mark:inks(['#FF0000','#FF0000','#FF0000']),
@@ -106,7 +108,7 @@ export const PLATES={
   // survey sheets and European mission control. Interpretations, not replicas.
   // A wash mixes three pixels of a second ink with one of the ground ink;
   // the minute renderer makes it, without adding runs to the chart.
-  trackingboard:{name:'Tracking Board',note:'GSOC, 1970: rust land, blue-gray sea, red counters',night:'zones',terminator:hex('#FFFFAA'),wash:[hex('#AAAAAA'),null],
+  trackingboard:{name:'Tracking Board',note:'GSOC, 1970: rust land, blue-gray sea, red counters',digital:true,night:'zones',terminator:hex('#FFFFAA'),wash:[hex('#AAAAAA'),null],
     water:inks(['#55AAAA','#555555','#000055']),land:inks(['#AA5500','#AA5500','#550000']),coast:inks(['#FFAA55','#AA5500','#AA5500']),
     contour:inks(['#AA5500','#AA5500','#550000']),shelf:inks(['#AAAAAA','#555555','#000055']),grid:inks(['#AAAAAA','#AAAAAA','#555555']),
     route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),mark:inks(['#FF5555','#FF5555','#FF5555']),
@@ -116,7 +118,7 @@ export const PLATES={
     contour:inks(['#AA5500','#AA5500','#AA5500']),shelf:inks(['#55AAAA','#55AAAA','#55AAAA']),grid:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),
     route:inks(['#550055','#550055','#550055']),ink:inks(['#000000','#000000','#000000']),mark:inks(['#AA0000','#AA0000','#AA0000']),
     screen:hex('#AAAAAA'),space:hex('#FFFFFF'),spaceInk:hex('#000000')},
-  operations:{name:'Operations',note:'European mission control: cyan geography, amber counters',night:'zones',terminator:hex('#55AAAA'),
+  operations:{name:'Operations',note:'European mission control: cyan geography, amber counters',digital:true,night:'zones',terminator:hex('#55AAAA'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#000055','#000055','#000000']),coast:inks(['#55FFFF','#55AAAA','#005555']),
     contour:inks(['#005555','#005555','#005555']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#005555','#005555','#005555']),
     route:inks(['#FFFF55','#FFFF55','#FFFF55']),ink:inks(['#AAFFFF','#AAFFFF','#AAFFFF']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
@@ -126,7 +128,7 @@ export const PLATES={
   // The Earth as photographed from orbit at night: by day a dim blue sea
   // and teal land, at night both black with the coasts lit sodium gold, the
   // limb of the dawn a thin blue line.
-  nightside:{name:'Night Side',note:'From orbit at night: dark Earth, coastlines lit gold',night:'zones',terminator:hex('#55AAFF'),
+  nightside:{name:'Night Side',note:'From orbit at night: dark Earth, coastlines lit gold',digital:true,night:'zones',terminator:hex('#55AAFF'),
     water:inks(['#000055','#000055','#000000']),land:inks(['#005555','#000055','#000000']),coast:inks(['#55AAAA','#FFAA55','#FFAA00']),
     contour:inks(['#0055AA','#000055','#000055']),shelf:inks(['#0000AA','#000055','#000000']),grid:inks(['#0055AA','#000055','#000055']),
     route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#FFFFFF','#FFFFFF','#FFFFAA']),mark:inks(['#FFFF55','#FFFF55','#FFFF55']),
@@ -135,7 +137,7 @@ export const PLATES={
   // images: the land in a thermal ramp by height, violet lowland to pale
   // yellow peaks, on a black sea; map lines in the imagery's cyan; night
   // dims the ramp through a dark screen.
-  infrared:{name:'Infrared',note:'Weather-satellite infrared: a thermal ramp on a black sea',night:'screen',
+  infrared:{name:'Infrared',note:'Weather-satellite infrared: a thermal ramp on a black sea',digital:true,night:'screen',
     tints:[[300,hex('#550055')],[1000,hex('#AA0055')],[2000,hex('#FF5500')],[3500,hex('#FFAA00')],[Infinity,hex('#FFFFAA')]],depths:[[SHELF_DEPTH,hex('#000055')],[-Infinity,hex('#000000')]],
     water:inks(['#000000','#000000','#000000']),land:inks(['#550055','#550055','#550055']),coast:inks(['#55AAAA','#55AAAA','#55AAAA']),
     contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#005555','#005555','#005555']),
@@ -152,14 +154,14 @@ export const PLATES={
     screen:hex('#550000'),space:hex('#FFFFFF'),spaceInk:hex('#550000')},
   // A vector display: no fills at all, the world as line work on black, the
   // coast in one pale blue-white beam that dims at night.
-  vector:{name:'Vector',note:'Vector display: the world in line work alone',night:'zones',terminator:hex('#0055AA'),
+  vector:{name:'Vector',note:'Vector display: the world in line work alone',digital:true,night:'zones',terminator:hex('#0055AA'),
     water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#AAFFFF','#55AAAA','#0055AA']),
     contour:inks(['#0055AA','#005555','#000055']),shelf:inks(['#000055','#000055','#000000']),grid:inks(['#005555','#005555','#000055']),
     route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#AAFFFF','#AAFFFF','#55AAAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
     space:hex('#000000'),spaceInk:hex('#AAFFFF')},
   // Spare grey instruments: charcoal land on black, everything in greys,
   // the route the one white thing; night takes the land away.
-  graphite:{name:'Graphite',note:'Spare grey instruments: the route the one white line',night:'zones',
+  graphite:{name:'Graphite',note:'Spare grey instruments: the route the one white line',digital:true,night:'zones',
     water:inks(['#000000','#000000','#000000']),land:inks(['#555555','#555555','#000000']),coast:inks(['#AAAAAA','#AAAAAA','#555555']),
     contour:inks(['#000000','#000000','#555555']),shelf:inks(['#555555','#555555','#000000']),grid:inks(['#555555','#555555','#555555']),
     route:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),ink:inks(['#AAAAAA','#AAAAAA','#AAAAAA']),mark:inks(['#FFFFFF','#FFFFFF','#FFFFFF']),
@@ -194,7 +196,7 @@ export const PLATES={
   // terrain in dot densities of green, yellow and red on black, the route
   // in the navigation display's magenta.
   // (The lowlands black, as terrain far below the aircraft is.)
-  terrain:{name:'Terrain',note:'Ground-proximity display: green, yellow, red by dot density',night:'zones',terminator:hex('#555555'),pattern:'dots',
+  terrain:{name:'Terrain',note:'Ground-proximity display: green, yellow, red by dot density',digital:true,night:'zones',terminator:hex('#555555'),pattern:'dots',
     tints:[[300,hex('#000000')],[1000,hex('#00AA00')],[2000,hex('#FFFF00')],[3500,hex('#FFFF00')],[Infinity,hex('#FF0000')]],
     water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#00AAAA','#00AAAA','#005555']),
     contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000055','#000055','#000055']),grid:inks(['#005555','#005555','#005555']),
@@ -203,7 +205,7 @@ export const PLATES={
   // A thermal imager in white-hot polarity: the land the warm grey by day,
   // darker on the cold heights; by night the sea, holding its heat, brighter
   // than the land.
-  whitehot:{name:'White Hot',note:'Thermal imager: warm land by day, warmer sea by night',night:'zones',pattern:'dots',
+  whitehot:{name:'White Hot',note:'Thermal imager: warm land by day, warmer sea by night',digital:true,night:'zones',pattern:'dots',
     tints:[[300,hex('#555555')],[1000,hex('#555555')],[2000,hex('#000000')],[3500,hex('#000000')],[Infinity,hex('#000000')]],
     water:inks(['#555555','#555555','#AAAAAA']),land:inks(['#AAAAAA','#555555','#555555']),coast:inks(['#555555','#AAAAAA','#AAAAAA']),
     contour:inks(['#555555','#555555','#000000']),shelf:inks(['#555555','#555555','#AAAAAA']),grid:inks(['#000000','#000000','#000000']),
@@ -212,7 +214,7 @@ export const PLATES={
   // The night-attack head-up displays of the F-15E and F-16 (LANTIRN):
   // infrared video drawn as green raster, brighter and denser with height,
   // and the symbology stroked over it.
-  raster:{name:'Raster',note:'Night-attack HUD: green raster video, stroked symbology',night:'zones',terminator:hex('#005500'),pattern:'raster',
+  raster:{name:'Raster',note:'Night-attack HUD: green raster video, stroked symbology',digital:true,night:'zones',terminator:hex('#005500'),pattern:'raster',
     tints:[[300,hex('#005500')],[1000,hex('#00AA00')],[2000,hex('#00AA00')],[3500,hex('#55FF55')],[Infinity,hex('#AAFFAA')]],
     water:inks(['#000000','#000000','#000000']),land:inks(['#000000','#000000','#000000']),coast:inks(['#00AA00','#00AA00','#005500']),
     contour:inks(['#000000','#000000','#000000']),shelf:inks(['#000000','#000000','#000000']),grid:inks(['#005500','#005500','#005500']),
@@ -221,7 +223,7 @@ export const PLATES={
   // The synthetic vision of business-jet cockpits: terrain in earth tones
   // on a grid mesh, the sea blue, the flight path magenta, and the panel the
   // sky.
-  synthetic:{name:'Synthetic Vision',note:'Cockpit synthetic vision: terrain on a mesh, sky above',night:'screen',pattern:'mesh',
+  synthetic:{name:'Synthetic Vision',note:'Cockpit synthetic vision: terrain on a mesh, sky above',digital:true,night:'screen',pattern:'mesh',
     tints:[[300,hex('#55AA55')],[1000,hex('#AAAA55')],[2000,hex('#AA5500')],[3500,hex('#AA5555')],[Infinity,hex('#FFFFFF')]],
     water:inks(['#0055AA','#0055AA','#0055AA']),land:inks(['#555500','#555500','#555500']),coast:inks(['#55AAFF','#55AAFF','#55AAFF']),
     contour:inks(['#555500','#555500','#555500']),shelf:inks(['#0055AA','#0055AA','#0055AA']),grid:inks(['#55AAFF','#55AAFF','#55AAFF']),
@@ -230,7 +232,7 @@ export const PLATES={
   // A ship's electronic chart (IHO S-52): buff land, white deep water, the
   // safety contour bold; and its own dusk and night colour tables, dimmed
   // to keep the bridge's night vision.
-  bridge:{name:'Bridge',note:'Ship\'s electronic chart: its day, dusk and night tables',night:'zones',
+  bridge:{name:'Bridge',note:'Ship\'s electronic chart: its day, dusk and night tables',digital:true,night:'zones',
     water:inks(['#FFFFFF','#000055','#000000']),land:inks(['#AAAA55','#555500','#000000']),coast:inks(['#555555','#AAAAAA','#555555']),
     contour:inks(['#AAAA55','#555500','#000000']),shelf:inks(['#0055AA','#0055AA','#000055']),grid:inks(['#AAAAAA','#555555','#000055']),
     route:inks(['#FF5500','#FF5500','#AA5500']),ink:inks(['#000000','#AAAAAA','#555555']),mark:inks(['#AA0000','#FF5555','#AA0000']),

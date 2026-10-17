@@ -42,4 +42,9 @@ typedef struct {
   void (*free)(EnrScene *scene,void (*release)(void *));
   void (*status)(const char *text);
   void (*power)(int percent,int state);
+  // The animations (enroute_core.h enr_fx_*).
+  bool (*fx_begin)(const EnrScene *scene,int kind,int minute,uint32_t seed);
+  int (*fx_frame)(uint8_t *frame,int row_stride);
+  void (*fx_end)(uint8_t *frame,int row_stride);
+  bool (*fx_aos)(const EnrScene *scene,int minute);
 } GtRendererApi;

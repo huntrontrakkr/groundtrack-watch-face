@@ -45,8 +45,17 @@ typedef struct {
   uint8_t watch;
   int32_t extra[2]; // additional satellite catalog numbers
   char extra_code[2][3]; // compact catalog identifiers, no terminators
-
+  // The animations (main.c, effects.c): which (GT_FX_*), and how often the
+  // scans run of themselves (0 never, 1 once an hour, 2 twice, 3 four times).
+  uint16_t fx;uint8_t fx_rate;
 } WatchSettings;
+// The body blinking as it steps each minute; home's pulse as the satellite
+// rises into view; a scan as the hour's chart appears; a scan at a flick of
+// the wrist; the scans (the refresh line, the pixel sort, the reacquiring,
+// the tear); the scans on every plate, not only the screens' (DIGITAL_PLATES).
+enum {GT_FX_BODY=1,GT_FX_RISE=2,GT_FX_HOUR=4,GT_FX_FLICK=8,GT_FX_REFRESH=16,GT_FX_SORT=32,GT_FX_REACQUIRE=64,GT_FX_TEAR=128,GT_FX_EVERY_PLATE=256};
+#define GT_FX_DEFAULT 0xFF
+#define GT_FX_RATE_DEFAULT 2
 
 void settings_load(WatchSettings *s);
 void settings_save(const WatchSettings *s);

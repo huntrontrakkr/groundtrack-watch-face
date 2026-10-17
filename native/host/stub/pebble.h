@@ -56,6 +56,10 @@ GFont fonts_get_system_font(const char *font_key);
 typedef enum {SECOND_UNIT=1,MINUTE_UNIT=2,HOUR_UNIT=4,DAY_UNIT=8,MONTH_UNIT=16,YEAR_UNIT=32} TimeUnits;
 typedef void (*TickHandler)(struct tm *tick_time,TimeUnits units_changed);
 void tick_timer_service_subscribe(TimeUnits tick_units,TickHandler handler);
+typedef enum {ACCEL_AXIS_X,ACCEL_AXIS_Y,ACCEL_AXIS_Z} AccelAxisType;
+typedef void (*AccelTapHandler)(AccelAxisType axis,int32_t direction);
+void accel_tap_service_subscribe(AccelTapHandler handler);
+void accel_tap_service_unsubscribe(void);
 void tick_timer_service_unsubscribe(void);
 
 typedef enum {APP_MSG_OK=0} AppMessageResult;

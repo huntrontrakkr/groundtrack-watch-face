@@ -321,6 +321,21 @@ void enr_arc_inside(int y,int *lo,int *hi);
 // (on the Round 2, an EnrFrame). row_stride is the frame buffer's bytes per
 // row.
 void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride);
+
+// The animations (effects.c), drawn over the minute on the screen and
+// leaving it as it was: the scans (a refresh line, a pixel-sort band, the
+// sort reacquiring a lost signal, a torn picture) and the pulses (the body
+// blinking as it steps, home as the satellite rises into view).
+enum {ENR_FX_REFRESH,ENR_FX_SORT,ENR_FX_REACQUIRE,ENR_FX_TEAR,ENR_FX_PULSE_BODY,ENR_FX_PULSE_HOME,ENR_FX_KINDS};
+// Starts one at a minute of the scene (false where it cannot: no memory, or
+// a pulse off the screen); then each frame drawn over the frame buffer, 1
+// while there are more, 0 when it has ended and the screen is as it was;
+// or ended now, the screen put back (frame NULL: only let go).
+bool enr_fx_begin(const EnrScene *scene,int kind,int minute,uint32_t seed);
+int enr_fx_frame(uint8_t *frame,int row_stride);
+void enr_fx_end(uint8_t *frame,int row_stride);
+// Whether the satellite rises into home's view at this minute.
+bool enr_fx_aos(const EnrScene *scene,int minute);
 // The same minute, drawn over the frame as minute `from` of the same scene
 // left it: only what can have changed is drawn again. With from outside
 // 0-59, the whole frame. Returns the pixels of the base drawn, or -1

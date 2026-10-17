@@ -48,3 +48,9 @@ void core_power(int percent,int state);
 int core_class(int slot,int x,int y);
 int core_zone(int slot,int minute,int x,int y);
 int core_render_update(int slot,int from,int minute,uint8_t *frame);
+// The animations (enroute_core.h enr_fx_*) over a frame drawn by core_render:
+// begun at a minute of a slot's scene, a frame at a time (1 while more).
+int core_fx_begin(int slot,int kind,int minute,uint32_t seed);
+int core_fx_frame(uint8_t *frame);
+void core_fx_end(uint8_t *frame);
+int core_fx_aos(int slot,int minute);

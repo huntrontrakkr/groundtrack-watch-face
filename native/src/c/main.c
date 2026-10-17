@@ -3,9 +3,9 @@
 // The watch draws each hour's chart itself, from its own map (a resource)
 // and the Sun, Moon and satellite segments the phone sends days or weeks
 // ahead: the phone isn't needed hour to hour. Each minute it draws what
-// changed with the native core. There is no animation, no sensor and no
-// timer but the minute tick. Until a chart covers the current hour, the
-// face says so plainly rather than showing a stale one.
+// changed with the native core. Its animations (effects.c) are drawn over
+// the minute on the screen and leave it as it was. Until a chart covers the
+// current hour, the face says so plainly rather than showing a stale one.
 #include "build_size.h"
 #include <pebble.h>
 #include "enroute_core.h"
@@ -13,6 +13,7 @@
 #include "fmath.h"
 #include "watch_data.h"
 #include "chart.h"
+#include "generated/plates.h"
 
 // Ask again when a request has gone unanswered this long, and twice as
 // long after each that didn't bring what was missing (to 27 minutes: the
@@ -25,6 +26,8 @@
 // dictionary's own framing.
 #define INBOX_SIZE 2100
 
+// An animation running (its frames drawn over the minute on the screen).
+static bool s_fx_on;
 #if GT_BLOBS
 // The chart builder and the minute renderer are code blobs (blob.h; GT_BLOBS
 // is the watch app's build, not the host's), loaded while each is wanted: the builder for a build (the
@@ -64,6 +67,9 @@ static bool renderer_load(void){
 static void renderer_let_go(void){free(s_renderer_mem);s_renderer_mem=NULL;s_renderer=NULL;}
 static void builder_let_go(void){free(s_builder_mem);s_builder_mem=NULL;s_builder=NULL;}
 ChartBuild *gt_chart_begin(const ChartInput *in,const ChartSources *src){
+  // (An animation's memory is the renderer's: let go with it, the minute
+  // drawn whole after.)
+  if(s_fx_on&&s_renderer){s_renderer->fx_end(NULL,0);s_fx_on=false;}
   renderer_let_go();
   if(!s_builder&&(s_builder=blob_load(RESOURCE_ID_BUILDER_CODE,&s_builder_mem)))s_builder->init(malloc,free,s_font);
   if(!s_builder){s_chart_failed=1;return NULL;}
@@ -76,6 +82,10 @@ static EnrScene *gt_chart_finish(ChartBuild *b){EnrScene *s=s_builder->finish(b)
 static void gt_chart_abort(ChartBuild *b){s_builder->abort(b);builder_let_go();}
 #define enr_render_update(...) (renderer_load()?s_renderer->render_update(__VA_ARGS__):-1)
 #define enr_free(s,r) do{if(renderer_load())s_renderer->free(s,r);}while(0)
+#define enr_fx_begin(...) (renderer_load()&&s_renderer->fx_begin(__VA_ARGS__))
+#define enr_fx_frame(f,st) (s_renderer?s_renderer->fx_frame((f),(st)):0)
+#define enr_fx_end(f,st) do{if(s_renderer)s_renderer->fx_end((f),(st));}while(0)
+#define enr_fx_aos(...) (renderer_load()&&s_renderer->fx_aos(__VA_ARGS__))
 #define enr_status(t) do{strncpy(s_enr_status,(t),sizeof s_enr_status-1);if(s_renderer)s_renderer->status(s_enr_status);}while(0)
 #define enr_power(p,st) do{s_enr_power[0]=(p);s_enr_power[1]=(st);if(s_renderer)s_renderer->power((p),(st));}while(0)
 #define enr_font_load(f) (s_font=(f))
@@ -237,6 +247,60 @@ static void check(time_t now){
   if(!covers(&s_now,now))build(now);else need_data(now);
 }
 
+// ------------------------------------------------------- the animations
+// What runs (s_settings.fx, GT_FX_*): at each new minute drawn, the body's
+// blink; home's pulse at the minute the satellite rises into view; a scan
+// (one of those chosen, at random) as the hour's chart first appears and at
+// minutes chosen at random for the chart, once to four times an hour, on
+// the screens' plates (or every plate); and a scan at a flick of the wrist.
+// A frame each 66 ms (some 15 a second), drawn by update().
+static AppTimer *s_fx_timer;
+static uint32_t s_fx_planned,s_fx_shown;   // the chart the scans are chosen for; the chart last shown
+static uint8_t s_fx_plan[4];
+static void fx_step(void *data){s_fx_timer=NULL;if(s_fx_on)layer_mark_dirty(s_layer);}
+static void fx_next(void){if(!s_fx_timer)s_fx_timer=app_timer_register(66,fx_step,NULL);}
+// One of the scans chosen, at random; -1 for none (or, but at a flick, none
+// on this plate).
+static int fx_scan(bool any_plate){
+  const uint16_t f=s_settings.fx;
+  if(!any_plate&&!(f&GT_FX_EVERY_PLATE)&&!((DIGITAL_PLATES>>s_settings.plate)&1))return -1;
+  static const uint8_t kinds[4]={ENR_FX_REFRESH,ENR_FX_SORT,ENR_FX_REACQUIRE,ENR_FX_TEAR};
+  static const uint16_t bits[4]={GT_FX_REFRESH,GT_FX_SORT,GT_FX_REACQUIRE,GT_FX_TEAR};
+  int n=0,on[4];for(int k=0;k<4;k++)if(f&bits[k])on[n++]=kinds[k];
+  return n?on[rand()%n]:-1;
+}
+static void fx_start(int kind,int minute){
+  #ifdef GT_NO_FX
+  return;                                  // (the host's simulator: frames as the minute's alone)
+  #endif
+  if(kind<0||s_fx_on||s_build||!s_now.scene)return;
+  if(enr_fx_begin(s_now.scene,kind,minute,(uint32_t)rand())){s_fx_on=true;fx_next();}
+}
+static void fx_minute(int minute){
+  const uint16_t f=s_settings.fx;
+  if(!s_now.scene)return;
+  // (The scans' minutes, chosen when a chart is first shown: 3 to 57.)
+  if(s_fx_planned!=s_chart_serial){
+    s_fx_planned=s_chart_serial;
+    static const uint8_t count[4]={0,1,2,4};
+    for(int k=0;k<4;k++)s_fx_plan[k]=k<count[s_settings.fx_rate&3]?(uint8_t)(3+rand()%55):255;
+  }
+  int kind=-1;
+  if(s_fx_shown!=s_chart_serial){s_fx_shown=s_chart_serial;if(f&GT_FX_HOUR)kind=fx_scan(false);}
+  for(int k=0;k<4&&kind<0;k++)if(s_fx_plan[k]==minute)kind=fx_scan(false);
+  if(kind<0&&(f&GT_FX_RISE)&&enr_fx_aos(s_now.scene,minute))kind=ENR_FX_PULSE_HOME;
+  if(kind<0&&(f&GT_FX_BODY))kind=ENR_FX_PULSE_BODY;
+  fx_start(kind,minute);
+}
+static void flick(AccelAxisType axis,int32_t direction){if(s_painted&&s_drawn_minute>=0)fx_start(fx_scan(true),s_drawn_minute);}
+// The settings' animations taken: the flick listened for or not, the scans
+// chosen again.
+static void fx_settings(void){
+  static bool flicking;const bool want=(s_settings.fx&GT_FX_FLICK)!=0;
+  if(want!=flicking){if(want)accel_tap_service_subscribe(flick);else accel_tap_service_unsubscribe();flicking=want;}
+  s_fx_planned=0;
+}
+
 static void update(Layer *layer,GContext *ctx){
   const time_t now=time(NULL);
   if(!covers(&s_now,now)){
@@ -264,6 +328,17 @@ static void update(Layer *layer,GContext *ctx){
   uint8_t *const pixels=gbitmap_get_data(frame);const int stride=gbitmap_get_bytes_per_row(frame);
 #endif
   const int minute=(int)((now-s_now.scene->hour_start)/60);
+  // An animation's next frame over the minute on the screen; anything else
+  // drawn, it is ended first, the screen as it was.
+  if(s_fx_on){
+    if(!s_tick_redraw&&s_painted&&s_drawn_serial==s_chart_serial&&s_drawn_minute==minute){
+      s_fx_on=enr_fx_frame(pixels,stride)!=0;
+      graphics_release_frame_buffer(ctx,frame);
+      if(s_fx_on)fx_next();
+      return;
+    }
+    enr_fx_end(pixels,stride);s_fx_on=false;
+  }
   const bool partial=s_tick_redraw&&s_drawn_serial==s_chart_serial&&s_drawn_minute>=0&&s_drawn_minute<=minute;
   int drawn=enr_render_update(s_now.scene,partial?s_drawn_minute:-1,minute,pixels,stride);
   // (Drawing over the last minute takes more memory than drawing the minute
@@ -272,7 +347,9 @@ static void update(Layer *layer,GContext *ctx){
   graphics_release_frame_buffer(ctx,frame);
   // Without the memory to draw, the next tick tries the whole minute again.
   if(drawn<0){app_note("draw",0);s_drawn_minute=-1;s_tick_redraw=false;return;}
+  const bool fresh=minute!=s_drawn_minute||s_drawn_serial!=s_chart_serial;
   s_drawn_serial=s_chart_serial;s_drawn_minute=minute;s_tick_redraw=false;s_painted=true;
+  if(fresh)fx_minute(minute);
 }
 
 static void tick(struct tm *when,TimeUnits changed){
@@ -283,7 +360,11 @@ static void tick(struct tm *when,TimeUnits changed){
   layer_mark_dirty(s_layer);
 }
 // Back from a notification or a menu: the screen holds something else.
-static void focus_changed(bool focused){if(focused){s_drawn_minute=-1;s_painted=false;layer_mark_dirty(s_layer);}}
+static void focus_changed(bool focused){
+  // (Away, an animation is let go: the screen is drawn whole on the return.)
+  if(!focused&&s_fx_on){enr_fx_end(NULL,0);s_fx_on=false;}
+  if(focused){s_drawn_minute=-1;s_painted=false;layer_mark_dirty(s_layer);}
+}
 
 // After data arrives: once the messages stop for a moment, check what is
 // still missing and draw the hour again if it needs it (or, with `changed`,
@@ -318,17 +399,20 @@ static void take_settings(const uint8_t *b,size_t n){
   _Static_assert(offsetof(WatchSettings,extra)-offsetof(WatchSettings,numerals)==10,"contiguous settings options");
   _Static_assert(offsetof(WatchSettings,norad)-offsetof(WatchSettings,lat100)==8,"contiguous coordinate fields");
   _Static_assert(offsetof(WatchSettings,extra_code)-offsetof(WatchSettings,numerals)==18,"contiguous identifier bytes");
-  s.version=13;s.figures=2;
+  s.version=14;s.figures=2;s.fx=GT_FX_DEFAULT;s.fx_rate=GT_FX_RATE_DEFAULT;
   // Wire bytes are little-endian on both Pebble and the host; the three
   // coordinate/catalog fields and the option bytes are contiguous.
   memcpy(&s.body,b,5);memcpy(&s.lat100,b+5,12);
   s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);
   memcpy(&s.numerals,b+21,n>=45?24:n>=39?18:n-21<10?n-21:10);
+  if(n>=48){s.fx=(uint16_t)(b[45]|b[46]<<8);s.fx_rate=b[47];}
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
-  if(!memcmp(&s,&s_settings,sizeof s)){check_soon();return;}
-  s_settings=s;settings_save(&s);show_state();
+  // (The animations alone changed: kept, the chart as it is.)
+  {WatchSettings same=s;same.fx=s_settings.fx;same.fx_rate=s_settings.fx_rate;
+  if(!memcmp(&same,&s_settings,sizeof s)){if(s.fx!=s_settings.fx||s.fx_rate!=s_settings.fx_rate){s_settings=s;settings_save(&s);fx_settings();}check_soon();return;}}
+  s_settings=s;settings_save(&s);show_state();fx_settings();
   // Drawn again in the new settings.
   build_abort();chart_free(&s_now);s_status[0]=0;s_status_phone=false;
   check_soon();layer_mark_dirty(s_layer);
@@ -402,9 +486,12 @@ static void init(void){
   battery_state_service_subscribe(battery_changed);
   connection_service_subscribe((ConnectionHandlers){.pebble_app_connection_handler=connection_changed});
   show_state();
+  fx_settings();
   check(time(NULL));
 }
 static void deinit(void){
+  if(s_fx_on){enr_fx_end(NULL,0);s_fx_on=false;}
+  if(s_settings.fx&GT_FX_FLICK)accel_tap_service_unsubscribe();
   tick_timer_service_unsubscribe();
   app_focus_service_unsubscribe();
   battery_state_service_unsubscribe();

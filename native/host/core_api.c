@@ -110,6 +110,10 @@ static uint8_t *frame_of(uint8_t *frame){
 #endif
 int core_render(int slot,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;enr_render(s,minute,frame_of(frame),ENR_W);return 0;}
 int core_render_update(int slot,int from,int minute,uint8_t *frame){const EnrScene *s=core_scene(slot);if(!s)return -1;return enr_render_update(s,from,minute,frame_of(frame),ENR_W);}
+int core_fx_begin(int slot,int kind,int minute,uint32_t seed){const EnrScene *s=core_scene(slot);return s&&enr_fx_begin(s,kind,minute,seed);}
+int core_fx_frame(uint8_t *frame){return enr_fx_frame(frame_of(frame),ENR_W);}
+void core_fx_end(uint8_t *frame){enr_fx_end(frame?frame_of(frame):NULL,ENR_W);}
+int core_fx_aos(int slot,int minute){const EnrScene *s=core_scene(slot);return s&&enr_fx_aos(s,minute);}
 // The scene's layout, in the order src/core.js reads it.
 int core_layout(int32_t *out,int max){
   const int32_t v[]={

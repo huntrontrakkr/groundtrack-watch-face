@@ -70,8 +70,21 @@ try{
   await page.setContent(html);
   // The sections fold: the face, what it follows and its own settings open,
   // each closed one saying what it holds.
-  assert.deepEqual(await page.locator('details.card').evaluateAll(e=>e.map(d=>[d.id,d.open])),[['sec-face',true],['sec-follow',true],['sec-chart',true],['sec-time',false],['sec-look',false],['sec-home',false],['sec-events',false]]);
-  assert.deepEqual(await page.locator('summary .now').allTextContents(),['Enroute','Sun','A flag','24-hour · Zulu','Green CRT · Michroma','Greenwich','Off']);
+  assert.deepEqual(await page.locator('details.card').evaluateAll(e=>e.map(d=>[d.id,d.open])),[['sec-face',true],['sec-follow',true],['sec-chart',true],['sec-time',false],['sec-look',false],['sec-fx',false],['sec-home',false],['sec-events',false]]);
+  // The animations: a scan played over the preview changes it, and leaves it as it was.
+  {
+    await page.locator('#sec-fx summary').click();
+    const shot=()=>page.evaluate(()=>document.getElementById('preview').toDataURL());
+    await page.waitForFunction(()=>window.previewDrawn);
+    const before=await shot();
+    await page.locator('button.play[data-fx="0"]').click();
+    await page.waitForTimeout(700);
+    assert.notEqual(await shot(),before,'the refresh scan shows on the preview');
+    await page.waitForTimeout(4000);
+    assert.equal(await shot(),before,'the preview is left as it was');
+    await page.locator('#sec-fx summary').click();
+  }
+  assert.deepEqual(await page.locator('summary .now').allTextContents(),['Enroute','Sun','A flag','24-hour · Zulu','Green CRT · Michroma','Blink · 4 scans · twice an hour','Greenwich','Off']);
   assert.equal(await page.locator('#chart-title').textContent(),'Enroute');
   await page.waitForFunction(()=>window.previewDrawn,null,{timeout:20000});
   mkdirSync('test-results',{recursive:true});await page.screenshot({path:'test-results/native-settings-closed.png',fullPage:true});
@@ -292,6 +305,10 @@ try{
   await page.fill('input[name=lat]','91');await page.fill('input[name=lon]','2.35');
   await page.click('#save');await page.waitForTimeout(200);
   assert.equal(closes.length,0,'an impossible latitude closed the page');
+  // The animations: the pixel sort off, the scans on every plate, four times an hour.
+  await page.locator('input[name=fx][value=sort]').uncheck();await page.locator('input[name=fx][value=everyplate]').check();
+  await page.locator('input[name=fxRate][value="3"]').check();
+  assert.equal(await page.locator('#now-fx').textContent(),'Blink · 3 scans · 4× an hour');
   // The phone's own fix, rounded to 0.01°.
   await page.click('#locate');
   assert.deepEqual([await page.inputValue('input[name=lat]'),await page.inputValue('input[name=lon]')],['48.86','2.35']);
@@ -314,7 +331,8 @@ try{
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1,...Array(14).fill(0)]));
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1,...Array(14).fill(0),(255&~32)|256&255,256>>8,3]));
+  assert.deepEqual([stored.fx,stored.fxRate],['body,rise,hour,flick,refresh,reacquire,tear,everyplate','3']);
   assert.equal(stored.vibe,'1');
   assert.equal(stored.hourFigures,'0');
   assert.equal(messages.find(m=>m.RiseSets).RiseSets.length,45*12);

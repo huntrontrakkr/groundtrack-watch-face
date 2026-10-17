@@ -13,7 +13,7 @@ import {registerLiveFixture} from './tle-fixture.mjs';
 import {registerNominal} from '../src/nominal.js';
 import {nameCode} from '../src/events.js';
 
-let cc=true;try{execFileSync('make',['-s','-C','native/host','harness','harness-exact','build_check','build_check-enroute','build_check-fuller','round_check-enroute','round_check-fuller'],{stdio:'pipe'});}catch{cc=false;}
+let cc=true;try{execFileSync('make',['-s','-C','native/host','harness','harness-exact','build_check','build_check-enroute','build_check-fuller','round_check-enroute','round_check-fuller','harness-round'],{stdio:'pipe'});}catch{cc=false;}
 registerLiveFixture();registerNominal();
 const ev=(iso,title)=>({epoch:Date.parse(iso),label:nameCode(title)});
 const input=(body,iso,plate,zone,more={})=>{const home=zone?HOMES[zone]||null:null;return chartInput({body,start:Date.parse(iso),plate,zone:zone||'UTC',home,...more});};
@@ -122,6 +122,21 @@ test('each face builds its hours on the Round 2 in what its builder leaves of th
       const r=spawnSync(`native/host/round_check-${face}`,[],{input:input(body,at(hour),more.plate||'console','America/New_York',{flag:!more.readout,rim,...more}),env:{...process.env,HEAP_LIMIT:String(limit)},timeout:20000});
       assert.equal(r.status,0,`${face} ${rim} ${body} ${JSON.stringify(more)} hour ${hour}: no chart in a heap of ${limit} bytes: ${r.stdout}${r.stderr}${r.signal||''}`);
     }
+  }
+});
+
+// The animations (effects.c) over the minute on the screen, on each screen
+// and on plates light and dark: every one leaves the screen as it was, and
+// a pulse off the chart declines.
+test('every animation leaves the screen as it was',{skip:!cc&&'no C compiler'},()=>{
+  const cases=[['sat:25544','2026-09-30T13:00:00Z','crt',{flag:true}],['sat:36585','2026-09-28T15:00:00Z','console',{flag:true}],['moon','2026-09-19T09:00:00Z','enroute',{flag:true}],
+    ['sat:25544','2026-09-30T13:00:00Z','raster',{face:'plotboard'}],['sat:25544','2026-09-30T13:00:00Z','operations',{projection:'fuller'}]];
+  for(const harness of ['native/host/harness','native/host/harness-round'])for(const [body,iso,plate,more] of cases)for(const rim of ['bezel','chords'])for(let kind=0;kind<6;kind++)for(const minute of [0,31,59]){
+    const r=spawnSync(harness,['-x',String(kind),String(minute),String(kind*97+minute)],{input:input(body,iso,plate,'America/New_York',{...more,rim}),maxBuffer:1<<28});
+    const out=JSON.parse(r.stderr.toString().trim().split('\n').pop());
+    const what=`${harness} ${body} ${plate} ${rim} kind ${kind} minute ${minute}`;
+    if(out.begun===false){assert.ok(kind>=4,`${what}: a scan declined`);continue;}
+    assert.equal(r.status,0,what);assert.ok(out.frames>0,what);assert.equal(out.restored,true,`${what}: the screen was not left as it was`);
   }
 });
 

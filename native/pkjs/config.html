@@ -115,6 +115,8 @@
   .satellite-row .drop{margin:0 0 6px 46px}
   #bodies>h3{margin:10px 14px 2px;font-size:13px}
   #bodies .satellite-row label{min-width:120px}
+  .fx-row{display:flex;align-items:center;gap:8px}.fx-label{flex:1;display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+  .play{min-width:40px;min-height:36px;border-radius:8px;font-size:14px}
   .track-option{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;cursor:pointer;min-height:28px}
 </style>
 </head>
@@ -230,6 +232,29 @@
       <p class="note field">The corner also says when the phone is out of reach (NO LINK) or a satellite's orbit data is old (EL OLD).</p>
     </div>
   </details>
+  <details class="card" id="sec-fx"><summary><span class="title">Animations</span><span class="now" id="now-fx"></span></summary>
+    <p class="note field">Brief animations drawn over the face, which is left as it was. Each can be turned off; press &#9654; to see it on the preview.</p>
+    <div class="group"><h3>On the face</h3>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="body"><span class="name">The body blinks as it steps<span class="note">Each minute, as the body moves on, it blinks and a ring opens round it</span></span></label><button type="button" class="play" data-fx="4" aria-label="Play The body blinks as it steps">&#9654;</button></div>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="rise"><span class="name">Home pulses as the satellite rises<span class="note">At the minute a satellite comes into view of home, a ring opens round home</span></span></label><button type="button" class="play" data-fx="5" aria-label="Play Home pulses as the satellite rises">&#9654;</button></div>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="hour"><span class="name">A scan as each hour begins<span class="note">When the new hour's chart appears, one of the scans below runs over it</span></span></label></div>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="flick"><span class="name">A scan at a flick of the wrist<span class="note">Flick your wrist to run one of the scans below, on any plate</span></span></label></div>
+    </div>
+    <div class="group"><h3>The scans</h3>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="refresh"><span class="name">Refresh<span class="note">A bright line runs down the screen with the glow of phosphor behind it</span></span></label><button type="button" class="play" data-fx="0" aria-label="Play Refresh">&#9654;</button></div>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="sort"><span class="name">Pixel sort<span class="note">A band sweeps the screen, each row's light sorted and smeared across it</span></span></label><button type="button" class="play" data-fx="1" aria-label="Play Pixel sort">&#9654;</button></div>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="reacquire"><span class="name">Reacquire<span class="note">The picture breaks into sorted noise and resolves again behind the sweep, as a signal coming back</span></span></label><button type="button" class="play" data-fx="2" aria-label="Play Reacquire">&#9654;</button></div>
+      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="tear"><span class="name">Tear<span class="note">Blocks of rows jump sideways, their red split from the rest, as a picture losing its hold</span></span></label><button type="button" class="play" data-fx="3" aria-label="Play Tear">&#9654;</button></div>
+      <label class="row"><input type="checkbox" name="fx" value="everyplate"><span class="name">On every plate<span class="note">Otherwise the scans run only on the plates that are a screen's: Console, Green CRT, Raster and the like</span></span></label>
+    </div>
+    <div class="group"><h3>How often the scans run</h3>
+      <label class="row"><input type="radio" name="fxRate" value="0"><span class="name">Never of themselves<span class="note">Only as an hour begins or at a flick, if those are on</span></span></label>
+      <label class="row"><input type="radio" name="fxRate" value="1"><span class="name">Once an hour</span></label>
+      <label class="row"><input type="radio" name="fxRate" value="2"><span class="name">Twice an hour</span></label>
+      <label class="row"><input type="radio" name="fxRate" value="3"><span class="name">Four times an hour</span></label>
+      <p class="note field">At minutes chosen at random each hour. Each scan lasts two to three seconds.</p>
+    </div>
+  </details>
   <details class="card" id="sec-home"><summary><span class="title">Home</span><span class="now" id="now-home"></span></summary>
     <p class="note field">Home is marked on the chart, with its sunrise and sunset, moonrise and moonset, or the satellite's next pass.</p>
     <label class="row"><input type="radio" name="home" value="custom"><span class="name">A place of my own</span></label>
@@ -288,6 +313,9 @@
   // (On a Round 2, its rim: round the octagon, across chords, or the instrument.)
   s.rim=['bezel','chords','instrument'].indexOf(config.settings.rim)>=0?config.settings.rim:'bezel';var round=!!config.settings.round;
   s.clock24=config.settings.clock24!=='0';
+  // (The animations: src/settings-rules.js EFFECTS, and how often the scans run.)
+  s.fx=String(config.settings.fx==null?'body,rise,hour,flick,refresh,sort,reacquire,tear':config.settings.fx).split(',').filter(Boolean);
+  s.fxRate=['0','1','2','3'].indexOf(config.settings.fxRate)>=0?config.settings.fxRate:'2';
   s.also=(config.settings.also||[]).slice();s.sats=(config.sats||[]).slice();s.tles={};
   config.bodies.forEach(function(b){info[b[0]]={name:b[1],note:b[2],view:b[3],period:b[4],group:b[5],plot:b[6]};});
   // (A satellite added from CelesTrak is charted by its orbit, as the
@@ -446,6 +474,9 @@
     hide('tape-group',!r.tape);show('tape',s.tape,round?['fixed','tape','clock','route']:null);
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
+    Array.prototype.forEach.call(form.querySelectorAll('input[name=fx]'),function(c){c.checked=s.fx.indexOf(c.value)>=0;});show('fxRate',s.fxRate);
+    var scans=['refresh','sort','reacquire','tear'].filter(function(k){return s.fx.indexOf(k)>=0;}).length;
+    document.getElementById('now-fx').textContent=[s.fx.indexOf('body')>=0?'Blink':null,scans?scans+' scan'+(scans>1?'s':'')+(s.fxRate==='0'?'':' · '+['','once','twice','4×'][Number(s.fxRate)]+' an hour'):null].filter(Boolean).join(' · ')||'Off';
     hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;form.elements.vibe.checked=s.vibe;form.elements.fuel.checked=s.fuel;
     hide('bare-group',!r.bare);show('hourFigures',s.hourFigures);
     hide('readout-group',!r.readout.length);show('readout',r.readoutShown,r.readout);
@@ -477,6 +508,8 @@
     else if(t.name==='tracked'){if(t.checked){if(t.dataset.found){var entry=foundEntries.filter(function(x){return 'sat:'+x.norad===t.value;})[0];if(entry)choose(entry);}else chooseKey(t.value);}else removeKey(t.value);return;}
     else if(t.name==='legend')s.legend=t.checked;
     else if(t.name==='vibe')s.vibe=t.checked;
+    else if(t.name==='fx'){s.fx=s.fx.filter(function(k){return k!==t.value;});if(t.checked)s.fx.push(t.value);render();return;}
+    else if(t.name==='fxRate'){s.fxRate=t.value;render();return;}
     else if(t.name==='fuel')s.fuel=t.checked;
     else if(t.name==='also'){if(t.checked&&s.also.indexOf(t.value)<0)s.also.push(t.value);if(!t.checked)s.also=s.also.filter(function(k){return k!==t.value;});}
     else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;
@@ -702,8 +735,21 @@
     document.getElementById('colours-now').textContent=screen?'As the watch\'s screen shows it.':'In the colours as drawn.';
     document.getElementById('colours').textContent=screen?'Show as drawn':'Show as on the watch';
   }
+  // An animation played over the preview's minute (effects.c, as the watch
+  // draws it), a frame each 66 ms.
+  var playing=null;
+  function stopPlaying(){if(playing){clearInterval(playing);playing=null;core.core_fx_end(0);}}
+  function play(kind){
+    if(!core||drawnMinute<0)return;
+    stopPlaying();
+    if(!core.core_fx_begin(0,kind,drawnMinute,(Math.random()*4294967295)>>>0)){note(kind===5?'Home is not on this chart.':'');return;}
+    note('');
+    playing=setInterval(function(){var more=core.core_fx_frame(framePtr);show_();if(!more){clearInterval(playing);playing=null;}},66);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('button.play'),function(b){b.addEventListener('click',function(){play(Number(b.dataset.fx));});});
   function paint(){
     if(!core||!GT)return;
+    stopPlaying();
     if(s.body.indexOf('sat:')===0&&!GT.elementsFor(s.body)){blank(true);window.previewDrawn=null;need(s.body.slice(4));return;}
     s.extra.forEach(function(b){if(b&&!GT.elementsFor(b)&&!failed[b.slice(4)]&&!fetching[b.slice(4)])need(b.slice(4));});
     var made;try{made=inputNow();}catch(error){blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
@@ -746,7 +792,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',rim:s.rim,vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',rim:s.rim,fx:s.fx.join(','),fxRate:s.fxRate,vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

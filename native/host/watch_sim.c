@@ -98,6 +98,8 @@ static void redraw(void){
 static TickHandler s_tick;static AppFocusHandler s_focus;static BatteryStateHandler s_battery;static ConnectionHandlers s_connection;
 static BatteryChargeState s_charge={100,false,false};static bool s_linked=true;
 void tick_timer_service_subscribe(TimeUnits u,TickHandler h){s_tick=h;}
+void accel_tap_service_subscribe(AccelTapHandler h){(void)h;}
+void accel_tap_service_unsubscribe(void){}
 void tick_timer_service_unsubscribe(void){s_tick=NULL;}
 void app_focus_service_subscribe(AppFocusHandler h){s_focus=h;}
 void app_focus_service_unsubscribe(void){s_focus=NULL;}

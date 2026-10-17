@@ -40,7 +40,7 @@ CFLAGS = ["-mcpu=cortex-m3", "-mthumb", "-Os", "-std=gnu11", "-ffunction-section
           "-fno-tree-pre", "-fno-reorder-blocks", "-fno-move-loop-invariants", "-fno-tree-dominator-opts",
           "-fno-tree-loop-im", "-fno-tree-scev-cprop", "-fmerge-all-constants"]
 CORE = ["chart.c", "fuller.c", "map_pack.c", "segments.c", "passes.c", "fmath.c", "enroute_core.c",
-        "departure_font.c"]
+        "departure_font.c", "effects.c"]
 # each blob: its entry table, then the core (only what the table reaches is kept)
 BLOBS = {"builder": "builder_blob.c", "renderer": "renderer_blob.c"}
 MAGIC = 0x42435447          # "GTCB"

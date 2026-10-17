@@ -28,14 +28,18 @@ void settings_load(WatchSettings *s){
   // the phone sends one.
   // The Sun on Groundtrack, the ISS on Fuller.
 #if defined(FACE_FULLER)
-  const WatchSettings defaults={13,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}}};
+  const WatchSettings defaults={14,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}},GT_FX_DEFAULT,GT_FX_RATE_DEFAULT};
 #else
-  const WatchSettings defaults={13,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}}};
+  const WatchSettings defaults={14,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}},GT_FX_DEFAULT,GT_FX_RATE_DEFAULT};
 #endif
   memset(s,0,sizeof *s);
   const int n=persist_read_data(SETTINGS_KEY,s,sizeof *s);
+  // (Version 13's record ended before the animations: they start as the
+  // defaults.)
+  #define V13_BYTES ((int)((offsetof(WatchSettings,fx)+3)&~3u))
   if((n==36&&(s->version==10||s->version==11))||(n==44&&s->version==12)){if(s->version==10)s->watch=0;s->version=13;}
-  else if(n!=(int)sizeof *s||s->version!=13)*s=defaults;
+  if(s->version==13&&(n==36||n==44||n==V13_BYTES)){s->fx=GT_FX_DEFAULT;s->fx_rate=GT_FX_RATE_DEFAULT;s->version=14;}
+  else if(n!=(int)sizeof *s||s->version!=14)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
