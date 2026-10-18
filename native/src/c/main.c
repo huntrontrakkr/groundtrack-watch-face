@@ -35,7 +35,7 @@
 #endif
 // An animation running (its frames drawn over the minute on the screen),
 // and the face going to the next satellite (below).
-static bool s_fx_on,s_switching;
+static bool s_fx_on,s_switching,s_switch_built;
 static void switch_end(void);
 #if GT_BLOBS
 // The chart builder and the minute renderer are code blobs (blob.h; GT_BLOBS
@@ -234,10 +234,12 @@ static void check(time_t now);
 static void build_step(void *data){
   s_build_timer=NULL;
   if(!s_build)return;
-  const uint32_t t0=now_ms();int r;
-  do r=chart_step(s_build);while(r>0&&now_ms()-t0<80);
+  // (Going to the next satellite, smaller slices, so that the track list
+  // over it keeps its pace: a frame each 66 ms between them.)
+  const uint32_t t0=now_ms(),slice=s_switching?20:80;int r;
+  do r=chart_step(s_build);while(r>0&&now_ms()-t0<slice);
   s_build_ms+=now_ms()-t0;
-  if(r>0){s_build_timer=app_timer_register(10,build_step,NULL);return;}
+  if(r>0){s_build_timer=app_timer_register(s_switching?1:10,build_step,NULL);return;}
   if(r<0){app_note("chart",chart_failed_at);switch_end();build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
@@ -252,6 +254,8 @@ static void build_step(void *data){
 // What the watch still needs. A chart built in another time zone (the
 // clock set anew mid-hour) is another hour's.
 static void check(time_t now){
+  // (Not while the track list is still moving: the hour is built after.)
+  if(s_switching&&!s_switch_built)return;
   if(s_now.scene&&zone_minutes(now)!=s_zone)chart_free(&s_now);
   if(!covers(&s_now,now))build(now);else need_data(now);
 }
@@ -322,8 +326,13 @@ static struct {int n;char code[3][4];uint8_t kind[3];uint8_t ground,ink,accent;}
 #define LIST_MOON 0x81
 static uint8_t s_switch_step;static AppTimer *s_switch_timer;static time_t s_switch_since;
 static int satellites(const WatchSettings *s){int n=s->body==BODY_SATELLITE;for(int k=0;k<2;k++)n+=s->extra[k]!=0;return n;}
-static void switch_step(void *data){s_switch_timer=NULL;if(s_switching){if(s_switch_step<255)s_switch_step++;layer_mark_dirty(s_layer);s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);}}
-static void switch_end(void){s_switching=false;if(s_switch_timer){app_timer_cancel(s_switch_timer);s_switch_timer=NULL;}}
+static void switch_step(void *data){s_switch_timer=NULL;
+  if(s_switching){
+    if(!s_switch_built&&s_switch_step>=16){s_switch_built=true;check(time(NULL));}
+    layer_mark_dirty(s_layer);s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);
+  }}
+static void switch_end(void){
+  s_switching=false;if(s_switch_timer){app_timer_cancel(s_switch_timer);s_switch_timer=NULL;}}
 static void send_primary(int32_t norad){
   DictionaryIterator *out;
   if(app_message_outbox_begin(&out)!=APP_MSG_OK)return;
@@ -359,9 +368,12 @@ static void next_satellite(void){
   // (What the new body lacks, its passes over home, asked for at once.)
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
   if(s_fx_on){enr_fx_end(NULL,0);s_fx_on=false;}
-  s_switching=true;s_switch_step=0;s_switch_since=time(NULL);if(!s_switch_timer)s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);
+  s_switching=true;s_switch_step=0;s_switch_built=false;s_switch_since=time(NULL);if(!s_switch_timer)s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);
+  // (The hour built once the list has dropped and scrolled, when it says
+  // ACQUIRING: its code loaded and its work done then, not under the
+  // list's movement.)
   build_abort();chart_free(&s_now);s_status[0]=0;s_status_phone=false;
-  check(time(NULL));layer_mark_dirty(s_layer);
+  layer_mark_dirty(s_layer);
 }
 // The track list over the last chart, which breaks up behind it: a row for
 // each of the satellites (or the Sun or Moon) in the ring's order before
@@ -432,6 +444,9 @@ static void switch_frame(GContext *ctx,GRect box){
     letters(&f,s_list.code[item],x0+22,y+11,wy0,wy1,fg);
   }
   graphics_release_frame_buffer(ctx,frame);
+  // (The next step at the next frame drawn: under load the list slows
+  // rather than skips.)
+  if(s_switch_step<255)s_switch_step++;
   // The small type: the header, and each row's view (rows wholly in view).
   static const char *const VIEWS[4]={"HOUR CHART","WORLD BAND","WHOLE DAY","WORLD DAY"};
   const GFont small=fonts_get_system_font(FONT_KEY_GOTHIC_09);
