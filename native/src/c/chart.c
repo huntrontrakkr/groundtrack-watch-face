@@ -1345,13 +1345,14 @@ static __attribute__((noinline)) bool companion_place(ChartBuild *b,int k,int64_
   double lat,lon,alt;sat_segment_position(s,t,&lat,&lon,&alt);
   project(&b->cam,lat,lon,x,y);return true;
 }
-// Half-minute dots never bridge a map cut. Only this hour.
+// Half-minute dots never bridge a map cut. Only this hour. In the marks'
+// ink, as the companion's own mark is (in the grid's they were lost in it).
 static __attribute__((noinline)) void companion_tracks(ChartBuild *b,Canvas *cv){
   for(int k=0;k<2;k++)if(b->in.legend&(4<<k)){
     for(int dt=0;dt<3600;dt+=30){
       double x,y;
       if(!companion_place(b,k,b->in.start+dt,&x,&y))continue;
-      if(y>=cv->top&&y<=cv->bottom)plot(cv,x,y,L_GRID);
+      if(y>=cv->top&&y<=cv->bottom)plot(cv,x,y,L_MARK);
     }
   }
 }
