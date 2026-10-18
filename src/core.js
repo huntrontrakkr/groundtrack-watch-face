@@ -23,20 +23,22 @@ const RGB=Array.from({length:256},(_,c)=>[(c>>4&3)*85,(c>>2&3)*85,(c&3)*85]);
 
 // Loads the core with its resources: {wasm, map, figures, tables, grids,
 // land} as bytes (grids and land for the Fuller sheets).
-export async function loadCore({wasm,map,figures,tables,grids=null,land=null}){
+// (size: the screen the core was built for, the Time 2's unless given: the
+// Round 2's core, public/core-round.wasm, draws 260x260.)
+export async function loadCore({wasm,map,figures,tables,grids=null,land=null,size=null}){
   const stubs={wasi_snapshot_preview1:{fd_close:()=>0,fd_seek:()=>0,fd_write:()=>0}};
   const {instance}=await WebAssembly.instantiate(wasm,stubs);
   instance.exports._initialize();
-  const core=new Core(instance);
+  const core=new Core(instance,size);
   [map,figures,tables,grids,land].forEach((bytes,kind)=>{if(bytes)core.source(kind,bytes);});
   return core;
 }
 export class Core{
-  constructor(instance){
-    this.x=instance.exports;this.kept=[];
+  constructor(instance,size=null){
+    this.x=instance.exports;this.kept=[];this.w=size?size.w:W;this.h=size?size.h:H;
     const at=this.x.core_alloc(4*64),n=this.x.core_layout(at,64);
     const v=new Int32Array(this.mem(),at,n);this.layout=Object.fromEntries(LAYOUT.map((k,i)=>[k,v[i]]));this.x.core_free(at);
-    this.frameAt=this.x.core_alloc(W*H);
+    this.frameAt=this.x.core_alloc(this.w*this.h);
     // The scenes built, by their input text, each in one of the core's slots.
     this.slots=new Map();this.tick=0;
   }
@@ -98,7 +100,7 @@ export class Core{
   zoneAt(slot,minute,x,y){return this.x.core_zone(slot,minute,x,y);}
   // A minute's frame as GColor8 bytes (a copy), or drawn over `frame` as the
   // minute `from` left it.
-  render(minute,slot=0){this.x.core_render(slot,minute,this.frameAt);return new Uint8Array(this.mem(),this.frameAt,W*H).slice();}
+  render(minute,slot=0){this.x.core_render(slot,minute,this.frameAt);return new Uint8Array(this.mem(),this.frameAt,this.w*this.h).slice();}
   update(from,minute,frame,slot=0){new Uint8Array(this.mem(),this.frameAt,W*H).set(frame);const drawn=this.x.core_render_update(slot,from,minute,this.frameAt);frame.set(new Uint8Array(this.mem(),this.frameAt,W*H));return drawn;}
 }
 
@@ -106,12 +108,17 @@ export class Core{
 // tests read it. The last few hours' scenes are kept (the page's proofs
 // show one hour on every plate), each in a slot of the core's.
 export const MEASURE={body:0,flag:1,callout:2,tapeHour:3,tapeNext:4,index:5,counter:6};
+// A study state's input text for the core, and the minute of its hour.
+export function inputFor(state){
+  const {body,epoch,timeZone,clock24}=state,start=civilHour(epoch,timeZone),minute=Math.floor((epoch-start)/MINUTE);
+  return {minute,text:chartInput({body,start,plate:state.plate,readout:state.readout===true?'callout':state.readout||false,numerals:state.numerals||'colon',margin:state.zone||'utc',
+      span:state.span||'day',tape:state.tape||'fixed',transfer:state.transfer||'off',figures:state.figures||'michroma',corner:state.corner||'day',events:state.events||[],clock24,zone:timeZone,home:state.home||null,projection:state.projection||'chart',face:state.face,also:state.also||[],bare:!!state.bare,legend:!!state.legend,north:!!state.north,extra:state.extra||[],tracks:state.tracks||[],rim:state.rim||'bezel'})};
+}
 export class CoreRenderer{
   constructor(core){this.core=core;this.stats={geometryBuilds:0,renders:0};}
   render(state){
-    const {body,epoch,timeZone,clock24}=state,start=civilHour(epoch,timeZone),minute=Math.floor((epoch-start)/MINUTE);
-    const text=chartInput({body,start,plate:state.plate,readout:state.readout===true?'callout':state.readout||false,numerals:state.numerals||'colon',margin:state.zone||'utc',
-      span:state.span||'day',tape:state.tape||'fixed',transfer:state.transfer||'off',figures:state.figures||'michroma',corner:state.corner||'day',events:state.events||[],clock24,zone:timeZone,home:state.home||null,projection:state.projection||'chart',face:state.face,also:state.also||[],bare:!!state.bare,legend:!!state.legend,north:!!state.north,extra:state.extra||[],tracks:state.tracks||[],rim:state.rim||'bezel'});
+    const {body,epoch,timeZone,clock24}=state,start=civilHour(epoch,timeZone);
+    const {text,minute}=inputFor(state);
     const held=this.core.sceneFor(text);if(held.built)this.stats.geometryBuilds++;this.scene=held.scene;
     const frame=this.core.render(minute,held.slot),buf=new Uint8ClampedArray(W*H*3),rgba=new Uint8ClampedArray(W*H*4);
     for(let i=0;i<W*H;i++){const c=RGB[frame[i]];buf[i*3]=c[0];buf[i*3+1]=c[1];buf[i*3+2]=c[2];rgba[i*4]=c[0];rgba[i*4+1]=c[1];rgba[i*4+2]=c[2];rgba[i*4+3]=255;}

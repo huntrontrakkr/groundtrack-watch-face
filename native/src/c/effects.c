@@ -32,6 +32,7 @@ typedef struct {
   Span held[4];int nheld;                  // the rows kept, as strips
   uint8_t rows[FX_ROWS][W];                // and their pixels
   EnrPx text[480];                         // the reacquiring's box's lettering
+  uint8_t tmp[3][W];                       // rows worked on (not on the stack: it is 2 KB)
 } Fx;
 static Fx *fx;
 
@@ -132,7 +133,7 @@ static void sort_row(uint8_t *r,const uint8_t *src,int x0,int x1,int at,bool dar
   if(dark)at=12-at;
   // (The lightest to the left: the row read backward and written back so.)
   if(fx->left){
-    uint8_t a[W],b[W];for(int x=x0;x<=x1;x++)a[x]=src[x1-(x-x0)];
+    uint8_t *a=fx->tmp[0],*b=fx->tmp[1];for(int x=x0;x<=x1;x++)a[x]=src[x1-(x-x0)];
     fx->left=false;sort_row(b,a,x0,x1,dark?12-at:at,dark);fx->left=true;
     for(int x=x0;x<=x1;x++)r[x]=b[x1-(x-x0)];
     return;
@@ -178,11 +179,11 @@ static void pixel_sort(uint8_t *frame,int stride,bool resolving){
       if(resolving){
         // Blocks of the row thrown sideways, as a signal breaking up.
         const int shift=(int)(rnd()%13)-6;
-        if(shift){uint8_t t[W];memcpy(t+x0,r+x0,(size_t)(x1-x0+1));for(int x=x0;x<=x1;x++){int sx=x-shift;sx=sx<x0?x0:sx>x1?x1:sx;r[x]=t[sx];}}
+        if(shift){uint8_t *t=fx->tmp[0];memcpy(t+x0,r+x0,(size_t)(x1-x0+1));for(int x=x0;x<=x1;x++){int sx=x-shift;sx=sx<x0?x0:sx>x1?x1:sx;r[x]=t[sx];}}
       }
     }else{
       // Resolving behind it: each pixel back as the band leaves it.
-      uint8_t sorted[W];sort_row(sorted,src,x0,x1,1,dark);
+      uint8_t *sorted=fx->tmp[2];sort_row(sorted,src,x0,x1,1,dark);
       const int keep=(band-head-d)*256/(band-head);   // (the chance a pixel is back, of 256)
       for(int x=x0;x<=x1;x++)r[x]=(int)(rnd()&255)<keep?src[x]:sorted[x];
     }

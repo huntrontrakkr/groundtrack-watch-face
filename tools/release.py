@@ -177,6 +177,15 @@ def public_app(face):
     return response.json()["data"][0]
 
 
+def gallery(face):
+    """The face's store gallery in docs/screenshots/store/<face> (node
+    tools/render-store.mjs), each platform's (emery_*, gabbro_*), in order:
+    its GIFs and its stills."""
+    shots = sorted((p for p in (ROOT / "docs/screenshots/store" / face.key).glob("*_*")
+                    if p.name.split("_", 1)[0] in PLATFORMS), key=lambda p: (p.name.split("_")[0], p.name))
+    return [str(p) for p in shots if p.suffix == ".gif"], [str(p) for p in shots if p.suffix == ".png"]
+
+
 def create(version, face):
     """Creates a face's store listing from the verified package, with the
     listing's copy, the release notes and the face's gallery, through the
@@ -195,15 +204,15 @@ def create(version, face):
     if existing:
         print(f"{face.title} already has a listing: {existing}")
         return existing
-    gallery = sorted((ROOT / "docs/screenshots/store" / face.key).glob("emery_*"))
-    if not gallery:
+    gifs, stills = gallery(face)
+    if not gifs and not stills:
         raise RuntimeError(f"No gallery for {face.title} in docs/screenshots/store/{face.key} (node tools/render-store.mjs).")
     details = {"name": face.title, "version": version, "description": description(face),
                "source": "https://github.com/huntrontrakkr/groundtrack-watch-face", "category": "faces",
                "icon_small_path": "", "icon_large_path": ""}
-    metadata = {"app_uuid": face.uuid, "version": version, "platforms": ["emery"], "app_name": face.title, "app_type": "watchface"}
+    metadata = {"app_uuid": face.uuid, "version": version, "platforms": PLATFORMS, "app_name": face.title, "app_type": "watchface"}
     payload = PublishCommand._create_app(API, token, str(pbw), metadata, details, notes_for(version).read_text().strip(), True,
-                                         [str(p) for p in gallery if p.suffix == ".gif"], [str(p) for p in gallery if p.suffix == ".png"])
+                                         gifs, stills)
     app_id = PublishCommand._extract_app_id(payload)
     if not app_id:
         r = requests.get(API + "/api/v1/developer/me", headers={"Authorization": "Bearer " + token}, timeout=30)
@@ -245,12 +254,10 @@ def publish(version, face):
         raise ValueError("Refusing to replace a newer published version.")
     if current != version:
         # The face's gallery in docs/screenshots/store/<face>, if any,
-        # replaces the listing's: GIFs first, then stills.
-        gallery = sorted((ROOT / "docs/screenshots/store" / face.key).glob("emery_*"))
-        gifs = [str(p) for p in gallery if p.suffix == ".gif"]
-        stills = [str(p) for p in gallery if p.suffix == ".png"]
+        # replaces the listing's, each platform's: GIFs first, then stills.
+        gifs, stills = gallery(face)
         PublishCommand._upload_release(API, face.store_id, token, str(pbw), version, notes, True, gifs, stills,
-                                       replace_screenshots=bool(gallery))
+                                       replace_screenshots=bool(gifs or stills))
     # A rerun verifies an existing version instead of creating it again.
     app = public_app(face)
     if app["latest_release"]["version"] != version:

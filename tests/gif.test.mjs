@@ -18,12 +18,17 @@ test('a GIF decodes to the frames it was made of',()=>{
   d.frames.forEach((f,k)=>{assert.equal(f.delay,50);assert.ok(Buffer.from(f.rgb).equals(Buffer.from(frames[k])),`frame ${k}`);});
 });
 
-test('each face opens its store gallery with a reel: the watch\'s screen, half a second a frame',()=>{
+test('each face opens each platform\'s store gallery with a reel: the watch\'s screen, half a second a frame',()=>{
   for(const face of ['enroute','fuller']){
-    const dir=`docs/screenshots/store/${face}`,gifs=readdirSync(dir).filter(f=>f.endsWith('.gif'));
-    assert.deepEqual(gifs,['emery_00_reel.gif'],face);
-    const d=decodeGIF(new Uint8Array(readFileSync(`${dir}/${gifs[0]}`)));
-    assert.deepEqual([d.width,d.height,d.loops],[W,H,0]);
-    assert.ok(d.frames.length>=10&&d.frames.every(f=>f.delay===50),face);
+    const dir=`docs/screenshots/store/${face}`,gifs=readdirSync(dir).filter(f=>f.endsWith('.gif')).sort();
+    assert.deepEqual(gifs,['emery_00_reel.gif','gabbro_00_reel.gif'],face);
+    for(const [gif,size] of [[gifs[0],[W,H]],[gifs[1],[260,260]]]){
+      const d=decodeGIF(new Uint8Array(readFileSync(`${dir}/${gif}`)));
+      assert.deepEqual([d.width,d.height,d.loops],[...size,0],gif);
+      assert.ok(d.frames.length>=10&&d.frames.every(f=>f.delay===50),`${face} ${gif}`);
+    }
+    // (A still for each platform's every one.)
+    const stills=p=>readdirSync(dir).filter(f=>f.startsWith(p)&&f.endsWith('.png')).map(f=>f.slice(p.length));
+    assert.deepEqual(stills('gabbro_'),stills('emery_'),face);
   }
 });

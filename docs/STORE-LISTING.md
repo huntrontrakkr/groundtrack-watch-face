@@ -15,12 +15,14 @@ Every release publishes to both store listings and verifies the public download 
 
 Groundtrack draws where the Sun, the Moon or a satellite is over the Earth, and where it goes next, on a flat chart with the time set along the route.
 
-Two faces in one. Enroute is an hour chart: the ground track from this hour's compass rose to the next reporting point, marked each minute, for the Sun, the Moon and the slower, higher satellites. The Plotboard is mission control's wall: a world band with tracking stations and the time on a ruler, sliding tape or clock, showing a fast satellite's hour or a slow one's whole day.
+Two faces in one. Enroute is an hour chart: the ground track from this hour's compass rose to the next reporting point, marked each minute. The Plotboard is mission control's wall: a world band with tracking stations and the time on a ruler, tape or clock.
 
 Follow one of 68 satellites, from space stations and Starlink to GPS and weather, or find any other at CelesTrak. The Sun and Moon can be marked beside it.
 
-Relief, the continental shelf and coastlines come from public-domain elevation data on the watch; the calculated Sun brings night across the map. A home station gives sunrise and sunset or the satellite's next pass. Thirty-two plates, from paper charts and a portolan to mission-control glass, cockpit HUDs and the Earth at night. A fuel line along the top edge shows battery and phone link; the watch can buzz when the link drops.
+Relief and coastlines come from public-domain elevation data on the watch; the calculated Sun brings night across the map. A home station gives sunrise and sunset or the satellite's next pass. Thirty-two plates, from paper charts and a portolan to mission-control glass, cockpit HUDs and the Earth at night. A fuel line shows battery and phone link; the watch can buzz when the link drops. Brief animations, each its own switch: the body blinks as it steps, and on screen-like plates a scan now and then refreshes, pixel-sorts or reacquires the picture.
 
-Its companion, Groundtrack Fuller, draws the same routes on Buckminster Fuller's unfolded globe, rolled along the track so the route never meets a cut. The two share their satellites, plates and options but are separate watchfaces with their own settings, and can be installed side by side.
+For Pebble Time 2 and Pebble Round 2: on the round screen the margins letter round an octagon, run in chords over a map to the edge, or tick the minutes like an instrument.
 
-The phone sends the Sun and Moon weeks ahead and orbits from CelesTrak days ahead, so the face runs without it. Requires Pebble Time 2. Not for navigation. Source code is on GitHub.
+Its companion, Groundtrack Fuller, draws the same routes on Buckminster Fuller's unfolded globe; the two can be installed side by side.
+
+The phone sends the Sun and Moon weeks ahead and orbits days ahead, so the face runs without it. Not for navigation. Source code is on GitHub.

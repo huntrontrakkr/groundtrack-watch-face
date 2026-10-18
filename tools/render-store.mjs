@@ -2,12 +2,13 @@
 // (the core, as WebAssembly), 200x228 as the store takes them for emery,
 // into docs/screenshots/store/<face>/emery_NN_<name>.png, led by a reel,
 // emery_00_reel.gif: the face's range, plates and features, half a second
-// a frame (tools/gif.mjs). tools/release.py uploads what is there with a
-// release.
+// a frame (tools/gif.mjs); and the same for the Round 2 (gabbro_*: 260x260,
+// the Round 2's core, black off the glass), through its three rim styles in
+// turn. tools/release.py uploads what is there with a release.
 //   node tools/render-store.mjs
 import {mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {loadCore,CoreRenderer} from '../src/core.js';
+import {loadCore,CoreRenderer,inputFor} from '../src/core.js';
 import {HOMES} from '../src/home.js';
 import {W,H} from '../src/plates.js';
 import {encodePNG} from './png.mjs';
@@ -22,6 +23,7 @@ registerNominal();
 {const lines=readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','celestrak');}
 const read=f=>new Uint8Array(readFileSync(f));
 const core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack')});
+const round=await loadCore({wasm:read('public/core-round.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack'),size:{w:260,h:260}});
 const zone='America/New_York',home={...HOMES[zone]},at=iso=>Date.parse(iso);
 const ev=(iso,title)=>({epoch:at(iso),label:nameCode(title)});
 const GALLERIES={
@@ -82,14 +84,29 @@ const REELS={
     {body:'sat:25544',epoch:at('2026-09-30T15:05:00Z'),plate:'infrared',figures:'orbitron',readout:'flag'}
   ]
 };
-const draw=(face,state)=>new CoreRenderer(core).render({timeZone:zone,clock24:true,home,numerals:'even',zone:'utc',span:'day',tape:'fixed',transfer:'off',figures:'michroma',corner:'day',projection:face==='fuller'?'fuller':'chart',...state});
+const settings=face=>({timeZone:zone,clock24:true,home,numerals:'even',zone:'utc',span:'day',tape:'fixed',transfer:'off',figures:'michroma',corner:'day',projection:face==='fuller'?'fuller':'chart'});
+const draw=(face,state)=>new CoreRenderer(core).render({...settings(face),...state});
+// The Round 2's frame, RGB, black off the glass; the k-th in a gallery or
+// reel in the k-th of the rim styles, round and round.
+const RIMS=['bezel','chords','instrument'];
+const drawRound=(face,state,k)=>{
+  const {text,minute}=inputFor({...settings(face),rim:RIMS[k%3],...state});
+  const held=round.sceneFor(text),frame=round.render(minute,held.slot),buf=Buffer.alloc(260*260*3);
+  for(let y=0;y<260;y++)for(let x=0;x<260;x++){
+    const d=(2*x+1-260)**2+(2*y+1-260)**2;if(d>260*260)continue;
+    const c=frame[y*260+x],i=3*(y*260+x);buf[i]=(c>>4&3)*85;buf[i+1]=(c>>2&3)*85;buf[i+2]=(c&3)*85;
+  }
+  return buf;
+};
 for(const [face,list] of Object.entries(GALLERIES)){
   const dir=join('docs/screenshots/store',face);rmSync(dir,{recursive:true,force:true});mkdirSync(dir,{recursive:true});
   list.forEach(([name,state],k)=>{
     const frame=draw(face,state);
     const file=join(dir,`emery_${String(k+1).padStart(2,'0')}_${name}.png`);
     writeFileSync(file,encodePNG(Buffer.from(frame.buf),W,H,1));
-    console.log(file);
+    const roundFile=join(dir,`gabbro_${String(k+1).padStart(2,'0')}_${name}.png`);
+    writeFileSync(roundFile,encodePNG(drawRound(face,state,k),260,260,1));
+    console.log(file,roundFile);
   });
 }
 // The reels take CelesTrak's elements of 2 October for the rest (GLONASS
@@ -98,5 +115,7 @@ for(const [face,list] of Object.entries(GALLERIES)){
 for(const [face,list] of Object.entries(REELS)){
   const reel=join('docs/screenshots/store',face,'emery_00_reel.gif');
   writeFileSync(reel,encodeGIF(list.map(state=>Buffer.from(draw(face,state).buf)),W,H,50));
-  console.log(reel);
+  const roundReel=join('docs/screenshots/store',face,'gabbro_00_reel.gif');
+  writeFileSync(roundReel,encodeGIF(list.map((state,k)=>drawRound(face,state,k)),260,260,50));
+  console.log(reel,roundReel);
 }
