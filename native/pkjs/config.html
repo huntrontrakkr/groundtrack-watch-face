@@ -293,7 +293,9 @@
     <label class="row"><input type="radio" name="home" value="none"><span class="name">None<span class="note">No home on the chart; its line in the margin shows the date instead</span></span></label>
   </details>
   <details class="card" id="sec-fx"><summary><span class="title">Animations</span><span class="now" id="now-fx"></span></summary>
-    <p class="note field">Brief animations drawn over the face, which is left as it was. Each has its own switch; &#9654; plays it on the preview above.</p>
+    <label class="row"><input type="checkbox" name="fxOn"><span class="name">Animations<span class="note">Brief animations drawn over the face, which is left as it was. Off, nothing moves but the minute</span></span></label>
+    <div id="fx-all">
+    <p class="note field">Each has its own switch; &#9654; plays it on the preview above.</p>
     <div class="group"><h3>On the face</h3>
       <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="body"><span class="name">The body blinks as it steps<span class="note">Each minute, as the body moves on, it blinks and a ring opens round it</span></span></label><button type="button" class="play" data-fx="4" aria-label="Play The body blinks as it steps">&#9654;</button></div>
       <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="rise"><span class="name">Home pulses as a satellite rises<span class="note">At the minute a satellite comes into view of home, a ring opens round home</span></span></label><button type="button" class="play" data-fx="5" aria-label="Play Home pulses as a satellite rises">&#9654;</button></div>
@@ -312,12 +314,13 @@
       <label class="row"><input type="radio" name="fxRate" value="2"><span class="name">2 an hour<span class="note">Twice an hour, at minutes chosen at random</span></span></label>
       <label class="row"><input type="radio" name="fxRate" value="3"><span class="name">4 an hour<span class="note">Four times an hour, at minutes chosen at random</span></span></label>
     </div><p class="seg-note"></p></div>
+    </div>
     <div class="group"><h3>A flick of the wrist</h3><div class="seg">
-      <label class="row"><input type="radio" name="flickMode" value="one"><span class="name">One flick<span class="note">Following more than one satellite, a flick moves to the next: a track list names it while its chart is drawn, and it comes in under a reacquiring sweep. Following one, a flick runs a scan, on any plate</span></span></label>
+      <label class="row"><input type="radio" name="flickMode" value="one"><span class="name">One flick<span class="note">Following more than one satellite, a flick moves to the next: a track list names it while its chart is drawn, and it comes in under a reacquiring sweep. Following one, a flick runs a scan (any but the reacquiring, whose box would cover the time)</span></span></label>
       <label class="row"><input type="radio" name="flickMode" value="two"><span class="name">Two flicks<span class="note">The same at two flicks within a second and a half, so a stray movement does nothing</span></span></label>
       <label class="row"><input type="radio" name="flickMode" value="off"><span class="name">Off<span class="note">The face takes no notice of a flick</span></span></label>
     </div><p class="seg-note"></p></div>
-    <div class="group"><h3>Quiet Time</h3>
+    <div class="group" id="fx-quiet"><h3>Quiet Time</h3>
       <label class="row"><input type="checkbox" name="quietFx"><span class="name">Hold the animations in Quiet Time<span class="note">While the watch's Quiet Time is on, nothing moves but the minute</span></span></label>
     </div>
   </details>
@@ -552,9 +555,10 @@
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
     Array.prototype.forEach.call(form.querySelectorAll('input[name=fx]'),function(c){c.checked=s.fx.indexOf(c.value)>=0;});show('fxRate',s.fxRate);
+    {var on=s.fx.indexOf('none')<0;form.elements.fxOn.checked=on;document.getElementById('fx-all').hidden=!on;document.getElementById('fx-quiet').hidden=!on;}
     show('flickMode',s.fx.indexOf('flick')<0?'off':s.fx.indexOf('twoflicks')>=0?'two':'one');
     var scans=['refresh','sort','reacquire','tear'].filter(function(k){return s.fx.indexOf(k)>=0;}).length;
-    document.getElementById('now-fx').textContent=[s.fx.indexOf('body')>=0?'Blink':null,scans?scans+' scan'+(scans>1?'s':'')+(s.fxRate==='0'?'':' · '+['','once','twice','4×'][Number(s.fxRate)]+' an hour'):null].filter(Boolean).join(' · ')||'Off';
+    document.getElementById('now-fx').textContent=s.fx.indexOf('none')>=0?'Off':[s.fx.indexOf('body')>=0?'Blink':null,scans?scans+' scan'+(scans>1?'s':'')+(s.fxRate==='0'?'':' · '+['','once','twice','4×'][Number(s.fxRate)]+' an hour'):null].filter(Boolean).join(' · ')||'Off';
     ['antenna','riseBuzz','quietFx'].forEach(function(k){form.elements[k].checked=s[k];});
     {var pulses=[s.vibe?'disconnect':null,s.riseBuzz?'rise':null].filter(Boolean);
     document.getElementById('now-watch').textContent=[s.fuel?'Battery':null,s.antenna?'Antenna':null,pulses.length?'Pulses: '+pulses.join(', '):null].filter(Boolean).join(' · ')||'Plain';}
@@ -597,6 +601,7 @@
     else if(t.name==='vibe')s.vibe=t.checked;
     else if(t.name==='antenna'||t.name==='riseBuzz'||t.name==='quietFx')s[t.name]=t.checked;
     else if(t.name==='fx'){s.fx=s.fx.filter(function(k){return k!==t.value;});if(t.checked)s.fx.push(t.value);render();return;}
+    else if(t.name==='fxOn'){s.fx=s.fx.filter(function(k){return k!=='none';});if(!t.checked)s.fx.push('none');render();return;}
     else if(t.name==='fxRate'){s.fxRate=t.value;render();return;}
     else if(t.name==='flickMode'){s.fx=s.fx.filter(function(k){return k!=='flick'&&k!=='twoflicks';});if(t.value!=='off')s.fx.push('flick');if(t.value==='two')s.fx.push('twoflicks');render();return;}
     else if(t.name==='fuel')s.fuel=t.checked;

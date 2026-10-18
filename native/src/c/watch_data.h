@@ -57,10 +57,11 @@ typedef struct {
 // The body blinking as it steps each minute; home's pulse as the satellite
 // rises into view; a scan as the hour's chart appears; the flick of the
 // wrist (with more than one satellite followed, the next made the body;
-// else a scan); the scans (the refresh line, the pixel sort, the
+// else a scan, never the reacquiring); the scans (the refresh line, the pixel sort, the
 // reacquiring, the tear); the scans on every plate, not only the screens'
-// (DIGITAL_PLATES); and two flicks for the flick's, not one.
-enum {GT_FX_BODY=1,GT_FX_RISE=2,GT_FX_HOUR=4,GT_FX_FLICK=8,GT_FX_REFRESH=16,GT_FX_SORT=32,GT_FX_REACQUIRE=64,GT_FX_TEAR=128,GT_FX_EVERY_PLATE=256,GT_FX_TWO_FLICKS=512};
+// (DIGITAL_PLATES); two flicks for the flick's, not one; and none of them
+// at all (the flick still moves to the next satellite, plainly).
+enum {GT_FX_BODY=1,GT_FX_RISE=2,GT_FX_HOUR=4,GT_FX_FLICK=8,GT_FX_REFRESH=16,GT_FX_SORT=32,GT_FX_REACQUIRE=64,GT_FX_TEAR=128,GT_FX_EVERY_PLATE=256,GT_FX_TWO_FLICKS=512,GT_FX_NONE=1024};
 #define GT_FX_DEFAULT 0xFF
 #define GT_FX_RATE_DEFAULT 2
 

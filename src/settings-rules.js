@@ -25,11 +25,12 @@ export const RIMS=['bezel','chords','instrument'];
 // minute, home's pulse as the satellite rises into view, a scan as the
 // hour's chart appears, a scan at a flick of the wrist, the four scans
 // (refresh, pixel sort, reacquire, tear), the scans on every plate rather
-// than the screens' alone, and two flicks rather than one for the flick's
-// (which, with more than one satellite followed, moves to the next). Kept on the phone as a comma-separated
+// than the screens' alone, two flicks rather than one for the flick's
+// (which, with more than one satellite followed, moves to the next), and
+// none of them at all (all the animations off). Kept on the phone as a comma-separated
 // list; fxRate is how often the scans run of themselves ('0' never, '1'
 // once an hour, '2' twice, '3' four times).
-export const EFFECTS=['body','rise','hour','flick','refresh','sort','reacquire','tear','everyplate','twoflicks'];
+export const EFFECTS=['body','rise','hour','flick','refresh','sort','reacquire','tear','everyplate','twoflicks','none'];
 export const EFFECTS_DEFAULT='body,rise,hour,flick,refresh,sort,reacquire,tear';
 export const FX_RATES=['0','1','2','3'];
 export function fxBits(list){return String(list).split(',').reduce(function(m,k){var i=EFFECTS.indexOf(k);return i<0?m:m|1<<i;},0);}

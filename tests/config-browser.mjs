@@ -309,6 +309,11 @@ try{
   await page.locator('input[name=fx][value=sort]').uncheck();await page.locator('input[name=fx][value=everyplate]').check();
   await page.locator('input[name=fxRate][value="3"]').check();
   assert.equal(await page.locator('#now-fx').textContent(),'Blink · 3 scans · 4× an hour');
+  // All the animations off at one switch, and on again as they were.
+  await page.locator('input[name=fxOn]').uncheck();
+  assert.equal(await page.locator('#now-fx').textContent(),'Off');assert.ok(await page.locator('#fx-all').isHidden());
+  await page.locator('input[name=fxOn]').check();
+  assert.equal(await page.locator('#now-fx').textContent(),'Blink · 3 scans · 4× an hour');
   // The watch: no antenna, a pulse as a satellite rises.
   await page.locator('input[name=antenna]').uncheck();await page.locator('input[name=riseBuzz]').check();
   assert.equal(await page.locator('#now-watch').textContent(),'Battery · Pulses: disconnect, rise');

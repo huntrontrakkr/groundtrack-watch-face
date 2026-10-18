@@ -275,19 +275,19 @@ static void fx_step(void *data){s_fx_timer=NULL;if(s_fx_on)layer_mark_dirty(s_la
 static void fx_next(void){if(!s_fx_timer)s_fx_timer=app_timer_register(HUD_MS,fx_step,NULL);}
 // One of the scans chosen, at random; -1 for none (or, but at a flick, none
 // on this plate).
-static int fx_scan(bool any_plate){
+static int fx_scan(bool any_plate,bool no_reacquire){
   const uint16_t f=s_settings.fx;
   if(!any_plate&&!(f&GT_FX_EVERY_PLATE)&&!((DIGITAL_PLATES>>s_settings.plate)&1))return -1;
   static const uint8_t kinds[4]={ENR_FX_REFRESH,ENR_FX_SORT,ENR_FX_REACQUIRE,ENR_FX_TEAR};
   static const uint16_t bits[4]={GT_FX_REFRESH,GT_FX_SORT,GT_FX_REACQUIRE,GT_FX_TEAR};
-  int n=0,on[4];for(int k=0;k<4;k++)if(f&bits[k])on[n++]=kinds[k];
+  int n=0,on[4];for(int k=0;k<4;k++)if((f&bits[k])&&!(no_reacquire&&kinds[k]==ENR_FX_REACQUIRE))on[n++]=kinds[k];
   return n?on[rand()%n]:-1;
 }
 static void fx_start(int kind,int minute){
   #ifdef GT_NO_FX
   return;                                  // (the host's simulator: frames as the minute's alone)
   #endif
-  if(kind<0||s_fx_on||s_build||!s_now.scene)return;
+  if(kind<0||s_fx_on||s_build||!s_now.scene||(s_settings.fx&GT_FX_NONE))return;
   if((s_settings.watch&32)&&quiet_time_is_active())return;
   if(enr_fx_begin(s_now.scene,kind,minute,(uint32_t)rand())){s_fx_on=true;fx_next();}
 }
@@ -302,8 +302,8 @@ static void fx_minute(int minute){
   }
   int kind=-1;
   if(s_switching){switch_end();kind=ENR_FX_ACQUIRED;s_fx_hour=s_now.scene->hour_start;}
-  else if(s_fx_hour!=s_now.scene->hour_start){s_fx_hour=s_now.scene->hour_start;if(f&GT_FX_HOUR)kind=fx_scan(false);}
-  for(int k=0;k<4&&kind<0;k++)if(s_fx_plan[k]==minute)kind=fx_scan(false);
+  else if(s_fx_hour!=s_now.scene->hour_start){s_fx_hour=s_now.scene->hour_start;if(f&GT_FX_HOUR)kind=fx_scan(false,false);}
+  for(int k=0;k<4&&kind<0;k++)if(s_fx_plan[k]==minute)kind=fx_scan(false,false);
   // (A rise into home's view: home's pulse, and the watch's if asked.)
   const bool rise=((f&GT_FX_RISE)||(s_settings.watch&16))&&enr_fx_aos(s_now.scene,minute);
   if(rise&&(s_settings.watch&16)&&!quiet_time_is_active())vibes_double_pulse();
@@ -316,9 +316,10 @@ static void fx_minute(int minute){
 // flick makes the next the body: the body and companions turned round as a
 // ring (the Sun or Moon as the body gives way to the first companion, and
 // is marked beside it), the phone told (Primary), the hour built again.
-// While it is built a box says so over the last chart, which breaks up
-// behind it (it is going: nothing is kept); the new one comes in under the
-// reacquiring's sweep (ENR_FX_ACQUIRED).
+// While it is built a track list says so over the last chart, which breaks
+// up behind it (it is going: nothing is kept); the new one comes in under
+// the reacquiring's sweep (ENR_FX_ACQUIRED). With the animations off, the
+// new chart plainly.
 // The track list (below): the ring as it stood, the body first, and the
 // chart's colours.
 static struct {int n;char code[3][4];uint8_t kind[3];uint8_t ground,ink,accent;} s_list;
@@ -368,6 +369,8 @@ static void next_satellite(void){
   // (What the new body lacks, its passes over home, asked for at once.)
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
   if(s_fx_on){enr_fx_end(NULL,0);s_fx_on=false;}
+  // (No animations: the next chart plainly, the last kept until it comes.)
+  if(s_settings.fx&GT_FX_NONE){build_abort();chart_free(&s_now);s_status[0]=0;s_status_phone=false;check(time(NULL));layer_mark_dirty(s_layer);return;}
   s_switching=true;s_switch_step=0;s_switch_built=false;s_switch_since=time(NULL);if(!s_switch_timer)s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);
   // (The hour built once the list has dropped and scrolled, when it says
   // ACQUIRING: its code loaded and its work done then, not under the
@@ -463,7 +466,7 @@ static void switch_frame(GContext *ctx,GRect box){
   }
 }
 // A flick (or two within a second and a half, if asked): to the next
-// satellite, or a scan.
+// satellite, or, following one, a scan.
 static void flick(AccelAxisType axis,int32_t direction){
   if(s_settings.fx&GT_FX_TWO_FLICKS){
     static uint32_t last;const uint32_t t=now_ms();
@@ -472,7 +475,9 @@ static void flick(AccelAxisType axis,int32_t direction){
   }
   if(s_switching||s_build)return;
   if(satellites(&s_settings)>1){next_satellite();return;}
-  if(s_painted&&s_drawn_minute>=0)fx_start(fx_scan(true),s_drawn_minute);
+  // (With one satellite, a scan, but not the reacquiring: the flick lights
+  // the watch to read the time, and its box would stand over it.)
+  if(s_painted&&s_drawn_minute>=0)fx_start(fx_scan(true,true),s_drawn_minute);
 }
 // The settings' animations taken: the flick listened for or not, the scans
 // chosen again.
