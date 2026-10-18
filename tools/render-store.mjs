@@ -4,9 +4,12 @@
 // emery_00_reel.gif: the face's range, plates and features, half a second
 // a frame (tools/gif.mjs); and the same for the Round 2 (gabbro_*: 260x260,
 // the Round 2's core, black off the glass), through its three rim styles in
-// turn. tools/release.py uploads what is there with a release.
+// turn. And what was captured from the emulator, the watch app's own
+// drawing (docs/screenshots/store-captured/<face>: the flick to the next
+// satellite, tools/capture-switch.mjs), copied in. tools/release.py uploads
+// what is there with a release.
 //   node tools/render-store.mjs
-import {mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {copyFileSync,existsSync,mkdirSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {loadCore,CoreRenderer,inputFor} from '../src/core.js';
 import {HOMES} from '../src/home.js';
@@ -23,7 +26,7 @@ registerNominal();
 {const lines=readFileSync('tests/fixtures/celestrak-2026-09-29.tle','utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3)registerElements(lines.slice(i,i+3).join('\n')+'\n','celestrak');}
 const read=f=>new Uint8Array(readFileSync(f));
 const core=await loadCore({wasm:read('public/core.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack')});
-const round=await loadCore({wasm:read('public/core-round.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack'),size:{w:260,h:260}});
+const round_=await loadCore({wasm:read('public/core-round.wasm'),map:read('native/resources/map.pack'),figures:read('native/resources/figures.bin'),tables:read('native/resources/tables.bin'),grids:read('public/fuller.bin'),land:read('native/resources/land.pack'),size:{w:260,h:260}});
 const zone='America/New_York',home={...HOMES[zone]},at=iso=>Date.parse(iso);
 const ev=(iso,title)=>({epoch:at(iso),label:nameCode(title)});
 const GALLERIES={
@@ -91,7 +94,7 @@ const draw=(face,state)=>new CoreRenderer(core).render({...settings(face),...sta
 const RIMS=['bezel','chords','instrument'];
 const drawRound=(face,state,k)=>{
   const {text,minute}=inputFor({...settings(face),rim:RIMS[k%3],...state});
-  const held=round.sceneFor(text),frame=round.render(minute,held.slot),buf=Buffer.alloc(260*260*3);
+  const held=round_.sceneFor(text),frame=round_.render(minute,held.slot),buf=Buffer.alloc(260*260*3);
   for(let y=0;y<260;y++)for(let x=0;x<260;x++){
     const d=(2*x+1-260)**2+(2*y+1-260)**2;if(d>260*260)continue;
     const c=frame[y*260+x],i=3*(y*260+x);buf[i]=(c>>4&3)*85;buf[i+1]=(c>>2&3)*85;buf[i+2]=(c&3)*85;
@@ -112,10 +115,55 @@ for(const [face,list] of Object.entries(GALLERIES)){
 // The reels take CelesTrak's elements of 2 October for the rest (GLONASS
 // turning over the Arctic; GPS and QZSS as they were, not nominal).
 {const lines=readFileSync('tests/fixtures/celestrak-2026-10-02.tle','utf8').trim().split('\n');for(let i=0;i+2<lines.length;i+=3){const b='sat:'+Number(lines[i+1].slice(2,7));if(!elementsFor(b)||elementsFor(b).source==='nominal')registerElements(lines.slice(i,i+3).join('\n')+'\n','celestrak');}}
+// The animations, each face's on each watch (emery_00a_scans.gif,
+// gabbro_00a_scans.gif): the chart a moment, then the animation as the
+// watch draws it, a frame each 66 ms (7 hundredths), on a plate it suits.
+const FX={refresh:0,sort:1,reacquire:2,tear:3,blink:4};
+const SCANS={
+  enroute:[
+    [{body:'sat:36585',epoch:at('2026-09-28T15:31:00Z'),plate:'console',figures:'michroma',readout:'flag'},'reacquire'],
+    [{body:'sat:36585',epoch:at('2026-09-28T15:09:00Z'),plate:'infrared',figures:'orbitron',readout:'counter',numerals:'plain'},'sort'],
+    [{body:'sat:25544',epoch:at('2026-09-30T02:21:00Z'),plate:'nightside',figures:'orbitron',readout:'flag'},'refresh'],
+    [{body:'sat:25544',epoch:at('2026-09-30T22:48:00Z'),plate:'raster',tape:'clock',readout:'flag'},'tear'],
+    [{body:'sat:36585',epoch:at('2026-09-28T15:12:00Z'),plate:'operations',figures:'michroma',readout:'counter'},'blink']
+  ],
+  fuller:[
+    [{body:'sat:25544',epoch:at('2026-09-30T13:21:00Z'),plate:'operations',figures:'michroma',readout:'counter',numerals:'colon'},'reacquire'],
+    [{body:'sat:25544',epoch:at('2026-09-30T02:21:00Z'),plate:'nightside',figures:'orbitron',readout:'flag'},'refresh'],
+    [{body:'sat:42738',epoch:at('2026-09-28T22:12:00Z'),plate:'synthetic',figures:'b612',readout:'flag'},'sort'],
+    [{body:'sat:25544',epoch:at('2026-09-30T09:10:00Z'),plate:'console',figures:'michroma',readout:'flag'},'tear'],
+    [{body:'sat:25544',epoch:at('2026-09-30T15:05:00Z'),plate:'infrared',figures:'orbitron',readout:'flag'},'blink']
+  ]
+};
+const rgbOf=(frame,w,h,round)=>{const buf=Buffer.alloc(w*h*3);for(let y=0;y<h;y++)for(let x=0;x<w;x++){if(round&&(2*x+1-w)**2+(2*y+1-h)**2>w*w)continue;const c=frame[y*w+x],i=3*(y*w+x);buf[i]=(c>>4&3)*85;buf[i+1]=(c>>2&3)*85;buf[i+2]=(c&3)*85;}return buf;};
+function scans(face,c,round){
+  const frames=[],delays=[];
+  SCANS[face].forEach(([state,fx],k)=>{
+    const {text,minute}=inputFor({...settings(face),rim:RIMS[k%3],...state});
+    const held=c.sceneFor(text),w=round?260:W,h=round?260:H;
+    frames.push(rgbOf(c.render(minute,held.slot),w,h,round));delays.push(80);
+    if(!c.fxBegin(FX[fx],minute,7+k,held.slot))throw new Error(`${face} ${fx}: not begun`);
+    for(let f;(f=c.fxFrame());){frames.push(rgbOf(f,w,h,round));delays.push(7);}
+    delays[delays.length-1]=60;
+  });
+  return {frames,delays};
+}
+for(const face of Object.keys(SCANS)){
+  for(const [platform,c,round] of [['emery',core,false],['gabbro',round_,true]]){
+    const {frames,delays}=scans(face,c,round),file=join('docs/screenshots/store',face,`${platform}_00a_scans.gif`);
+    writeFileSync(file,encodeGIF(frames,round?260:W,round?260:H,delays));
+    console.log(file,frames.length,'frames');
+  }
+}
 for(const [face,list] of Object.entries(REELS)){
   const reel=join('docs/screenshots/store',face,'emery_00_reel.gif');
   writeFileSync(reel,encodeGIF(list.map(state=>Buffer.from(draw(face,state).buf)),W,H,50));
   const roundReel=join('docs/screenshots/store',face,'gabbro_00_reel.gif');
   writeFileSync(roundReel,encodeGIF(list.map((state,k)=>drawRound(face,state,k)),260,260,50));
   console.log(reel,roundReel);
+}
+// The captures, copied in.
+for(const face of Object.keys(GALLERIES)){
+  const from=join('docs/screenshots/store-captured',face);
+  if(existsSync(from))for(const f of readdirSync(from)){copyFileSync(join(from,f),join('docs/screenshots/store',face,f));console.log(join('docs/screenshots/store',face,f));}
 }

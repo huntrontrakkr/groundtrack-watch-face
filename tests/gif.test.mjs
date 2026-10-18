@@ -21,11 +21,14 @@ test('a GIF decodes to the frames it was made of',()=>{
 test('each face opens each platform\'s store gallery with a reel: the watch\'s screen, half a second a frame',()=>{
   for(const face of ['enroute','fuller']){
     const dir=`docs/screenshots/store/${face}`,gifs=readdirSync(dir).filter(f=>f.endsWith('.gif')).sort();
-    assert.deepEqual(gifs,['emery_00_reel.gif','gabbro_00_reel.gif'],face);
-    for(const [gif,size] of [[gifs[0],[W,H]],[gifs[1],[260,260]]]){
-      const d=decodeGIF(new Uint8Array(readFileSync(`${dir}/${gif}`)));
+    // (The reel, the animations, the flick to the next satellite: each watch's.)
+    assert.deepEqual(gifs,['emery_00_reel.gif','emery_00a_scans.gif','emery_00b_switch.gif','gabbro_00_reel.gif','gabbro_00a_scans.gif','gabbro_00b_switch.gif'],face);
+    for(const gif of gifs){
+      const d=decodeGIF(new Uint8Array(readFileSync(`${dir}/${gif}`))),size=gif.startsWith('gabbro')?[260,260]:[W,H];
       assert.deepEqual([d.width,d.height,d.loops],[...size,0],gif);
-      assert.ok(d.frames.length>=10&&d.frames.every(f=>f.delay===50),`${face} ${gif}`);
+      assert.ok(d.frames.length>=10,`${face} ${gif}`);
+      if(gif.includes('reel'))assert.ok(d.frames.every(f=>f.delay===50),`${face} ${gif}`);
+      assert.ok(readFileSync(`${dir}/${gif}`).length<1500000,`${gif}: small enough for the store`);
     }
     // (A still for each platform's every one.)
     const stills=p=>readdirSync(dir).filter(f=>f.startsWith(p)&&f.endsWith('.png')).map(f=>f.slice(p.length));

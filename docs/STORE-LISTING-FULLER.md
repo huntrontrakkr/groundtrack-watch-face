@@ -19,7 +19,7 @@ The icosahedron rolls across the screen under the route, printing each face as i
 
 Follow one of 68 satellites, from space stations and Starlink to GPS and weather, or find any other at CelesTrak. The Sun and Moon can be marked beside it.
 
-Relief and coastlines come from public-domain elevation data on the watch; the calculated Sun brings night across the net. Thirty-two plates, from paper charts and a portolan to mission-control glass, cockpit HUDs and the Earth at night. A fuel line shows battery and phone link; the watch can buzz when the link drops. Brief animations, each its own switch: the body blinks as it steps, and on screen-like plates a scan now and then refreshes, pixel-sorts or reacquires the picture.
+Relief and coastlines come from public-domain elevation data on the watch; the calculated Sun brings night across the net. Thirty-two plates, from paper charts and a portolan to mission-control glass, cockpit HUDs and the Earth at night. A fuel line shows battery and phone link; the watch can buzz when the link drops. Brief animations, each its own switch: the body blinks as it steps, scans refresh, pixel-sort or reacquire screen-like plates, and a flick moves between the satellites you follow.
 
 For Pebble Time 2 and Pebble Round 2: on the round screen the margins letter round an octagon, run in chords over a map to the edge, or tick the minutes like an instrument.
 

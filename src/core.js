@@ -101,6 +101,11 @@ export class Core{
   // A minute's frame as GColor8 bytes (a copy), or drawn over `frame` as the
   // minute `from` left it.
   render(minute,slot=0){this.x.core_render(slot,minute,this.frameAt);return new Uint8Array(this.mem(),this.frameAt,this.w*this.h).slice();}
+  // The animations (enroute_core.h enr_fx_*) over the frame last rendered:
+  // begun at a minute of a slot's scene, then each frame (null at the end,
+  // the frame as it was).
+  fxBegin(kind,minute,seed=1,slot=0){return !!this.x.core_fx_begin(slot,kind,minute,seed>>>0);}
+  fxFrame(){return this.x.core_fx_frame(this.frameAt)?new Uint8Array(this.mem(),this.frameAt,this.w*this.h).slice():null;}
   update(from,minute,frame,slot=0){new Uint8Array(this.mem(),this.frameAt,W*H).set(frame);const drawn=this.x.core_render_update(slot,from,minute,this.frameAt);frame.set(new Uint8Array(this.mem(),this.frameAt,W*H));return drawn;}
 }
 

@@ -58,6 +58,9 @@ def build(ctx):
                 '-fno-tree-dominator-opts', '-fno-tree-loop-im', '-fno-tree-scev-cprop']
         ctx.env.append_value('CFLAGS', size)
         ctx.env.append_value('LINKFLAGS', size)
+        # (Extra flags for a build of the moment: GT_FLAGS, as native/wscript.)
+        ctx.env.append_value('CFLAGS', os.environ.get('GT_FLAGS','').split())
+        ctx.env.append_value('LINKFLAGS', os.environ.get('GT_FLAGS','').split())
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         # Doubles throughout, as the JavaScript: the SDK builds for the

@@ -26,6 +26,13 @@
 // dictionary's own framing.
 #define INBOX_SIZE 2100
 
+// (GT_HUD_SLOW=n: the list and the animations n times slower, for
+// screenshots: tools/capture-switch.sh.)
+#ifdef GT_HUD_SLOW
+#define HUD_MS (66*GT_HUD_SLOW)
+#else
+#define HUD_MS 66
+#endif
 // An animation running (its frames drawn over the minute on the screen),
 // and the face going to the next satellite (below).
 static bool s_fx_on,s_switching;
@@ -257,10 +264,11 @@ static void check(time_t now){
 // the screens' plates (or every plate); and a scan at a flick of the wrist.
 // A frame each 66 ms (some 15 a second), drawn by update().
 static AppTimer *s_fx_timer;
-static uint32_t s_fx_planned,s_fx_shown;   // the chart the scans are chosen for; the chart last shown
+static uint32_t s_fx_planned;              // the chart the scans are chosen for
+static int64_t s_fx_hour=-1;              // the hour whose scan has run (a chart built again within it runs none)
 static uint8_t s_fx_plan[4];
 static void fx_step(void *data){s_fx_timer=NULL;if(s_fx_on)layer_mark_dirty(s_layer);}
-static void fx_next(void){if(!s_fx_timer)s_fx_timer=app_timer_register(66,fx_step,NULL);}
+static void fx_next(void){if(!s_fx_timer)s_fx_timer=app_timer_register(HUD_MS,fx_step,NULL);}
 // One of the scans chosen, at random; -1 for none (or, but at a flick, none
 // on this plate).
 static int fx_scan(bool any_plate){
@@ -289,7 +297,8 @@ static void fx_minute(int minute){
     for(int k=0;k<4;k++)s_fx_plan[k]=k<count[s_settings.fx_rate&3]?(uint8_t)(3+rand()%55):255;
   }
   int kind=-1;
-  if(s_fx_shown!=s_chart_serial){s_fx_shown=s_chart_serial;if(s_switching){switch_end();kind=ENR_FX_ACQUIRED;}else if(f&GT_FX_HOUR)kind=fx_scan(false);}
+  if(s_switching){switch_end();kind=ENR_FX_ACQUIRED;s_fx_hour=s_now.scene->hour_start;}
+  else if(s_fx_hour!=s_now.scene->hour_start){s_fx_hour=s_now.scene->hour_start;if(f&GT_FX_HOUR)kind=fx_scan(false);}
   for(int k=0;k<4&&kind<0;k++)if(s_fx_plan[k]==minute)kind=fx_scan(false);
   // (A rise into home's view: home's pulse, and the watch's if asked.)
   const bool rise=((f&GT_FX_RISE)||(s_settings.watch&16))&&enr_fx_aos(s_now.scene,minute);
@@ -306,20 +315,14 @@ static void fx_minute(int minute){
 // While it is built a box says so over the last chart, which breaks up
 // behind it (it is going: nothing is kept); the new one comes in under the
 // reacquiring's sweep (ENR_FX_ACQUIRED).
-// (GT_HUD_SLOW: the list four times slower, for screenshots.)
-#ifdef GT_HUD_SLOW
-#define HUD_MS 264
-#else
-#define HUD_MS 66
-#endif
 // The track list (below): the ring as it stood, the body first, and the
 // chart's colours.
 static struct {int n;char code[3][4];uint8_t kind[3];uint8_t ground,ink,accent;} s_list;
 #define LIST_SUN 0x80
 #define LIST_MOON 0x81
-static uint8_t s_switch_step;static AppTimer *s_switch_timer;static time_t s_switch_since;static uint32_t s_switch_ms;
+static uint8_t s_switch_step;static AppTimer *s_switch_timer;static time_t s_switch_since;
 static int satellites(const WatchSettings *s){int n=s->body==BODY_SATELLITE;for(int k=0;k<2;k++)n+=s->extra[k]!=0;return n;}
-static void switch_step(void *data){s_switch_timer=NULL;if(s_switching){s_switch_step++;layer_mark_dirty(s_layer);s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);}}
+static void switch_step(void *data){s_switch_timer=NULL;if(s_switching){if(s_switch_step<255)s_switch_step++;layer_mark_dirty(s_layer);s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);}}
 static void switch_end(void){s_switching=false;if(s_switch_timer){app_timer_cancel(s_switch_timer);s_switch_timer=NULL;}}
 static void send_primary(int32_t norad){
   DictionaryIterator *out;
@@ -356,7 +359,7 @@ static void next_satellite(void){
   // (What the new body lacks, its passes over home, asked for at once.)
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
   if(s_fx_on){enr_fx_end(NULL,0);s_fx_on=false;}
-  s_switching=true;s_switch_step=0;s_switch_since=time(NULL);s_switch_ms=now_ms();if(!s_switch_timer)s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);
+  s_switching=true;s_switch_step=0;s_switch_since=time(NULL);if(!s_switch_timer)s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);
   build_abort();chart_free(&s_now);s_status[0]=0;s_status_phone=false;
   check(time(NULL));layer_mark_dirty(s_layer);
 }
@@ -466,9 +469,11 @@ static void fx_settings(void){
 
 static void update(Layer *layer,GContext *ctx){
   const time_t now=time(NULL);
-  // (The list stays 1.6 seconds at the least, its highlight dropped and
-  // scrolled up and its new top read, though the chart may be ready before.)
-  if(s_switching&&s_painted&&now_ms()-s_switch_ms<(uint32_t)HUD_MS*24&&covers(&s_now,now)){const GRect b=layer_get_bounds(layer);switch_frame(ctx,GRect(b.size.w/2-58,b.size.h/2-28,116,56));return;}
+  // (The list stays 24 of its steps at the least, 1.6 seconds, its
+  // highlight dropped and scrolled up and its new top read, though the
+  // chart may be ready before. Counted in its own steps: the watch's clock
+  // of milliseconds can step back.)
+  if(s_switching&&s_painted&&s_switch_step<24&&covers(&s_now,now)){const GRect b=layer_get_bounds(layer);switch_frame(ctx,GRect(b.size.w/2-58,b.size.h/2-28,116,56));return;}
   if(!covers(&s_now,now)){
     // Going to the next satellite, the last chart breaks up behind its box
     // while the next is built, or its data asked for (45 seconds at most).
@@ -501,7 +506,12 @@ static void update(Layer *layer,GContext *ctx){
   // An animation's next frame over the minute on the screen; anything else
   // drawn, it is ended first, the screen as it was.
   if(s_fx_on){
-    if(!s_tick_redraw&&s_painted&&s_drawn_serial==s_chart_serial&&s_drawn_minute==minute){
+    #ifdef GT_HUD_SLOW
+    const bool same_minute=true;           // (slowed for screenshots: the minute may turn under it)
+    #else
+    const bool same_minute=s_drawn_minute==minute;
+    #endif
+    if(!s_tick_redraw&&s_painted&&s_drawn_serial==s_chart_serial&&same_minute){
       s_fx_on=enr_fx_frame(pixels,stride)!=0;
       graphics_release_frame_buffer(ctx,frame);
       if(s_fx_on)fx_next();
@@ -523,6 +533,9 @@ static void update(Layer *layer,GContext *ctx){
 }
 
 static void tick(struct tm *when,TimeUnits changed){
+  #ifdef GT_HUD_SLOW
+  if(s_fx_on||s_switching){check(time(NULL));return;}   // (slowed for screenshots: data asked for, the animation not cut short)
+  #endif
   // (The stack's deepest, logged when it has grown: a minute's drawing too.)
   {static unsigned logged;const unsigned d=stack_deepest();if(d>logged){logged=d;app_note("stack",d);}}
   check(time(NULL));
@@ -541,6 +554,10 @@ static void focus_changed(bool focused){
 // because the data changes what is drawn).
 static AppTimer *s_data_timer;static bool s_data_changed;
 static void data_settled(void *data){
+  // (Not while an animation runs over the chart, the next satellite's
+  // arrival say: the new hour after it, a second at a time. A switch still
+  // waiting for its chart takes the data at once: it may be what it lacks.)
+  if(s_data_changed&&s_fx_on){s_data_timer=app_timer_register(1000,data_settled,NULL);return;}
   s_data_timer=NULL;s_data_ok_until=0;
   const time_t now=time(NULL);
   if(s_data_changed&&(s_now.scene||s_build)){build_abort();chart_free(&s_now);}

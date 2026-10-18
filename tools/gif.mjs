@@ -1,8 +1,9 @@
 // A looping GIF of RGB frames (the store's animated screenshot): one
-// palette for all of them (the watch draws in 64 colours), each frame whole,
-// LZW-coded as GIF89a has it.
+// palette for all of them (the watch draws in 64 colours), the first frame
+// whole and each after it the rectangle that differs from the one before
+// (kept over it), LZW-coded as GIF89a has it.
 //   encodeGIF(frames, width, height, delay)   frames: RGB buffers; delay in
-//   hundredths of a second
+//   hundredths of a second, one for all or one for each
 //   decodeGIF(bytes)   {width, height, loops, frames: [{rgb, delay}]}, for
 //   the tests: written from the format, not from the encoder
 export function encodeGIF(frames,width,height,delay){
@@ -20,14 +21,23 @@ export function encodeGIF(frames,width,height,delay){
   // Loop for ever (NETSCAPE2.0).
   u8(0x21);u8(0xff);u8(11);bytes('NETSCAPE2.0');u8(3);u8(1);u16(0);u8(0);
   const min=Math.max(2,bits);
-  for(const f of frames){
-    u8(0x21);u8(0xf9);u8(4);u8(0);u16(delay);u8(0);u8(0);
-    u8(0x2c);u16(0);u16(0);u16(width);u16(height);u8(0);
+  frames.forEach((f,k)=>{
+    // (The rectangle that changed since the frame before: at least a pixel.)
+    let x0=0,y0=0,x1=width-1,y1=height-1;
+    if(k){
+      const p=frames[k-1];x0=width;y0=height;x1=-1;y1=-1;
+      for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=3*(y*width+x);if(f[i]!==p[i]||f[i+1]!==p[i+1]||f[i+2]!==p[i+2]){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}}
+      if(x1<0){x0=y0=x1=y1=0;}
+    }
+    const w=x1-x0+1,h=y1-y0+1,part=new Uint8Array(w*h*3);
+    for(let y=0;y<h;y++)part.set(f.subarray(3*((y0+y)*width+x0),3*((y0+y)*width+x0+w)),3*y*w);
+    u8(0x21);u8(0xf9);u8(4);u8(1<<2);u16(Array.isArray(delay)?delay[k]:delay);u8(0);u8(0);
+    u8(0x2c);u16(x0);u16(y0);u16(w);u16(h);u8(0);
     u8(min);
-    const data=lzw(f,width*height,index,min),blocks=[];
+    const data=lzw(part,w*h,index,min),blocks=[];
     for(let i=0;i<data.length;i+=255){const n=Math.min(255,data.length-i);blocks.push(n,...data.subarray(i,i+n));}
     for(const v of blocks)u8(v);u8(0);
-  }
+  });
   u8(0x3b);
   return Uint8Array.from(out);
 }
@@ -71,7 +81,8 @@ export function decodeGIF(b){
       continue;
     }
     assert.equal(t,0x2c);
-    const x=u16(),y=u16(),w=u16(),h=u16();assert.deepEqual([x,y,w,h,u8()],[0,0,width,height,0]);
+    const x=u16(),y=u16(),w=u16(),h=u16();assert.equal(u8(),0);
+    if(!frames.length)assert.deepEqual([x,y,w,h],[0,0,width,height]);
     const min=u8(),data=[];for(let n=u8();n;n=u8()){data.push(...b.subarray(o,o+n));o+=n;}
     // LZW, decoded.
     const clear=1<<min,end=clear+1,out=[];let table,width_,pos=0,prev=null;
@@ -91,7 +102,9 @@ export function decodeGIF(b){
       if(table.length===1<<width_&&width_<12)width_++;
       prev=entry;
     }
-    const rgb=new Uint8Array(width*height*3);out.forEach((k,i)=>rgb.set(palette[k],3*i));
+    // (Each frame a rectangle over the one before.)
+    const rgb=frames.length?frames[frames.length-1].rgb.slice():new Uint8Array(width*height*3);
+    out.forEach((k,i)=>rgb.set(palette[k],3*((y+Math.floor(i/w))*width+x+i%w)));
     frames.push({rgb,delay});
   }
   return {width,height,frames,loops};
