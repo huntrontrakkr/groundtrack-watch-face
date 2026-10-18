@@ -696,6 +696,22 @@ void enr_power(int percent,int state){s_power[0]=(uint8_t)(percent<0?0:percent>1
 #if ENR_ROUND
 static void rim_point(enr_real deg,enr_real r,int *x,int *y);
 #endif
+// The phone's link beside the battery: an antenna (an inverted triangle on
+// its mast) in the lettering's ink, with its signal either side; out of
+// reach, dim and crossed. On the Time 2 a small one at the battery line's
+// right end, in the line's own rows (nothing else is drawn there); on the
+// Round 2 past the battery bar's right end.
+static void draw_link(Ctx *c,int x,int y,bool big){
+  const EnrScene *s=c->s;const bool linked=!(s_power[1]&ENR_NO_LINK);
+  const uint8_t ink=linked?s->space_ink:s->zoned[ENR_GRID][0];
+  static const char *const SMALL[5]={"#####",".#.#.","..#..","..#..","..#.."};
+  static const char *const BIG[7]={"#######",".#...#.","..#.#..","...#...","...#...","...#...","...#..."};
+  const char *const *a=big?BIG:SMALL;const int rows=big?7:5,cols=big?7:5;
+  for(int j=0;j<rows;j++)for(int i=0;i<cols;i++)if(a[j][i]=='#')plot(c,x+i,y+j,ink);
+  if(!big)return;
+  if(linked){static const int8_t wave[4][2]={{-2,1},{-2,2},{-3,0},{-3,3}};for(int k=0;k<4;k++){plot(c,x+wave[k][0],y+wave[k][1],ink);plot(c,x+6-wave[k][0],y+wave[k][1],ink);}}
+  else for(int k=0;k<4;k++){plot(c,x+5+k,y+3+k,s->zoned[ENR_MARK][0]);plot(c,x+8-k,y+3+k,s->zoned[ENR_MARK][0]);}
+}
 static __attribute__((noinline)) void draw_fuel(Ctx *c){
   const EnrScene *s=c->s;const int f=s_power[1],e=s_power[0]*W/100;
   if(f&ENR_NO_FUEL)return;
@@ -725,13 +741,17 @@ static __attribute__((noinline)) void draw_fuel(Ctx *c){
       }
     }
   }
+  draw_link(c,W/2+43,15,true);
   return;
   #endif
-  for(int x=0;x<W;x++){
-    const bool on=x<e&&!((f&ENR_NO_LINK)&&x%6>3);
+  // (The line stops short of the link's antenna at its right end.)
+  const int L=W-8,el=s_power[0]*L/100;(void)e;
+  for(int x=0;x<L;x++){
+    const bool on=x<el&&!((f&ENR_NO_LINK)&&x%6>3);
     if(on||!(x&1))plot(c,x,0,on?fill:s->zoned[ENR_GRID][0]);
-    if(on||(x%(W/4)==0&&x))plot(c,x,1+!on,fill);
+    if(on||(x%(L/4)==0&&x))plot(c,x,1+!on,fill);
   }
+  draw_link(c,W-6,0,false);
 }
 static void draw_flag(Ctx *c){
   const EnrScene *s=c->s;const EnrMinute *m=c->m;
