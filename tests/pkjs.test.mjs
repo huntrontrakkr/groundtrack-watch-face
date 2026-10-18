@@ -21,7 +21,7 @@ function phone(bundle,now,stored,take=()=>true){
   const context=vm.createContext({
     console:{log:m=>logs.push(m)},
     setTimeout:(f,ms)=>{if(ms>=3600000)return 0;pending++;setTimeout(()=>{pending--;f();},Math.min(ms/1000,50));return 1;},clearTimeout:()=>{},
-    localStorage:{getItem:k=>k in stored?stored[k]:null},
+    localStorage:{getItem:k=>k in stored?stored[k]:null,setItem:(k,v)=>{stored[k]=String(v);},removeItem:k=>{delete stored[k];}},
     Pebble:{
       addEventListener:(name,f)=>{listeners[name]=f;},
       sendAppMessage:(message,ok,fail)=>{messages.push(message);const taken=take(message);pending++;setTimeout(()=>{pending--;(taken?ok:fail)();},0);}
@@ -30,7 +30,7 @@ function phone(bundle,now,stored,take=()=>true){
   vm.runInContext(`Date.now=()=>${now};`,context);
   vm.runInContext(bundle,context);
   const quiet=async()=>{for(let idle=0;idle<3;){await new Promise(r=>setTimeout(r,20));idle=pending?0:idle+1;}};
-  return {listeners,messages,logs,quiet};
+  return {listeners,messages,logs,quiet,stored:()=>stored};
 }
 const bundled=dir=>{const out=join(dir,'index.js');execFileSync(process.execPath,['tools/build-pkjs.mjs',out],{stdio:'pipe'});return readFileSync(out,'utf8').replace(/\n/g,'\n\t');};
 
@@ -140,7 +140,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
     // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,...Array(14).fill(0),255,0,2]},{Events:[0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,...Array(14).fill(0),255,0,2,0,0]},{Events:[0]}]));
     // The browser's other options, as set: a time callout in Departure Mono,
     // the 12-hour clock, the nautical zone; QZSS on the hour chart.
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
@@ -210,11 +210,25 @@ test('the world band on Groundtrack: the fast satellites beside the Sun and Moon
     }
     {const p=phone(bundle,now,{timeZone:'UTC',body:'sat:25544',extra:'sat:20580,sat:48274',tracks:'sat:48274'});p.listeners.ready({});await p.quiet();
       assert.equal(String.fromCharCode(...p.messages.find(m=>m.Settings).Settings.slice(39,45)), 'HSTCSS');
-      assert.equal(p.messages.find(m=>m.Settings).Settings[29],8); }
+      assert.equal(p.messages.find(m=>m.Settings).Settings[29],8);
+      // Each companion's kind (HST on the world band, CSS a station on it).
+      assert.equal(JSON.stringify(p.messages.find(m=>m.Settings).Settings.slice(48,50)),JSON.stringify([1<<1,1|1<<1]));
+      // A flick on the watch made HST the body: the ring turned as the watch
+      // turns it, kept, and sent back.
+      const before=p.messages.length;p.listeners.appmessage({payload:{Primary:20580}});await p.quiet();
+      const stored=p.stored();
+      assert.deepEqual([stored.body,stored.extra],['sat:20580','sat:48274,sat:25544']);
+      const set=p.messages.slice(before).find(m=>m.Settings).Settings;
+      assert.equal(JSON.stringify([set[13]|set[14]<<8,String.fromCharCode(...set.slice(18,21)),String.fromCharCode(...set.slice(39,45))]),JSON.stringify([20580,'HST','CSSISS']));
+    }
+    // The Sun as the body: the first companion made the body, the Sun marked beside it.
+    {const p=phone(bundle,now,{timeZone:'UTC',body:'sun',extra:'sat:20580,sat:48274'});p.listeners.ready({});await p.quiet();
+      p.listeners.appmessage({payload:{Primary:20580}});await p.quiet();
+      assert.deepEqual([p.stored().body,p.stored().extra,p.stored().also],['sat:20580','sat:48274,','sun']);}
     // How the tape's minutes fall on the route: the settings' 25th byte.
     for(const [transfer,code] of [['vernier',1],['comb',2],['chevrons',3],['wavy',0]]){
       const p=phone(bundle,now,{timeZone:'UTC',transfer});p.listeners.ready({});await p.quiet();
-      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,48);assert.equal(set[24],code);
+      const set=p.messages.find(m=>m.Settings).Settings;assert.equal(set.length,50);assert.equal(set[24],code);
     }
     // The minute readout (byte 2): none, the flag, the time in full, or the
     // counter (this hour's figure as the time); one the phone doesn't know

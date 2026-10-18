@@ -48,12 +48,17 @@ typedef struct {
   // The animations (main.c, effects.c): which (GT_FX_*), and how often the
   // scans run of themselves (0 never, 1 once an hour, 2 twice, 3 four times).
   uint16_t fx;uint8_t fx_rate;
+  // Each companion's kind, as the body's: 1 a station, plus its view times 2
+  // (a flick makes it the body: main.c).
+  uint8_t extra_kind[2];
 } WatchSettings;
 // The body blinking as it steps each minute; home's pulse as the satellite
-// rises into view; a scan as the hour's chart appears; a scan at a flick of
-// the wrist; the scans (the refresh line, the pixel sort, the reacquiring,
-// the tear); the scans on every plate, not only the screens' (DIGITAL_PLATES).
-enum {GT_FX_BODY=1,GT_FX_RISE=2,GT_FX_HOUR=4,GT_FX_FLICK=8,GT_FX_REFRESH=16,GT_FX_SORT=32,GT_FX_REACQUIRE=64,GT_FX_TEAR=128,GT_FX_EVERY_PLATE=256};
+// rises into view; a scan as the hour's chart appears; the flick of the
+// wrist (with more than one satellite followed, the next made the body;
+// else a scan); the scans (the refresh line, the pixel sort, the
+// reacquiring, the tear); the scans on every plate, not only the screens'
+// (DIGITAL_PLATES); and two flicks for the flick's, not one.
+enum {GT_FX_BODY=1,GT_FX_RISE=2,GT_FX_HOUR=4,GT_FX_FLICK=8,GT_FX_REFRESH=16,GT_FX_SORT=32,GT_FX_REACQUIRE=64,GT_FX_TEAR=128,GT_FX_EVERY_PLATE=256,GT_FX_TWO_FLICKS=512};
 #define GT_FX_DEFAULT 0xFF
 #define GT_FX_RATE_DEFAULT 2
 

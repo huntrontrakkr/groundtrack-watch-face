@@ -162,6 +162,9 @@ function watchSettings(){
   // often the scans run.
   var fx=fxBits(setting('fx',EFFECTS_DEFAULT)),rate=FX_RATES.indexOf(setting('fxRate','2'));
   bytes.push(fx&255,fx>>8,rate<0?2:rate);
+  // Each companion's kind, as the body's (a flick on the watch can make it
+  // the body).
+  for(var j=0;j<2;j++){var b=companions[j],e=b?catalogEntry(b):null;bytes.push(b?(e&&e.symbol==='station'?1:0)|VIEW_CODES[chart(b)]<<1:0);}
   return bytes;
 }
 function sendSettings(){enqueue({Settings:watchSettings()});}
@@ -495,12 +498,25 @@ Pebble.addEventListener('webviewclosed',function(e){
   fetchCalendar(linkChanged);
 });
 
+function takePrimary(next){
+  var body=currentBody(),sats=extra().filter(Boolean),ring=body.indexOf('sat:')===0?[body].concat(sats):sats;
+  var at=ring.indexOf(next);if(at<0||!known(next))return;
+  // (The Sun or Moon as the body is marked beside the satellite instead.)
+  if(body.indexOf('sat:')!==0){var a=also();if(a.indexOf(body)<0)a.push(body);localStorage.setItem('also',a.join(','));}
+  ring=ring.slice(at).concat(ring.slice(0,at));
+  localStorage.setItem('body',ring[0]);localStorage.setItem('extra',[ring[1]||'',ring[2]||''].join(','));
+  sendSettings();
+}
 // On launch, the settings: the watch asks for anything else it lacks.
 Pebble.addEventListener('ready',function(){owed=false;owedTries=0;sendSettings();sendEvents();fetchCalendar(false);});
 Pebble.addEventListener('appmessage',function(e){
   // Segments from a UTC day (days since 1970; -1: none are missing), and
   // home's rise and set or a satellite's own data; and with them what the
   // watch is owed, and its events if they have moved on.
+  // A flick on the watch made the next satellite the body (Primary, its
+  // catalog number): the body and companions turned round as the watch
+  // turned them (native/src/c/main.c next_satellite), kept, and sent back.
+  if(e.payload.Primary!==undefined)takePrimary('sat:'+e.payload.Primary);
   var from=e.payload.DataRequest;
   if(from!==undefined){
     owedTries=0;

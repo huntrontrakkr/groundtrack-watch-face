@@ -55,7 +55,7 @@ class Watch{
     this.done=new Promise(r=>this.p.on('close',status=>{this.status=status;for(const w of this.waiting)w(null);r();}));
     createInterface({input:this.p.stdout}).on('line',line=>{
       if(line!=='.'){this.lines.push(JSON.parse(line));return;}
-      const block={requests:this.lines.filter(l=>'request' in l),state:this.lines.find(l=>'note' in l)};this.lines=[];
+      const block={requests:this.lines.filter(l=>'request' in l),primaries:this.lines.filter(l=>'primary' in l).map(l=>l.primary),state:this.lines.find(l=>'note' in l)};this.lines=[];
       const w=this.waiting.shift();if(w)w(block);else this.blocks.push(block);
     });
   }
@@ -359,4 +359,32 @@ test('companion satellites refresh through their own ring rollover without repla
     }
     await w.close();
   }
+});
+
+// A flick with more than one satellite followed: the next made the body, the
+// phone told; the phone turns its own the same way and sends them back,
+// which the watch already has (no second build); the hour is the core's for
+// the new body and companions. With one satellite, a flick changes nothing.
+test('a flick moves to the next satellite, the phone following',{skip:!cc&&'no C compiler',timeout:300000},async()=>{
+  const t=Date.parse('2026-09-30T13:12:00Z'),c={zone:'America/New_York',body:'sat:25544',extra:['sat:20580','sat:48274'],home:NY,plate:'console',face:'plotboard'};
+  const {w,ph}=await fresh('enroute',c,t);
+  assert.equal(w.state.chart,true);
+  const b=await w.cmd('flick');
+  assert.deepEqual(b.primaries,[20580],'the phone is told HST is the body');
+  ph.at(w.state.t*1000);ph.listeners.appmessage({payload:{Primary:20580}});await ph.quiet();
+  await w.cmd('run 6');await answer(w,ph);await w.cmd('run 6');
+  assert.equal(w.state.chart,true,'the next satellite\'s hour is drawn');
+  const sent=ph.out.length;await deliver(w,ph);
+  assert.equal(w.state.chart,true,'the phone\'s settings, sent back, are the watch\'s: not built again');
+  await same('enroute',{...c,body:'sat:20580',extra:['sat:48274','sat:25544']},w,'after the flick');
+  // (Round again: CSS, then ISS.)
+  for(const [next,extra] of [[48274,['sat:25544','sat:20580']],[25544,['sat:20580','sat:48274']]]){
+    const r=await w.cmd('flick');assert.deepEqual(r.primaries,[next]);
+    ph.at(w.state.t*1000);ph.listeners.appmessage({payload:{Primary:next}});await ph.quiet();
+    await w.cmd('run 6');await answer(w,ph);await w.cmd('run 6');await deliver(w,ph);
+    await same('enroute',{...c,body:'sat:'+next,extra},w,`round to ${next}`);
+  }
+  await w.close();
+  // One satellite: no switch.
+  {const {w:one}=await fresh('enroute',{...c,extra:[]},t);const r=await one.cmd('flick');assert.deepEqual(r.primaries,[]);assert.equal(one.state.chart,true);await one.close();}
 });

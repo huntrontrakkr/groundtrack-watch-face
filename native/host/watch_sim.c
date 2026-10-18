@@ -11,6 +11,7 @@
 //   link <0|1>           the phone out of reach, or back
 //   battery <percent>    the battery (not charging)
 //   focus                back from a notification
+//   flick                a flick of the wrist
 //   frame <file>         the frame as drawn, to a file (GColor8 bytes)
 //
 // {"request":day,"body":norad} is a request for data the watch sent;
@@ -83,6 +84,9 @@ GBitmap *graphics_capture_frame_buffer(GContext *ctx){s_captured=true;return &s_
 bool graphics_release_frame_buffer(GContext *ctx,GBitmap *b){return true;}
 uint8_t *gbitmap_get_data(const GBitmap *b){return (uint8_t *)b->data;}
 uint16_t gbitmap_get_bytes_per_row(const GBitmap *b){return ENR_W;}
+GBitmapDataRowInfo gbitmap_get_data_row_info(const GBitmap *b,uint16_t y){return (GBitmapDataRowInfo){(uint8_t *)b->data+y*ENR_W,0,ENR_W-1};}
+void graphics_context_set_stroke_color(GContext *ctx,GColor c){}
+void graphics_draw_rect(GContext *ctx,GRect r){}
 void graphics_context_set_fill_color(GContext *ctx,GColor c){}
 void graphics_context_set_text_color(GContext *ctx,GColor c){}
 void graphics_fill_rect(GContext *ctx,GRect r,uint16_t radius,GCornerMask m){memset(s_frame.data,0xC0,sizeof s_frame.data);}
@@ -98,8 +102,9 @@ static void redraw(void){
 static TickHandler s_tick;static AppFocusHandler s_focus;static BatteryStateHandler s_battery;static ConnectionHandlers s_connection;
 static BatteryChargeState s_charge={100,false,false};static bool s_linked=true;
 void tick_timer_service_subscribe(TimeUnits u,TickHandler h){s_tick=h;}
-void accel_tap_service_subscribe(AccelTapHandler h){(void)h;}
-void accel_tap_service_unsubscribe(void){}
+static AccelTapHandler s_tap;
+void accel_tap_service_subscribe(AccelTapHandler h){s_tap=h;}
+void accel_tap_service_unsubscribe(void){s_tap=NULL;}
 void tick_timer_service_unsubscribe(void){s_tick=NULL;}
 void app_focus_service_subscribe(AppFocusHandler h){s_focus=h;}
 void app_focus_service_unsubscribe(void){s_focus=NULL;}
@@ -123,8 +128,8 @@ bool app_timer_reschedule(AppTimer *t,uint32_t ms){if(!t->live)return false;t->d
 void app_timer_cancel(AppTimer *t){t->live=false;}
 
 // ---- messages
-uint32_t MESSAGE_KEY_Status=1,MESSAGE_KEY_Settings=2,MESSAGE_KEY_Segments=3,MESSAGE_KEY_RiseSets=4,MESSAGE_KEY_DataRequest=5,MESSAGE_KEY_DataBody=6,MESSAGE_KEY_SatSegments=7,MESSAGE_KEY_Passes=8,MESSAGE_KEY_Events=9;
-static const char *const KEYS[]={"","Status","Settings","Segments","RiseSets","DataRequest","DataBody","SatSegments","Passes","Events"};
+uint32_t MESSAGE_KEY_Status=1,MESSAGE_KEY_Settings=2,MESSAGE_KEY_Segments=3,MESSAGE_KEY_RiseSets=4,MESSAGE_KEY_DataRequest=5,MESSAGE_KEY_DataBody=6,MESSAGE_KEY_SatSegments=7,MESSAGE_KEY_Passes=8,MESSAGE_KEY_Events=9,MESSAGE_KEY_Primary=10;
+static const char *const KEYS[]={"","Status","Settings","Segments","RiseSets","DataRequest","DataBody","SatSegments","Passes","Events","Primary"};
 struct DictionaryIterator {int n;Tuple *t[4];};
 static struct DictionaryIterator s_out;static int32_t s_out_values[4];static uint32_t s_out_keys[4];
 static AppMessageInboxReceived s_inbox;static AppMessageOutboxFailed s_outbox_failed;static uint32_t s_inbox_size;
@@ -136,6 +141,8 @@ AppMessageResult app_message_outbox_begin(DictionaryIterator **it){s_out.n=0;*it
 DictionaryResult dict_write_int32(DictionaryIterator *it,const uint32_t key,const int32_t v){s_out_keys[it->n]=key;s_out_values[it->n++]=v;return DICT_OK;}
 AppMessageResult app_message_outbox_send(void){
   int32_t day=-2,body=0;for(int i=0;i<s_out.n;i++){if(s_out_keys[i]==MESSAGE_KEY_DataRequest)day=s_out_values[i];if(s_out_keys[i]==MESSAGE_KEY_DataBody)body=s_out_values[i];}
+  // (A flick's next satellite, told the phone.)
+  for(int i=0;i<s_out.n;i++)if(s_out_keys[i]==MESSAGE_KEY_Primary){printf("{\"primary\":%d,\"t\":%lld}\n",(int)s_out_values[i],(long long)(s_ms/1000));return APP_MSG_OK;}
   printf("{\"request\":%d,\"body\":%d,\"t\":%lld}\n",(int)day,(int)body,(long long)(s_ms/1000));
   // (Out of reach, the message fails a moment later.)
   if(!s_linked&&s_outbox_failed)s_outbox_failed(&s_out,(AppMessageResult)1,NULL);
@@ -144,7 +151,7 @@ AppMessageResult app_message_outbox_send(void){
 Tuple *dict_find(const DictionaryIterator *it,const uint32_t key){for(int i=0;i<it->n;i++)if(it->t[i]->key==key)return it->t[i];return NULL;}
 static Tuple *tuple(uint32_t key,const uint8_t *bytes,size_t n){Tuple *t=malloc(sizeof(Tuple)+n+4);t->key=key;t->type=0;t->length=(uint16_t)n;memcpy((uint8_t *)t->value,bytes,n);return t;}
 static void deliver(struct DictionaryIterator *in){if(s_inbox)s_inbox(in,NULL);for(int i=0;i<in->n;i++)free(in->t[i]);}
-static uint32_t key_of(const char *name){for(uint32_t k=1;k<10;k++)if(!strcmp(KEYS[k],name))return k;fprintf(stderr,"no key %s\n",name);exit(3);}
+static uint32_t key_of(const char *name){for(uint32_t k=1;k<11;k++)if(!strcmp(KEYS[k],name))return k;fprintf(stderr,"no key %s\n",name);exit(3);}
 static size_t unhex(const char *hex,uint8_t *out){size_t n=0;for(;hex[0]&&hex[1]&&hex[0]!='\n';hex+=2){unsigned v;sscanf(hex,"%2x",&v);out[n++]=(uint8_t)v;}return n;}
 
 // ---- the event loop: the commands
@@ -191,6 +198,7 @@ void app_event_loop(void){
     else if(!strncmp(line,"charging ",9)){s_charge.is_charging=atoi(line+9)!=0;if(s_battery)s_battery(s_charge);}
     else if(!strncmp(line,"quiet ",6))s_quiet=atoi(line+6)!=0;
     else if(!strncmp(line,"focus",5)){if(s_focus)s_focus(true);}
+    else if(!strncmp(line,"flick",5)){if(s_tap)s_tap(ACCEL_AXIS_X,1);}
     else if(!strncmp(line,"frame ",6)){line[strcspn(line,"\n")]=0;redraw();FILE *f=fopen(line+6,"wb");fwrite(s_frame.data,1,sizeof s_frame.data,f);fclose(f);}
     else{fprintf(stderr,"no command: %s",line);exit(3);}
     state();

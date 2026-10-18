@@ -331,7 +331,7 @@ try{
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1,...Array(14).fill(0),(255&~32)|256&255,256>>8,3]));
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1,...Array(14).fill(0),(255&~32)|256&255,256>>8,3,0,0]));
   assert.deepEqual([stored.fx,stored.fxRate],['body,rise,hour,flick,refresh,reacquire,tear,everyplate','3']);
   assert.equal(stored.vibe,'1');
   assert.equal(stored.hourFigures,'0');

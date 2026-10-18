@@ -28,18 +28,22 @@ void settings_load(WatchSettings *s){
   // the phone sends one.
   // The Sun on Groundtrack, the ISS on Fuller.
 #if defined(FACE_FULLER)
-  const WatchSettings defaults={14,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}},GT_FX_DEFAULT,GT_FX_RATE_DEFAULT};
+  const WatchSettings defaults={15,BODY_SATELLITE,0,1,1,0,0,0,25544,1,VIEW_HOUR,"ISS",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}},GT_FX_DEFAULT,GT_FX_RATE_DEFAULT,{0,0}};
 #else
-  const WatchSettings defaults={14,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}},GT_FX_DEFAULT,GT_FX_RATE_DEFAULT};
+  const WatchSettings defaults={15,BODY_SUN,0,1,1,0,0,0,0,0,0,"",ENR_EVEN,0,0,0,2,0,0,0,0,0,{0,0},{{0},{0}},GT_FX_DEFAULT,GT_FX_RATE_DEFAULT,{0,0}};
 #endif
   memset(s,0,sizeof *s);
-  const int n=persist_read_data(SETTINGS_KEY,s,sizeof *s);
+  int n=persist_read_data(SETTINGS_KEY,s,sizeof *s);
   // (Version 13's record ended before the animations: they start as the
   // defaults.)
   #define V13_BYTES ((int)((offsetof(WatchSettings,fx)+3)&~3u))
   if((n==36&&(s->version==10||s->version==11))||(n==44&&s->version==12)){if(s->version==10)s->watch=0;s->version=13;}
-  if(s->version==13&&(n==36||n==44||n==V13_BYTES)){s->fx=GT_FX_DEFAULT;s->fx_rate=GT_FX_RATE_DEFAULT;s->version=14;}
-  else if(n!=(int)sizeof *s||s->version!=14)*s=defaults;
+  // (And version 14's before the companions' kinds: hour charts until the
+  // phone says.)
+  #define V14_BYTES ((int)((offsetof(WatchSettings,extra_kind)+3)&~3u))
+  if(s->version==13&&(n==36||n==44||n==V13_BYTES)){s->fx=GT_FX_DEFAULT;s->fx_rate=GT_FX_RATE_DEFAULT;s->version=14;n=V14_BYTES;}
+  if(s->version==14&&n==V14_BYTES){s->extra_kind[0]=s->extra_kind[1]=0;s->version=15;}
+  else if(n!=(int)sizeof *s||s->version!=15)*s=defaults;
 }
 void settings_save(const WatchSettings *s){persist_write_data(SETTINGS_KEY,s,sizeof *s);}
 
@@ -54,10 +58,10 @@ void rise_sets_store(const uint8_t *b,size_t n){
 // Separate rings for the two companions: 32 slots each, beyond saved maps.
 static int32_t s_extra[2];
 static int sat_bank(int32_t norad){return norad==s_extra[0]?1100:norad==s_extra[1]?1132:SAT_KEY;}
-static uint32_t sat_key(int32_t norad,int32_t start,int32_t span){
-  const int bank=sat_bank(norad),count=bank==SAT_KEY?SAT_RING:32;
-  const int slot=(start/span)%count;return bank+(uint32_t)(slot<0?slot+count:slot);
+static uint32_t bank_key(int bank,int32_t start,int32_t span){
+  const int count=bank==SAT_KEY?SAT_RING:32,slot=(start/span)%count;return bank+(uint32_t)(slot<0?slot+count:slot);
 }
+static uint32_t sat_key(int32_t norad,int32_t start,int32_t span){return bank_key(sat_bank(norad),start,span);}
 void sat_segments_store(const uint8_t *b,size_t n,const WatchSettings *s){
   memcpy(s_extra,s->extra,sizeof s_extra);
   for(size_t at=0;at+SAT_SEGMENT_BYTES<=n;at+=SAT_SEGMENT_BYTES){
@@ -96,8 +100,14 @@ static bool sat_segment_load(int32_t norad,int64_t t,SatSegment *seg){
   for(int k=0;k<2;k++){
     _Static_assert(sizeof(SatSegment)==SAT_SEGMENT_BYTES,"satellite wire layout");
     const int32_t start=(int32_t)(q64(t,spans[k])*spans[k]);
-    if(persist_read_data(sat_key(norad,start,spans[k]),seg,sizeof *seg)!=(int)sizeof *seg)continue;
-    if(seg->norad==norad&&seg->start==start&&seg->span==spans[k])return true;
+    // (Its own ring first, then the others: a flick may have made the body
+    // a companion, or a companion the body, since the phone sent them.)
+    const int banks[4]={sat_bank(norad),SAT_KEY,1100,1132};
+    for(int b=0;b<4;b++){
+      if(b&&banks[b]==banks[0])continue;
+      if(persist_read_data(bank_key(banks[b],start,spans[k]),seg,sizeof *seg)!=(int)sizeof *seg)continue;
+      if(seg->norad==norad&&seg->start==start&&seg->span==spans[k])return true;
+    }
   }
   return false;
 }

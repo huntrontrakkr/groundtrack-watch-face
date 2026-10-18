@@ -139,11 +139,11 @@ test('each face builds its hours on the Round 2 in what its builder leaves of th
 test('every animation leaves the screen as it was',{skip:!cc&&'no C compiler'},()=>{
   const cases=[['sat:25544','2026-09-30T13:00:00Z','crt',{flag:true}],['sat:36585','2026-09-28T15:00:00Z','console',{flag:true}],['moon','2026-09-19T09:00:00Z','enroute',{flag:true}],
     ['sat:25544','2026-09-30T13:00:00Z','raster',{face:'plotboard'}],['sat:25544','2026-09-30T13:00:00Z','operations',{projection:'fuller'}]];
-  for(const harness of ['native/host/harness','native/host/harness-round'])for(const [body,iso,plate,more] of cases)for(const rim of ['bezel','chords'])for(let kind=0;kind<6;kind++)for(const minute of [0,31,59]){
+  for(const harness of ['native/host/harness','native/host/harness-round'])for(const [body,iso,plate,more] of cases)for(const rim of ['bezel','chords'])for(let kind=0;kind<7;kind++)for(const minute of [0,31,59]){
     const r=spawnSync(harness,['-x',String(kind),String(minute),String(kind*97+minute)],{input:input(body,iso,plate,'America/New_York',{...more,rim}),maxBuffer:1<<28});
     const out=JSON.parse(r.stderr.toString().trim().split('\n').pop());
     const what=`${harness} ${body} ${plate} ${rim} kind ${kind} minute ${minute}`;
-    if(out.begun===false){assert.ok(kind>=4,`${what}: a scan declined`);continue;}
+    if(out.begun===false){assert.ok(kind===4||kind===5,`${what}: a scan declined`);continue;}
     assert.equal(r.status,0,what);assert.ok(out.frames>0,what);assert.equal(out.restored,true,`${what}: the screen was not left as it was`);
   }
 });

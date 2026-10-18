@@ -324,9 +324,10 @@ void enr_render(const EnrScene *scene,int minute,uint8_t *frame,int row_stride);
 
 // The animations (effects.c), drawn over the minute on the screen and
 // leaving it as it was: the scans (a refresh line, a pixel-sort band, the
-// sort reacquiring a lost signal, a torn picture) and the pulses (the body
-// blinking as it steps, home as the satellite rises into view).
-enum {ENR_FX_REFRESH,ENR_FX_SORT,ENR_FX_REACQUIRE,ENR_FX_TEAR,ENR_FX_PULSE_BODY,ENR_FX_PULSE_HOME,ENR_FX_KINDS};
+// sort reacquiring a lost signal, a torn picture), the pulses (the body
+// blinking as it steps, home as the satellite rises into view), and the
+// reacquiring as a new satellite's chart comes in (SIGNAL ACQUIRED).
+enum {ENR_FX_REFRESH,ENR_FX_SORT,ENR_FX_REACQUIRE,ENR_FX_TEAR,ENR_FX_PULSE_BODY,ENR_FX_PULSE_HOME,ENR_FX_ACQUIRED,ENR_FX_KINDS};
 // Starts one at a minute of the scene (false where it cannot: no memory, or
 // a pulse off the screen); then each frame drawn over the frame buffer, 1
 // while there are more, 0 when it has ended and the screen is as it was;

@@ -238,7 +238,12 @@
       <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="body"><span class="name">The body blinks as it steps<span class="note">Each minute, as the body moves on, it blinks and a ring opens round it</span></span></label><button type="button" class="play" data-fx="4" aria-label="Play The body blinks as it steps">&#9654;</button></div>
       <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="rise"><span class="name">Home pulses as the satellite rises<span class="note">At the minute a satellite comes into view of home, a ring opens round home</span></span></label><button type="button" class="play" data-fx="5" aria-label="Play Home pulses as the satellite rises">&#9654;</button></div>
       <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="hour"><span class="name">A scan as each hour begins<span class="note">When the new hour's chart appears, one of the scans below runs over it</span></span></label></div>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="flick"><span class="name">A scan at a flick of the wrist<span class="note">Flick your wrist to run one of the scans below, on any plate</span></span></label></div>
+    </div>
+    <div class="group"><h3>A flick of the wrist</h3>
+      <p class="note field">Following more than one satellite, a flick moves to the next: a box names it while its chart is drawn, and it comes in under a reacquiring sweep. Following one, a flick runs one of the scans below, on any plate.</p>
+      <label class="row"><input type="radio" name="flickMode" value="one"><span class="name">One flick</span></label>
+      <label class="row"><input type="radio" name="flickMode" value="two"><span class="name">Two flicks<span class="note">Two within a second and a half, so a stray movement does nothing</span></span></label>
+      <label class="row"><input type="radio" name="flickMode" value="off"><span class="name">Off</span></label>
     </div>
     <div class="group"><h3>The scans</h3>
       <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="refresh"><span class="name">Refresh<span class="note">A bright line runs down the screen with the glow of phosphor behind it</span></span></label><button type="button" class="play" data-fx="0" aria-label="Play Refresh">&#9654;</button></div>
@@ -475,6 +480,7 @@
     hide('transfer-group',!r.transfer);show('transfer',s.transfer);
     form.elements.clock24.checked=s.clock24;
     Array.prototype.forEach.call(form.querySelectorAll('input[name=fx]'),function(c){c.checked=s.fx.indexOf(c.value)>=0;});show('fxRate',s.fxRate);
+    show('flickMode',s.fx.indexOf('flick')<0?'off':s.fx.indexOf('twoflicks')>=0?'two':'one');
     var scans=['refresh','sort','reacquire','tear'].filter(function(k){return s.fx.indexOf(k)>=0;}).length;
     document.getElementById('now-fx').textContent=[s.fx.indexOf('body')>=0?'Blink':null,scans?scans+' scan'+(scans>1?'s':'')+(s.fxRate==='0'?'':' · '+['','once','twice','4×'][Number(s.fxRate)]+' an hour'):null].filter(Boolean).join(' · ')||'Off';
     hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;form.elements.vibe.checked=s.vibe;form.elements.fuel.checked=s.fuel;
@@ -510,6 +516,7 @@
     else if(t.name==='vibe')s.vibe=t.checked;
     else if(t.name==='fx'){s.fx=s.fx.filter(function(k){return k!==t.value;});if(t.checked)s.fx.push(t.value);render();return;}
     else if(t.name==='fxRate'){s.fxRate=t.value;render();return;}
+    else if(t.name==='flickMode'){s.fx=s.fx.filter(function(k){return k!=='flick'&&k!=='twoflicks';});if(t.value!=='off')s.fx.push('flick');if(t.value==='two')s.fx.push('twoflicks');render();return;}
     else if(t.name==='fuel')s.fuel=t.checked;
     else if(t.name==='also'){if(t.checked&&s.also.indexOf(t.value)<0)s.also.push(t.value);if(!t.checked)s.also=s.also.filter(function(k){return k!==t.value;});}
     else if(t.type==='radio'&&t.name in s)s[t.name]=t.value;

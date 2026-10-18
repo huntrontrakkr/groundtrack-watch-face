@@ -26,8 +26,10 @@
 // dictionary's own framing.
 #define INBOX_SIZE 2100
 
-// An animation running (its frames drawn over the minute on the screen).
-static bool s_fx_on;
+// An animation running (its frames drawn over the minute on the screen),
+// and the face going to the next satellite (below).
+static bool s_fx_on,s_switching;
+static void switch_end(void);
 #if GT_BLOBS
 // The chart builder and the minute renderer are code blobs (blob.h; GT_BLOBS
 // is the watch app's build, not the host's), loaded while each is wanted: the builder for a build (the
@@ -229,7 +231,7 @@ static void build_step(void *data){
   do r=chart_step(s_build);while(r>0&&now_ms()-t0<80);
   s_build_ms+=now_ms()-t0;
   if(r>0){s_build_timer=app_timer_register(10,build_step,NULL);return;}
-  if(r<0){app_note("chart",chart_failed_at);build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
+  if(r<0){app_note("chart",chart_failed_at);switch_end();build_abort();s_status_phone=false;set_status("NO ROOM FOR THE CHART");layer_mark_dirty(s_layer);return;}
   const uint32_t t1=now_ms();
   EnrScene *scene=chart_finish(s_build);s_build=NULL;local_chart_done();
   s_build_ms+=now_ms()-t1;
@@ -286,13 +288,170 @@ static void fx_minute(int minute){
     for(int k=0;k<4;k++)s_fx_plan[k]=k<count[s_settings.fx_rate&3]?(uint8_t)(3+rand()%55):255;
   }
   int kind=-1;
-  if(s_fx_shown!=s_chart_serial){s_fx_shown=s_chart_serial;if(f&GT_FX_HOUR)kind=fx_scan(false);}
+  if(s_fx_shown!=s_chart_serial){s_fx_shown=s_chart_serial;if(s_switching){switch_end();kind=ENR_FX_ACQUIRED;}else if(f&GT_FX_HOUR)kind=fx_scan(false);}
   for(int k=0;k<4&&kind<0;k++)if(s_fx_plan[k]==minute)kind=fx_scan(false);
   if(kind<0&&(f&GT_FX_RISE)&&enr_fx_aos(s_now.scene,minute))kind=ENR_FX_PULSE_HOME;
   if(kind<0&&(f&GT_FX_BODY))kind=ENR_FX_PULSE_BODY;
   fx_start(kind,minute);
 }
-static void flick(AccelAxisType axis,int32_t direction){if(s_painted&&s_drawn_minute>=0)fx_start(fx_scan(true),s_drawn_minute);}
+// ---- a flick to the next satellite
+// With more than one satellite followed (the body and its companions), a
+// flick makes the next the body: the body and companions turned round as a
+// ring (the Sun or Moon as the body gives way to the first companion, and
+// is marked beside it), the phone told (Primary), the hour built again.
+// While it is built a box says so over the last chart, which breaks up
+// behind it (it is going: nothing is kept); the new one comes in under the
+// reacquiring's sweep (ENR_FX_ACQUIRED).
+// (GT_HUD_SLOW: the list four times slower, for screenshots.)
+#ifdef GT_HUD_SLOW
+#define HUD_MS 264
+#else
+#define HUD_MS 66
+#endif
+// The track list (below): the ring as it stood, the body first, and the
+// chart's colours.
+static struct {int n;char code[3][4];uint8_t kind[3];uint8_t ground,ink,accent;} s_list;
+#define LIST_SUN 0x80
+#define LIST_MOON 0x81
+static uint8_t s_switch_step;static AppTimer *s_switch_timer;static time_t s_switch_since;static uint32_t s_switch_ms;
+static int satellites(const WatchSettings *s){int n=s->body==BODY_SATELLITE;for(int k=0;k<2;k++)n+=s->extra[k]!=0;return n;}
+static void switch_step(void *data){s_switch_timer=NULL;if(s_switching){s_switch_step++;layer_mark_dirty(s_layer);s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);}}
+static void switch_end(void){s_switching=false;if(s_switch_timer){app_timer_cancel(s_switch_timer);s_switch_timer=NULL;}}
+static void send_primary(int32_t norad){
+  DictionaryIterator *out;
+  if(app_message_outbox_begin(&out)!=APP_MSG_OK)return;
+  dict_write_int32(out,MESSAGE_KEY_Primary,norad);app_message_outbox_send();
+}
+static void next_satellite(void){
+  WatchSettings s=s_settings;
+  // (The track list as the ring stands, the body first; in the chart's
+  // colours, before it goes.)
+  {int n=0;
+  if(s.body!=BODY_SATELLITE){memcpy(s_list.code[n],s.body==BODY_SUN?"SUN":"MOON",4);s_list.code[n][3]=s.body==BODY_SUN?0:'N';s_list.kind[n++]=s.body==BODY_SUN?LIST_SUN:LIST_MOON;}
+  else{memcpy(s_list.code[n],s.code,3);s_list.code[n][3]=0;s_list.kind[n++]=(uint8_t)(s.station|s.view<<1);}
+  for(int k=0;k<2;k++)if(s.extra[k]){memcpy(s_list.code[n],s.extra_code[k],3);s_list.code[n][3]=0;s_list.kind[n++]=s.extra_kind[k];}
+  s_list.n=n;
+  const EnrScene *sc=s_now.scene;s_list.ground=sc?sc->space:0xC0;s_list.ink=sc?sc->space_ink:0xFF;s_list.accent=sc?sc->zoned[ENR_ROUTE][0]:0xDC;}
+  int32_t sat[3];char code[3][3];uint8_t kind[3],track[3];int n=0;
+  if(s.body==BODY_SATELLITE){sat[n]=s.norad;memcpy(code[n],s.code,3);kind[n]=(uint8_t)(s.station|s.view<<1);track[n]=0;n++;}
+  else s.also|=s.body==BODY_SUN?1:2;
+  for(int k=0;k<2;k++)if(s.extra[k]){sat[n]=s.extra[k];memcpy(code[n],s.extra_code[k],3);kind[n]=s.extra_kind[k];track[n]=(s.legend>>(2+k))&1;n++;}
+  if(n<2)return;
+  // (The first after the body: the ring turned once; or, the Sun's or the
+  // Moon's, the first companion.)
+  const int first=s.body==BODY_SATELLITE?1:0;
+  s.body=BODY_SATELLITE;s.norad=sat[first];memcpy(s.code,code[first],3);s.code[3]=0;s.station=kind[first]&1;s.view=kind[first]>>1;
+  memset(s.extra,0,sizeof s.extra);memset(s.extra_code,0,sizeof s.extra_code);memset(s.extra_kind,0,sizeof s.extra_kind);
+  // (The companions: those after it, then, from a satellite body, that one.)
+  int order[2],m=0;for(int i=first+1;i<n;i++)order[m++]=i;
+  if(first==1)order[m++]=0;
+  // (Each companion's dotted track goes with it; the body's had none.)
+  s.legend&=(uint8_t)~12;
+  for(int k=0;k<m;k++){const int i=order[k];s.extra[k]=sat[i];memcpy(s.extra_code[k],code[i],3);s.extra_kind[k]=kind[i];s.legend|=(uint8_t)(track[i]<<(2+k));}
+  s_settings=s;settings_save(&s);send_primary(s.norad);
+  // (What the new body lacks, its passes over home, asked for at once.)
+  s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;
+  if(s_fx_on){enr_fx_end(NULL,0);s_fx_on=false;}
+  s_switching=true;s_switch_step=0;s_switch_since=time(NULL);s_switch_ms=now_ms();if(!s_switch_timer)s_switch_timer=app_timer_register(HUD_MS,switch_step,NULL);
+  build_abort();chart_free(&s_now);s_status[0]=0;s_status_phone=false;
+  check(time(NULL));layer_mark_dirty(s_layer);
+}
+// The track list over the last chart, which breaks up behind it: a row for
+// each of the satellites (or the Sun or Moon) in the ring's order before
+// the flick, each a square with its symbol, its code in the chart's
+// lettering and its view in small type; the highlight on the body drops to
+// the next, and the list scrolls up under it, round, till the next is at
+// the top. The header says ACQUIRING, blinking, till the chart comes. In
+// the plate's own colours (taken from the chart as it went).
+// The symbols, 9 wide (a station's arrays and modules; a satellite's
+// body and panels; the Sun; the Moon).
+static const char *const ICONS[4][7]={
+  {"#.#...#.#","###...###","#.#.#.#.#","#########","#.#.#.#.#","###...###","#.#...#.#"},
+  {".........","##.....##","##.###.##","#########","##.###.##","##.....##","........."},
+  {"...###...","..#...#..",".#..#..#.",".#.###.#.",".#..#..#.","..#...#..","...###..."},
+  {"...###...","..##.....",".##......",".##......",".##......","..##.....","...###..."}};
+typedef struct {uint8_t *row[ENR_H];int16_t x0[ENR_H],x1[ENR_H];} Rows;
+static void put(const Rows *f,int x,int y,int y0,int y1,uint8_t c){if(y<y0||y>y1||y<0||y>=ENR_H||x<f->x0[y]||x>f->x1[y])return;f->row[y][x]=c;}
+// The chart's lettering (font.bin's glyphs, as the core draws them).
+static void letters(const Rows *f,const char *t,int x,int baseline,int y0,int y1,uint8_t c){
+  #if GT_BLOBS
+  if(!s_font)return;
+  const EnrGlyph *glyphs=(const EnrGlyph *)s_font;const EnrRun *runs=(const EnrRun *)(s_font+8*ENR_FONT_GLYPH_COUNT);
+  #else
+  const EnrGlyph *glyphs=ENR_FONT_GLYPHS;const EnrRun *runs=ENR_FONT_RUNS;
+  #endif
+  for(;*t;t++){
+    const char ch=*t;const int k=ch>='0'&&ch<='9'?ch-'0':ch>='A'&&ch<='Z'?ch-'A'+10:ch=='-'?38:-1;
+    if(k<0){x+=7;continue;}
+    const EnrGlyph *g=&glyphs[k];
+    for(int r=0;r<g->count;r++){const EnrRun *run=&runs[g->first+r];for(int i=0;i<run->n;i++)put(f,x+g->left+run->x+i,baseline-g->top+run->y,y0,y1,c);}
+    x+=g->advance;
+  }
+}
+static void switch_frame(GContext *ctx,GRect box){
+  (void)box;
+  GBitmap *frame=graphics_capture_frame_buffer(ctx);
+  if(!frame)return;
+  static Rows f;for(int y=0;y<ENR_H;y++){const GBitmapDataRowInfo ri=gbitmap_get_data_row_info(frame,y);f.row[y]=ri.data;f.x0[y]=ri.min_x;f.x1[y]=ri.max_x;}
+  const int ROW=16,w=150,x0=ENR_W/2-w/2,top=ENR_H/2-34,h=12+3*ROW+3,wy0=top+12,wy1=top+12+3*ROW-1;
+  // The last chart breaking up: rows thrown sideways, their red apart (the
+  // panel's left alone).
+  {static uint8_t row[ENR_W];
+  for(int k=0;k<6;k++){
+    const int y0=rand()%(ENR_H-8),hh=2+rand()%7,shift=(rand()%25)-12;
+    for(int y=y0;y<y0+hh;y++){
+      if(y>=top-2&&y<top+h+2)continue;
+      uint8_t *r=f.row[y];const int a0=f.x0[y],a1=f.x1[y];if(a1<=a0)continue;
+      memcpy(row+a0,r+a0,(size_t)(a1-a0+1));
+      for(int x=a0;x<=a1;x++){int a=x-shift,b=a-2;a=a<a0?a0:a>a1?a1:a;b=b<a0?a0:b>a1?a1:b;r[x]=(uint8_t)((row[a]&0xCF)|(row[b]&0x30));}
+    }
+  }}
+  const uint8_t G=s_list.ground,I=s_list.ink,A=s_list.accent;
+  for(int y=top;y<top+h;y++)for(int x=x0;x<x0+w;x++)put(&f,x,y,0,ENR_H-1,(y==top||y==top+h-1||x==x0||x==x0+w-1||y==top+11)?A:G);
+  // Where the rows stand: the highlight on the body (row 0), dropping to the
+  // next (steps 4-8), then the list scrolling up a row (9-15), round.
+  const int st=s_switch_step,n=s_list.n>0?s_list.n:1;
+  const int drop=st<4?0:st<9?(st-3)*ROW/5:ROW,scroll=st<9?0:st<16?(st-8)*ROW/7:ROW;
+  const int hl=wy0+drop-scroll;
+  for(int y=hl;y<hl+ROW;y++)for(int x=x0+1;x<x0+w-1;x++)put(&f,x,y,wy0,wy1,A);
+  for(int i=0;i<n+1;i++){
+    const int item=i%n,y=wy0+i*ROW-scroll;if(i==n&&scroll==0)continue;
+    if(y+ROW<=wy0||y>wy1)continue;
+    const bool lit=y+ROW/2>=hl&&y+ROW/2<hl+ROW;const uint8_t fg=lit?G:I,sq=lit?G:A;
+    // (The square, and its symbol.)
+    for(int yy=0;yy<13;yy++)for(int xx=0;xx<13;xx++)if(yy==0||yy==12||xx==0||xx==12)put(&f,x0+4+xx,y+1+yy,wy0,wy1,sq);
+    const int icon=s_list.kind[item]==LIST_SUN?2:s_list.kind[item]==LIST_MOON?3:(s_list.kind[item]&1)?0:1;
+    for(int yy=0;yy<7;yy++)for(int xx=0;xx<9;xx++)if(ICONS[icon][yy][xx]=='#')put(&f,x0+6+xx,y+4+yy,wy0,wy1,fg);
+    letters(&f,s_list.code[item],x0+22,y+11,wy0,wy1,fg);
+  }
+  graphics_release_frame_buffer(ctx,frame);
+  // The small type: the header, and each row's view (rows wholly in view).
+  static const char *const VIEWS[4]={"HOUR CHART","WORLD BAND","WHOLE DAY","WORLD DAY"};
+  const GFont small=fonts_get_system_font(FONT_KEY_GOTHIC_09);
+  graphics_context_set_text_color(ctx,(GColor){.argb=A});
+  graphics_draw_text(ctx,"TRACK",small,GRect(x0+4,top-1,60,11),GTextOverflowModeFill,GTextAlignmentLeft,NULL);
+  if((st/4)%2==0||st<16)graphics_draw_text(ctx,st<16?"NEXT":"ACQUIRING",small,GRect(x0+w-70,top-1,66,11),GTextOverflowModeFill,GTextAlignmentRight,NULL);
+  for(int i=0;i<n+1;i++){
+    const int item=i%n,y=wy0+i*ROW-scroll;if(i==n&&scroll==0)continue;
+    if(y<wy0||y+ROW-1>wy1)continue;
+    const bool lit=y+ROW/2>=hl&&y+ROW/2<hl+ROW;
+    graphics_context_set_text_color(ctx,(GColor){.argb=lit?G:I});
+    const uint8_t k=s_list.kind[item];
+    graphics_draw_text(ctx,k==LIST_SUN||k==LIST_MOON?"BODY":VIEWS[(k>>1)&3],small,GRect(x0+50,y+2,w-54,11),GTextOverflowModeFill,GTextAlignmentRight,NULL);
+  }
+}
+// A flick (or two within a second and a half, if asked): to the next
+// satellite, or a scan.
+static void flick(AccelAxisType axis,int32_t direction){
+  if(s_settings.fx&GT_FX_TWO_FLICKS){
+    static uint32_t last;const uint32_t t=now_ms();
+    if(!last||t-last>1500){last=t;return;}
+    last=0;
+  }
+  if(s_switching||s_build)return;
+  if(satellites(&s_settings)>1){next_satellite();return;}
+  if(s_painted&&s_drawn_minute>=0)fx_start(fx_scan(true),s_drawn_minute);
+}
 // The settings' animations taken: the flick listened for or not, the scans
 // chosen again.
 static void fx_settings(void){
@@ -303,7 +462,14 @@ static void fx_settings(void){
 
 static void update(Layer *layer,GContext *ctx){
   const time_t now=time(NULL);
+  // (The list stays 1.6 seconds at the least, its highlight dropped and
+  // scrolled up and its new top read, though the chart may be ready before.)
+  if(s_switching&&s_painted&&now_ms()-s_switch_ms<(uint32_t)HUD_MS*24&&covers(&s_now,now)){const GRect b=layer_get_bounds(layer);switch_frame(ctx,GRect(b.size.w/2-58,b.size.h/2-28,116,56));return;}
   if(!covers(&s_now,now)){
+    // Going to the next satellite, the last chart breaks up behind its box
+    // while the next is built, or its data asked for (45 seconds at most).
+    if(s_switching&&s_painted&&now-s_switch_since<45){const GRect b=layer_get_bounds(layer);switch_frame(ctx,GRect(b.size.w/2-58,b.size.h/2-28,116,56));return;}
+    switch_end();
     // While the next chart is built, the last stays on the screen.
     if(s_build&&s_painted)return;
     // No chart for this hour: an honest blank with a note.
@@ -399,13 +565,14 @@ static void take_settings(const uint8_t *b,size_t n){
   _Static_assert(offsetof(WatchSettings,extra)-offsetof(WatchSettings,numerals)==10,"contiguous settings options");
   _Static_assert(offsetof(WatchSettings,norad)-offsetof(WatchSettings,lat100)==8,"contiguous coordinate fields");
   _Static_assert(offsetof(WatchSettings,extra_code)-offsetof(WatchSettings,numerals)==18,"contiguous identifier bytes");
-  s.version=14;s.figures=2;s.fx=GT_FX_DEFAULT;s.fx_rate=GT_FX_RATE_DEFAULT;
+  s.version=15;s.figures=2;s.fx=GT_FX_DEFAULT;s.fx_rate=GT_FX_RATE_DEFAULT;
   // Wire bytes are little-endian on both Pebble and the host; the three
   // coordinate/catalog fields and the option bytes are contiguous.
   memcpy(&s.body,b,5);memcpy(&s.lat100,b+5,12);
   s.station=b[17]&1;s.view=b[17]>>1;memcpy(s.code,b+18,3);
   memcpy(&s.numerals,b+21,n>=45?24:n>=39?18:n-21<10?n-21:10);
   if(n>=48){s.fx=(uint16_t)(b[45]|b[46]<<8);s.fx_rate=b[47];}
+  if(n>=50){s.extra_kind[0]=b[48];s.extra_kind[1]=b[49];}
   // The phone sends its settings as it starts: the moment to ask for what
   // is missing (a request made before it was listening is lost).
   s_data_ok_until=0;s_data_asked_at=0;s_data_tries=0;

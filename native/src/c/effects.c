@@ -109,7 +109,7 @@ static void hold_rows(uint8_t *frame,int stride,int y0,int y1){
 // the sweep has gone, blinking (four frames lit, four not) but the last.
 static void signal_box(uint8_t *frame,int stride){
   const int left=fx->steps-fx->step;
-  const char *t=left<=6?"SIGNAL ACQUIRED":fx->step<fx->steps/2?"LOSS OF SIGNAL":"REACQUIRING";
+  const char *t=left<=6||fx->kind==ENR_FX_ACQUIRED?"SIGNAL ACQUIRED":fx->step<fx->steps/2?"LOSS OF SIGNAL":"REACQUIRING";
   // (The box as wide as the longest, its words centred in it.)
   const int n=(int)strlen(t),w=enr_text_width("SIGNAL ACQUIRED",15)+10,h=13,x0=W/2-w/2,y0=H/2-h/2;
   hold_rows(frame,stride,y0,y0+h-1);
@@ -243,13 +243,13 @@ bool enr_fx_begin(const EnrScene *s,int kind,int minute,uint32_t seed){
   #if ENR_ROUND
   enr_rim_style(s->rim);
   #endif
-  fx->up=kind<=ENR_FX_REACQUIRE&&(rnd()&1);fx->left=rnd()&1;
+  fx->up=(kind<=ENR_FX_REACQUIRE||kind==ENR_FX_ACQUIRED)&&(rnd()&1);fx->left=rnd()&1;
   fx->accent=s->zoned[ENR_ROUTE][0];fx->ground=s->space;fx->ink=s->space_ink;
-  static const int8_t steps[ENR_FX_KINDS]={33,48,50,8,9,6};   // (the scans' through the screen and past)
-  fx->steps=steps[kind]+(ENR_ROUND&&kind<=ENR_FX_REACQUIRE?6:0);
+  static const int8_t steps[ENR_FX_KINDS]={33,48,50,8,9,6,50};   // (the scans' through the screen and past)
+  fx->steps=steps[kind]+(ENR_ROUND&&(kind<=ENR_FX_REACQUIRE||kind==ENR_FX_ACQUIRED)?6:0);
   if(kind==ENR_FX_PULSE_BODY){fx->cx=(int)f_floor(s->minutes[minute].mx+(enr_real)0.5);fx->cy=(int)f_floor(s->minutes[minute].my+(enr_real)0.5);}
   if(kind==ENR_FX_PULSE_HOME){fx->cx=s->home_x;fx->cy=s->home_y;}
-  if(kind>=ENR_FX_PULSE_BODY&&(fx->cx<0||fx->cx>=W||fx->cy<0||fx->cy>=H)){free(fx);fx=NULL;return false;}
+  if((kind==ENR_FX_PULSE_BODY||kind==ENR_FX_PULSE_HOME)&&(fx->cx<0||fx->cx>=W||fx->cy<0||fx->cy>=H)){free(fx);fx=NULL;return false;}
   return true;
 }
 int enr_fx_frame(uint8_t *frame,int stride){
@@ -259,7 +259,7 @@ int enr_fx_frame(uint8_t *frame,int stride){
   switch(fx->kind){
     case ENR_FX_REFRESH:refresh(frame,stride);break;
     case ENR_FX_SORT:pixel_sort(frame,stride,false);break;
-    case ENR_FX_REACQUIRE:pixel_sort(frame,stride,true);signal_box(frame,stride);break;
+    case ENR_FX_REACQUIRE:case ENR_FX_ACQUIRED:pixel_sort(frame,stride,true);signal_box(frame,stride);break;
     case ENR_FX_TEAR:tear(frame,stride);break;
     default:pulse(frame,stride);break;
   }
