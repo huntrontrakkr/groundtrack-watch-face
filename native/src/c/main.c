@@ -276,6 +276,7 @@ static void fx_start(int kind,int minute){
   return;                                  // (the host's simulator: frames as the minute's alone)
   #endif
   if(kind<0||s_fx_on||s_build||!s_now.scene)return;
+  if((s_settings.watch&32)&&quiet_time_is_active())return;
   if(enr_fx_begin(s_now.scene,kind,minute,(uint32_t)rand())){s_fx_on=true;fx_next();}
 }
 static void fx_minute(int minute){
@@ -290,7 +291,10 @@ static void fx_minute(int minute){
   int kind=-1;
   if(s_fx_shown!=s_chart_serial){s_fx_shown=s_chart_serial;if(s_switching){switch_end();kind=ENR_FX_ACQUIRED;}else if(f&GT_FX_HOUR)kind=fx_scan(false);}
   for(int k=0;k<4&&kind<0;k++)if(s_fx_plan[k]==minute)kind=fx_scan(false);
-  if(kind<0&&(f&GT_FX_RISE)&&enr_fx_aos(s_now.scene,minute))kind=ENR_FX_PULSE_HOME;
+  // (A rise into home's view: home's pulse, and the watch's if asked.)
+  const bool rise=((f&GT_FX_RISE)||(s_settings.watch&16))&&enr_fx_aos(s_now.scene,minute);
+  if(rise&&(s_settings.watch&16)&&!quiet_time_is_active())vibes_double_pulse();
+  if(kind<0&&rise&&(f&GT_FX_RISE))kind=ENR_FX_PULSE_HOME;
   if(kind<0&&(f&GT_FX_BODY))kind=ENR_FX_PULSE_BODY;
   fx_start(kind,minute);
 }
@@ -519,6 +523,8 @@ static void update(Layer *layer,GContext *ctx){
 }
 
 static void tick(struct tm *when,TimeUnits changed){
+  // (A pulse at the hour, if asked, but in Quiet Time.)
+  if(when->tm_min==0&&(s_settings.watch&8)&&!quiet_time_is_active())vibes_short_pulse();
   // (The stack's deepest, logged when it has grown: a minute's drawing too.)
   {static unsigned logged;const unsigned d=stack_deepest();if(d>logged){logged=d;app_note("stack",d);}}
   check(time(NULL));
@@ -613,7 +619,7 @@ static void show_state(void){
   static uint16_t shown=0xFFFF;
   const BatteryChargeState b=battery_state_service_peek();
   const bool linked=connection_service_peek_pebble_app_connection();
-  const int state=(b.is_charging?ENR_CHARGING:0)|(linked?0:ENR_NO_LINK)|(s_settings.watch&2?ENR_NO_FUEL:0);
+  const int state=(b.is_charging?ENR_CHARGING:0)|(linked?0:ENR_NO_LINK)|(s_settings.watch&2?ENR_NO_FUEL:0)|(s_settings.watch&4?ENR_NO_ANTENNA:0);
   const uint16_t now=(uint16_t)(b.charge_percent|state<<8);
   if(now==shown)return;
   shown=now;enr_status(linked?"":"NO LINK");enr_power(b.charge_percent,state);s_drawn_minute=-1;if(s_layer)layer_mark_dirty(s_layer);

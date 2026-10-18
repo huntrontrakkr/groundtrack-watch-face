@@ -702,6 +702,7 @@ static void rim_point(enr_real deg,enr_real r,int *x,int *y);
 // right end, in the line's own rows (nothing else is drawn there); on the
 // Round 2 past the battery bar's right end.
 static void draw_link(Ctx *c,int x,int y,bool big){
+  if(s_power[1]&ENR_NO_ANTENNA)return;
   const EnrScene *s=c->s;const bool linked=!(s_power[1]&ENR_NO_LINK);
   const uint8_t ink=linked?s->space_ink:s->zoned[ENR_GRID][0];
   static const char *const SMALL[5]={"#####",".#.#.","..#..","..#..","..#.."};

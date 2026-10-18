@@ -41,7 +41,9 @@ typedef struct {
   uint8_t legend;
   // The watch's own state (the record's last byte, once the ticker's: zero
   // for older records): 1 a vibration when the phone goes out of reach, 2
-  // no fuel line.
+  // no fuel line, 4 no link antenna, 8 a pulse at each hour, 16 a pulse as
+  // the satellite rises into home's view, 32 the animations held in Quiet
+  // Time (the pulses always are).
   uint8_t watch;
   int32_t extra[2]; // additional satellite catalog numbers
   char extra_code[2][3]; // compact catalog identifiers, no terminators

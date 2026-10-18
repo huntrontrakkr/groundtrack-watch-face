@@ -140,7 +140,7 @@ test('the phone gives the watch its settings, the Sun and Moon ahead, and home\'
     // On launch, the settings: Moon, Green CRT, no flag, 24-hour, New York;
     // the callout's figures outlined (the browser's default), Zulu.
     p.listeners.ready({});await p.quiet();
-    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,...Array(14).fill(0),255,0,2,0,0]},{Events:[0]}]));
+    assert.equal(JSON.stringify(p.messages),JSON.stringify([{Settings:[1,5,0,1,1,4071&255,4071>>8,0,0,(-7401)&255,((-7401)>>8)&255,255,255,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,32,...Array(14).fill(0),255,0,2,0,0]},{Events:[0]}]));
     // The browser's other options, as set: a time callout in Departure Mono,
     // the 12-hour clock, the nautical zone; QZSS on the hour chart.
     const r=phone(bundle,now,{body:'sat:42738',plate:'crt',readout:'callout',numerals:'mono',clock24:'0',margin:'body',span:'hour',timeZone:zone});r.listeners.ready({});await r.quiet();
@@ -385,11 +385,14 @@ test('Groundtrack\'s two faces, the Sun and Moon beside the body, and satellites
       [{body:'sat:60133',face:'plotboard'},3<<1],[{body:'sat:60133',span:'hour'},2<<1],[{body:'sat:40296'},0],[{body:'sat:40296',face:'plotboard'},1<<1],[{body:'sat:54755',face:'plotboard'},1<<1],[{body:'sat:54755',face:'nonsense'},1<<1],[{body:'sat:40296',face:'nonsense'},0]])
       assert.equal((await settings(stored))[17],view,JSON.stringify(stored));
     // The Sun and Moon beside the body: the settings' last byte.
-    for(const [also,bits] of [['sun',1],['moon',2],['sun,moon',3],['mars',0]])assert.deepEqual(Array.from(await settings({body:'sat:25544',also})).slice(27,31),[bits,0,0,0],also);
+    for(const [also,bits] of [['sun',1],['moon',2],['sun,moon',3],['mars',0]])assert.deepEqual(Array.from(await settings({body:'sat:25544',also})).slice(27,31),[bits,0,0,32],also);
     // The vibration when the phone goes out of reach: the last byte.
-    for(const [vibe,value] of [[undefined,0],['0',0],['1',1],['yes',0]])assert.equal(Array.from(await settings({body:'sun',vibe}))[30],value,String(vibe));
+    // (The animations held in Quiet Time unless asked otherwise: bit 32.)
+    for(const [vibe,value] of [[undefined,0],['0',0],['1',1],['yes',0]])assert.equal(Array.from(await settings({body:'sun',vibe}))[30],value|32,String(vibe));
     // And the fuel line: shown unless turned off (bit 2).
-    for(const [fuel,vibe,value] of [['0',undefined,2],['0','1',3],['1','1',1],['no',undefined,0]])assert.equal(Array.from(await settings({body:'sun',fuel,vibe}))[30],value,`${fuel} ${vibe}`);
+    for(const [fuel,vibe,value] of [['0',undefined,2],['0','1',3],['1','1',1],['no',undefined,0]])assert.equal(Array.from(await settings({body:'sun',fuel,vibe}))[30],value|32,`${fuel} ${vibe}`);
+    // The link antenna (off: 4), the hour's pulse (8), the rise's (16), the animations in Quiet Time too (32 off).
+    for(const [more,value] of [[{antenna:'0'},4|32],[{chime:'1'},8|32],[{riseBuzz:'1'},16|32],[{quietFx:'0'},0],[{antenna:'0',chime:'1',riseBuzz:'1',quietFx:'1',vibe:'1',fuel:'0'},63]])assert.equal(Array.from(await settings({body:'sun',...more}))[30],value,JSON.stringify(more));
     // The hour chart bare of its hour figures (byte 28): the time in full
     // beside the body then, whatever the readout was; other charts keep theirs.
     for(const [stored,readout,bare] of [[{body:'sun',readout:'off',hourFigures:'0'},2,1],[{body:'sun',readout:'off'},0,0],[{body:'sun',face:'plotboard',readout:'off',hourFigures:'0'},0,1],[{body:'sat:25544',readout:'flag',hourFigures:'0'},1,1]]){

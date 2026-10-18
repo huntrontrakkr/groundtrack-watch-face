@@ -115,6 +115,7 @@ bool connection_service_peek_pebble_app_connection(void){return s_linked;}
 // Vibrations made, and quiet time (the simulator's 'quiet' command).
 static int s_vibes;static bool s_quiet;
 void vibes_double_pulse(void){s_vibes++;}
+void vibes_short_pulse(void){s_vibes++;}
 bool quiet_time_is_active(void){return s_quiet;}
 void connection_service_subscribe(ConnectionHandlers h){s_connection=h;}
 void connection_service_unsubscribe(void){}

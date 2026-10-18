@@ -2,137 +2,182 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Groundtrack</title>
 <style>
-  :root{--ink:#10204a;--route:#d4148c;--paper:#fff;--water:#e6f7fb;--line:#9fb3c8;color-scheme:light}
+  /* The chart room: an instrument panel's dark glass, the lettering lit in
+     amber and the route's cyan, the face's own Departure Mono for what it
+     prints (subset: native/pkjs/departure-subset.woff2). */
+  @font-face{font-family:Departure;src:url(data:font/woff2;base64,__DEPARTURE_WOFF2__) format('woff2');font-display:block}
+  :root{--bg:#08111b;--panel:#0f1a28;--panel2:#0b1522;--rule:#1f3449;--rule2:#2a4561;--text:#d9e4ef;--dim:#8ea3ba;--faint:#5d7590;--amber:#ffb428;--amber-ink:#1b1204;--cyan:#5ce1f0;--warn:#ff6b6b;color-scheme:dark}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--water);color:var(--ink);font:16px/1.4 -apple-system,system-ui,Roboto,"Segoe UI",sans-serif}
-  header{padding:10px 18px 4px}
-  h1{margin:0;font:600 13px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;text-transform:uppercase}
-  header p{margin:6px 0 0;font-size:14px;opacity:.75}
-  form{padding:0 12px 96px}
-  fieldset{margin:12px 0;padding:6px 0;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
-  legend{margin-left:12px;padding:0 6px;font:600 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--route)}
-  label.row{display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px;border-top:1px solid #edf1f5}
-  label.row:first-of-type{border-top:0}
-  label.row input[type=radio],label.row input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--route);flex:none}
-  .name{flex:1}
-  label.row:has(select){flex-wrap:wrap}
-  label.row select{width:100%;min-width:0;padding:10px;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px}
-  .note{display:block;font-size:13px;opacity:.65}
-  .coords{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:6px 14px 12px}
-  .coords label{font-size:13px}
-  .coords input{width:100%;min-width:0;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
-  .coords[hidden]{display:none}
-  button{font:inherit;border-radius:10px;cursor:pointer}
-  #locate{grid-column:1/3;padding:10px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
-  #status{grid-column:1/3;margin:0;font-size:13px;opacity:.75;min-height:1em}
-  #events{list-style:none;margin:0;padding:0 14px}
-  #events li{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid #edf1f5}
-  #events li:first-child{border-top:0}
-  #events li span{flex:1;font-size:15px}
-  #events li code{font:600 13px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.08em;color:var(--route)}
-  #events li button,#add{padding:8px 12px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
-  #add{grid-column:1/3}
-  .coords input[name=title]{grid-column:1/3}
-  .actions{position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;padding:12px;background:linear-gradient(transparent,var(--water) 30%)}
-  .actions button{flex:1;padding:14px;border:0;font-weight:600}
-  #save{background:var(--route);color:#fff}
-  #cancel{background:var(--paper);color:var(--ink);border:1px solid var(--line)}
-  /* The preview stays at the top of the screen while the settings scroll under it. */
-  .preview{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;gap:12px;align-items:center;justify-content:center;padding:8px 12px;background:var(--water);border-bottom:1px solid var(--line)}
-  .preview canvas{width:140px;height:160px;flex:none;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
-  .preview canvas.round{width:160px;height:160px;border-radius:50%}
-  .preview .side{flex:0 1 150px;min-width:0;font-size:12px}
-  .preview .side p{margin:6px 0 4px;opacity:.75}
-  body{padding-top:178px}
-  #colours{padding:2px 8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font-size:12px}
-  details.card{margin:12px 0;border:1px solid var(--line);border-radius:10px;background:var(--paper);overflow:hidden}
-  details.card>summary{display:flex;align-items:baseline;gap:10px;min-height:52px;padding:14px;cursor:pointer;list-style:none}
-  details.card>summary::-webkit-details-marker{display:none}
-  details.card>summary::after{content:'+';margin-left:auto;font:600 18px/1 ui-monospace,Menlo,monospace;color:var(--route)}
-  details.card[open]>summary::after{content:'−'}
-  details.card[open]>summary{border-bottom:1px solid #dfe6ee}
-  summary .title{font:600 12px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--route);flex:none}
-  summary .now{font-size:14px;opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:6px 14px}
-  .tiles label.row{border:1px solid var(--line);border-radius:8px;min-height:44px;padding:6px 10px;gap:8px}
-  .tiles label.row:first-of-type{border-top:1px solid var(--line)}
-  .tiles .note{display:none}
-  .tiles .name{font-size:15px}
-  .picked-note{margin:2px 14px 6px;font-size:13px;opacity:.7;min-height:1.3em}
-  .group{padding:2px 0 6px}
-  .group+.group{border-top:1px solid #dfe6ee}
-  .group>h3{margin:10px 14px 2px;font:600 13px/1.2 -apple-system,system-ui,Roboto,sans-serif;opacity:.8}
-  .group>p.note{margin:0 14px 4px}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,system-ui,Roboto,"Segoe UI",sans-serif;
+    background-image:linear-gradient(rgba(92,225,240,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(92,225,240,.035) 1px,transparent 1px);background-size:24px 24px}
+  .mono,summary .title,.group>h3,.seg label .name,.preview h1,.actions button,.tile .name,.tag{font-family:Departure,ui-monospace,Menlo,Consolas,monospace}
   [hidden]{display:none!important}
-  .field{display:block;padding:6px 14px}
-  .field input{width:100%;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px -apple-system,system-ui,Roboto,sans-serif;color:var(--ink)}
-  details.sub>summary{display:flex;align-items:baseline;gap:8px;padding:12px 14px;cursor:pointer;list-style:none;font-weight:600;font-size:15px}
-  details.sub>summary::-webkit-details-marker{display:none}
-  details.sub>summary::after{content:'+';margin-left:auto;font:600 16px/1 ui-monospace,Menlo,monospace;color:var(--route)}
-  details.sub[open]>summary::after{content:'−'}
-  details.sub>summary small{font-weight:400;font-size:13px;opacity:.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  label.row.off{opacity:.5}
-  label.row button.drop{flex:none;padding:6px 10px;border:1px solid var(--line);background:var(--water);color:var(--ink);font-size:13px}
-  .find{display:flex;gap:8px;padding:6px 14px}
-  .find input{flex:1;min-width:0;padding:10px;border:1px solid var(--line);border-radius:8px;font:16px -apple-system,system-ui,Roboto,sans-serif;color:var(--ink)}
-  .find button{flex:none;padding:10px 14px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
-  #found{list-style:none;margin:0;padding:0 14px}
-  #found li button{display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
-  #found small{display:block;opacity:.7}
-  #face-why{color:var(--route);opacity:1}
-  #places{list-style:none;margin:0;padding:0 14px}
-  #places li button{display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
-  #places small{display:block;opacity:.7}
-  #place-now{margin:4px 14px;font-weight:600}
-  #chart-kind{margin:8px 14px 0;font-weight:600}
-  .tracking-card,#satellite-picker,.satellite-row{scroll-margin-top:190px}
+  button{font:inherit;cursor:pointer;color:inherit}
+  a{color:var(--cyan)}
+  /* ---- the preview, held at the top while the settings scroll under it */
+  .preview{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;gap:14px;align-items:center;justify-content:center;padding:10px 12px 10px;
+    background:linear-gradient(var(--bg) 85%,rgba(8,17,27,.92));border-bottom:1px solid var(--rule2);box-shadow:0 6px 18px rgba(0,0,0,.45)}
+  .bezel{flex:none;padding:6px;border-radius:14px;background:linear-gradient(145deg,#26384b,#0c141e);box-shadow:inset 0 0 0 1px #33506d,0 2px 8px rgba(0,0,0,.6)}
+  .bezel.round{border-radius:50%;padding:7px}
+  .preview canvas{display:block;width:122px;height:139px;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:6px;background:#000}
+  .preview canvas.round{width:140px;height:140px;border-radius:50%}
+  .preview .side{flex:0 1 190px;min-width:0;display:flex;flex-direction:column;gap:7px}
+  .preview h1{margin:0;font-size:15px;letter-spacing:.14em;color:var(--amber);font-weight:400;text-transform:uppercase}
+  .preview .now-line{margin:-4px 0 0;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #preview-note{margin:0;font-size:12px;color:var(--amber);min-height:0}
+  #preview-note:empty{display:none}
+  .scrub{display:flex;align-items:center;gap:6px}
+  .scrub input{flex:1;min-width:0;accent-color:var(--amber);height:24px;margin:0}
+  .scrub .clock{font:13px Departure,ui-monospace,monospace;color:var(--text);min-width:40px;text-align:right}
+  .mini{display:flex;border:1px solid var(--rule2);border-radius:6px;overflow:hidden}
+  .mini button{flex:1;padding:5px 4px;border:0;background:transparent;color:var(--dim);font:11px/1 Departure,ui-monospace,monospace;letter-spacing:.06em;white-space:nowrap}
+  .mini button+button{border-left:1px solid var(--rule2)}
+  .mini button[aria-pressed=true]{background:var(--amber);color:var(--amber-ink)}
+  #now-btn{flex:none;padding:5px 7px;border:1px solid var(--rule2);border-radius:6px;background:transparent;color:var(--cyan);font:11px Departure,ui-monospace,monospace;letter-spacing:.06em}
+  body{padding-top:174px}
+  /* ---- the sections: a chart's legend boxes */
+  form{padding:0 10px 104px;max-width:640px;margin:0 auto}
+  .intro{max-width:640px;margin:0 auto;padding:12px 18px 2px;color:var(--dim);font-size:13px}
+  details.card{margin:12px 0;border:1px solid var(--rule);border-radius:8px;background:linear-gradient(var(--panel),var(--panel2));overflow:hidden}
+  details.card>summary{display:flex;align-items:center;gap:10px;min-height:50px;padding:12px 14px;cursor:pointer;list-style:none;-webkit-tap-highlight-color:transparent}
+  details.card>summary::-webkit-details-marker{display:none}
+  details.card>summary::before{content:'';flex:none;width:7px;height:7px;transform:rotate(45deg);background:var(--amber)}
+  details.card>summary::after{content:'+';flex:none;margin-left:6px;width:22px;height:22px;border:1px solid var(--rule2);border-radius:4px;display:grid;place-items:center;font:14px/1 Departure,ui-monospace,monospace;color:var(--amber)}
+  details.card[open]>summary::after{content:'−'}
+  details.card[open]>summary{border-bottom:1px dashed var(--rule2)}
+  summary .title{flex:none;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
+  summary .now{flex:1;min-width:0;text-align:right;font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .group{padding:4px 0 10px}
+  .group+.group{border-top:1px solid var(--rule)}
+  .group>h3{margin:12px 14px 6px;font-size:11px;font-weight:400;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
+  .note{display:block;font-size:12.5px;line-height:1.4;color:var(--dim)}
+  p.note.field,.field{margin:6px 14px;padding:0}
+  .field{display:block}
+  .field input,.find input,.coords input{width:100%;margin-top:5px;padding:10px 11px;border:1px solid var(--rule2);border-radius:6px;background:var(--bg);color:var(--text);font:15px ui-monospace,Menlo,monospace}
+  .field input:focus,.find input:focus,.coords input:focus{outline:1px solid var(--cyan);border-color:var(--cyan)}
+  /* rows of choices, and toggles */
+  label.row{position:relative;display:flex;align-items:flex-start;gap:12px;min-height:48px;padding:10px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  label.row+label.row,.fx-row+.fx-row,label.row+.fx-row,.fx-row+label.row{border-top:1px solid var(--rule)}
+  .name{flex:1;min-width:0}
+  label.row input[type=radio]{appearance:none;-webkit-appearance:none;flex:none;width:18px;height:18px;margin:2px 0 0;border:1.5px solid var(--rule2);border-radius:50%;background:var(--bg)}
+  label.row input[type=radio]:checked{border-color:var(--amber);box-shadow:inset 0 0 0 4px var(--bg);background:var(--amber)}
+  /* a toggle: the switch at the row's right */
+  input.switch,label.row input[type=checkbox]{appearance:none;-webkit-appearance:none;order:2;flex:none;position:relative;width:42px;height:24px;margin:1px 0 0;border:1px solid var(--rule2);border-radius:12px;background:var(--bg);transition:background .15s}
+  input.switch::after,label.row input[type=checkbox]::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--faint);transition:transform .15s,background .15s}
+  input.switch:checked,label.row input[type=checkbox]:checked{background:rgba(255,180,40,.18);border-color:var(--amber)}
+  input.switch:checked::after,label.row input[type=checkbox]:checked::after{transform:translateX(18px);background:var(--amber)}
+  label.row.off{opacity:.45}
+  /* segmented: the choices side by side, the chosen one's note beneath */
+  .seg{display:flex;flex-wrap:wrap;margin:6px 14px 4px;border:1px solid var(--rule2);border-radius:7px;overflow:hidden}
+  .seg label.row{flex:1 1 auto;min-height:40px;padding:9px 8px;justify-content:center;align-items:center;text-align:center;border:0!important;border-left:1px solid var(--rule2)!important;margin-left:-1px}
+  .seg label.row input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;border:0;box-shadow:none;background:none}
+  .seg label.row .name{flex:none;font-size:12px;letter-spacing:.04em;color:var(--text);line-height:1.2}
+  .seg label.row .note{display:none}
+  .seg label.row:has(input:checked){background:var(--amber)}
+  .seg label.row:has(input:checked) .name{color:var(--amber-ink)}
+  .seg label.row:has(input:focus-visible){outline:2px solid var(--cyan);outline-offset:-2px}
+  .seg.wide label.row{flex-basis:50%}
+  .seg-note{margin:6px 14px 2px;font-size:12.5px;color:var(--dim);min-height:1.3em}
+  /* galleries: the plates, the figures, the rim (each drawn by the watch's own code) */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:10px;padding:6px 14px 4px}
+  .tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 5px 6px;border:1px solid var(--rule);border-radius:7px;background:var(--panel2);cursor:pointer;text-align:center}
+  .tile input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+  .tile canvas{width:80px;height:91px;image-rendering:pixelated;border-radius:3px;background:#000}
+  .tile canvas.round{width:88px;height:88px;border-radius:50%}
+  .tile canvas.crop{width:100%;height:auto;max-height:70px;object-fit:contain}
+  .tile .name{flex:none;font-size:11px;letter-spacing:.04em;color:var(--text);line-height:1.15}
+  .tile .note{display:none}
+  .tile:has(input:checked){border-color:var(--amber);box-shadow:0 0 0 1px var(--amber) inset;background:rgba(255,180,40,.07)}
+  .tile:has(input:checked) .name{color:var(--amber)}
+  .tile:has(input:focus-visible){outline:2px solid var(--cyan)}
+  .picked-note{margin:4px 14px 6px;font-size:12.5px;color:var(--dim);min-height:1.3em}
+  /* the animations' rows, each with its play button */
+  .fx-row{display:flex;align-items:stretch}
+  .fx-row label.row{flex:1}
+  .play{flex:none;align-self:center;margin-right:12px;width:36px;height:30px;border:1px solid var(--rule2);border-radius:6px;background:transparent;color:var(--cyan);font-size:12px}
+  .play:active{background:var(--cyan);color:var(--bg)}
+  /* following: the cards and the catalog */
   #tracking-cards{display:grid;gap:8px;padding:12px 12px 0}
-  .tracking-card{padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);min-width:0}
-  .tracking-card.primary{border-left:3px solid var(--route)}
+  .tracking-card{padding:10px 12px;border:1px solid var(--rule2);border-radius:7px;background:var(--bg);min-width:0}
+  .tracking-card.primary{border-left:3px solid var(--amber)}
   .tracking-card.empty{border-style:dashed}
-  .tracking-role{font-size:12px;color:var(--route);font-weight:600;margin-bottom:3px}
+  .tracking-role{font:11px Departure,ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:3px}
   .tracking-title{font-size:15px;overflow-wrap:anywhere}
-  .tracking-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-  .tracking-card button,#picker-cancel,.satellite-row button{min-height:44px;padding:6px 9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font-size:13px}
-  .tracking-card.empty button{width:100%;text-align:left;border:0;background:transparent;padding:0}
+  .tracking-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tracking-card button,#picker-cancel,.satellite-row button,#find-go,#locate,#events li button,.find button,#found li button,#places li button{min-height:40px;padding:6px 10px;border:1px solid var(--rule2);border-radius:6px;background:var(--panel2);color:var(--text);font-size:13px}
+  .tracking-card.empty button{width:100%;text-align:left;border:0;background:transparent;padding:0;color:var(--dim)}
+  .track-option{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer;min-height:28px;color:var(--dim)}
+  .track-option input{accent-color:var(--amber)}
   #tracking-notice:empty{display:none}
-  #satellite-picker{border-top:1px solid var(--line)}
-  #picker-mode{padding:12px 14px;background:var(--water)}
+  #satellite-picker{margin-top:10px;border-top:1px solid var(--rule)}
+  #picker-mode{padding:12px 14px;background:rgba(255,180,40,.08)}
   #picker-mode p{margin:3px 0 8px}
-  #find-go{margin:0 14px 6px;width:calc(100% - 28px);padding:10px;border:1px solid var(--line);background:var(--water);color:var(--ink)}
-  #found{padding:0;list-style:none}
-  #found .satellite-row button{width:auto;margin:0;padding:6px 9px}
-  .satellite-row{display:flex;align-items:center;gap:6px;padding-right:12px;border-top:1px solid #edf1f5;flex-wrap:wrap}
+  .find{display:flex;gap:8px;padding:2px 14px}
+  #find-go{margin:8px 14px 4px;width:calc(100% - 28px);color:var(--cyan)}
+  #found,#places{list-style:none;margin:0;padding:0 14px}
+  #found li button,#places li button{display:block;width:100%;text-align:left;margin:4px 0}
+  #found small,#places small{display:block;color:var(--dim)}
+  details.sub{border-top:1px solid var(--rule)}
+  details.sub>summary{display:flex;align-items:baseline;gap:8px;padding:12px 14px;cursor:pointer;list-style:none;font-size:14px}
+  details.sub>summary::-webkit-details-marker{display:none}
+  details.sub>summary::after{content:'+';margin-left:auto;font:13px Departure,ui-monospace,monospace;color:var(--amber)}
+  details.sub[open]>summary::after{content:'−'}
+  details.sub>summary small{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .satellite-row{display:flex;align-items:center;gap:6px;padding-right:12px;border-top:1px solid var(--rule);flex-wrap:wrap}
   .satellite-row label.row{flex:1;min-width:180px;border:0;padding-right:0}
+  .satellite-row label.row input[type=checkbox]{order:0;width:20px;height:20px;border-radius:4px}
+  .satellite-row label.row input[type=checkbox]::after{display:none}
+  .satellite-row label.row input[type=checkbox]:checked{background:var(--amber)}
   .satellite-row .name{min-width:0;overflow-wrap:anywhere;font-size:14px}
   .satellite-row .note{font-size:12px}
-  .satellite-row button{flex:none}
-  .satellite-role{font-size:12px;color:var(--route)}
-  .satellite-row input:disabled{opacity:.6}
+  .satellite-role{font:11px Departure,ui-monospace,monospace;color:var(--amber)}
   .satellite-row .drop{margin:0 0 6px 46px}
-  #bodies>h3{margin:10px 14px 2px;font-size:13px}
-  #bodies .satellite-row label{min-width:120px}
-  .fx-row{display:flex;align-items:center;gap:8px}.fx-label{flex:1;display:flex;gap:10px;align-items:flex-start;cursor:pointer}
-  .play{min-width:40px;min-height:36px;border-radius:8px;font-size:14px}
-  .track-option{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;cursor:pointer;min-height:28px}
+  #bodies>h3{margin:10px 14px 2px}
+  #face-why{color:var(--amber)}
+  .tracking-card,#satellite-picker,.satellite-row{scroll-margin-top:190px}
+  /* home and the calendar */
+  #place-now{margin:4px 14px;font-weight:600}
+  .coords{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:6px 14px 12px}
+  .coords label{font-size:12px;color:var(--dim)}
+  #locate{grid-column:1/3;color:var(--cyan)}
+  #status{grid-column:1/3;margin:0;font-size:12px;color:var(--dim);min-height:1em}
+  #events{list-style:none;margin:0;padding:0 14px}
+  #events li{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid var(--rule)}
+  #events li:first-child{border-top:0}
+  #events li span{flex:1;font-size:14px}
+  #events li code{font:12px Departure,ui-monospace,monospace;letter-spacing:.08em;color:var(--amber)}
+  /* about */
+  .about{padding:4px 14px 14px;color:var(--dim);font-size:12.5px}
+  .about p{margin:8px 0}
+  .tag{display:inline-block;padding:1px 6px;border:1px solid var(--rule2);border-radius:4px;color:var(--amber);font-size:11px;letter-spacing:.06em}
+  /* the save bar */
+  .actions{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(rgba(8,17,27,0),var(--bg) 35%)}
+  .actions button{padding:13px 10px;border:1px solid var(--rule2);border-radius:7px;background:var(--panel);color:var(--text);font-size:12px;letter-spacing:.1em}
+  #cancel{flex:none}
+  #defaults{flex:none}
+  #save{flex:1;border-color:var(--amber);background:var(--amber);color:var(--amber-ink)}
+  @media (max-width:360px){.actions button{padding:12px 7px;font-size:11px;letter-spacing:.04em;white-space:nowrap}.preview .side{flex-basis:170px}.preview canvas{width:110px;height:125px}.preview canvas.round{width:126px;height:126px}body{padding-top:162px}}
+  @media (min-width:520px){.preview canvas{width:150px;height:171px}.preview canvas.round{width:170px;height:170px}body{padding-top:206px}}
 </style>
 </head>
 <body>
 <div class="preview" aria-label="A preview of the face in these settings">
-  <canvas id="preview" width="200" height="228"></canvas>
+  <div class="bezel" id="bezel"><canvas id="preview" width="200" height="228"></canvas></div>
   <div class="side">
-    <h1 id="title">Groundtrack</h1>
-    <p id="colours-now"></p>
-    <button type="button" id="colours"></button>
+    <h1 id="title">GROUNDTRACK</h1>
+    <p class="now-line" id="now-line"></p>
+    <div class="scrub"><button type="button" id="now-btn" aria-label="Back to now">NOW</button><input type="range" id="scrub" min="0" max="59" step="1" value="0" aria-label="The minute shown"><span class="clock" id="scrub-time"></span></div>
+    <div class="mini" role="group" aria-label="The watch shown"><button type="button" id="screen-t2" aria-pressed="true">TIME 2</button><button type="button" id="screen-r2" aria-pressed="false">ROUND 2</button></div>
+    <div class="mini" role="group" aria-label="The colours shown"><button type="button" id="colours" aria-pressed="false"></button></div>
+    <p id="colours-now" hidden></p>
     <p id="preview-note"></p>
   </div>
 </div>
-<header>
-  <p>A setting is shown only where it changes the face. The preview is the watch's own drawing of this minute, in the settings as they stand here.</p>
-</header>
+<p class="intro">Each setting is shown where it changes the face. The preview is the watch's own drawing, in the settings as they stand here: slide through the hour, or see the other watch.</p>
 <form id="form">
   <details class="card" id="sec-face" open><summary><span class="title">Face</span><span class="now" id="now-face"></span></summary>
     <p class="note field">Groundtrack is two faces, each with settings of its own. What you follow says which can show it.</p>
@@ -162,107 +207,77 @@
   </details>
   <details class="card" id="sec-chart" open><summary><span class="title" id="chart-title">Chart</span><span class="now" id="now-chart"></span></summary>
     <p class="note field" id="chart-note"></p>
-    <div class="group" id="span-group"><h3>The chart</h3>
+    <div class="group" id="span-group"><h3>The chart</h3><div class="seg">
       <label class="row"><input type="radio" name="span" value="day"><span class="name">Whole day<span class="note">The shape it draws over its part of the world, the day's hours along it</span></span></label>
       <label class="row"><input type="radio" name="span" value="hour"><span class="name">This hour<span class="note">Zoomed far in on the hour's short run</span></span></label>
-    </div>
-    <div class="group" id="tape-group"><h3>The panel above the world</h3>
+    </div><p class="seg-note"></p></div>
+    <div class="group" id="tape-group"><h3>The panel above the world</h3><div class="seg wide">
       <label class="row"><input type="radio" name="tape" value="fixed"><span class="name">Ruler<span class="note">The hour as a fixed ruler, a pointer moving along it</span></span></label>
       <label class="row"><input type="radio" name="tape" value="tape"><span class="name">Sliding tape<span class="note">The pointer holds still and the hours run past it</span></span></label>
-      <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Sliding tape and world<span class="note">The map scrolls too, the body always under the pointer. Drawn whole each minute, which costs battery</span></span></label>
-      <label class="row"><input type="radio" name="tape" value="route"><span class="name">The route's ruler<span class="note" id="route-note"></span></span></label>
+      <label class="row"><input type="radio" name="tape" value="slide"><span class="name">Tape and world<span class="note">The map scrolls too, the body always under the pointer. Drawn whole each minute, which costs battery</span></span></label>
+      <label class="row"><input type="radio" name="tape" value="route"><span class="name">Route's ruler<span class="note" id="route-note"></span></span></label>
       <label class="row"><input type="radio" name="tape" value="clock"><span class="name">Clock<span class="note">The time in large figures instead of a scale</span></span></label>
-    </div>
-    <div class="group" id="bare-group"><h3>The hour's large figures</h3>
+    </div><p class="seg-note"></p></div>
+    <div class="group" id="bare-group"><h3>The hour's large figures</h3><div class="seg">
       <label class="row"><input type="radio" name="hourFigures" value="1"><span class="name">Shown<span class="note">This hour over the route's start, the next over its end</span></span></label>
       <label class="row"><input type="radio" name="hourFigures" value="0"><span class="name">Left off<span class="note">The route alone, the time in full beside the body</span></span></label>
-    </div>
-    <div class="group" id="readout-group"><h3 id="readout-title">The minute, marked on the route</h3>
+    </div><p class="seg-note"></p></div>
+    <div class="group" id="readout-group"><h3 id="readout-title">The minute, marked on the route</h3><div class="seg wide">
       <label class="row"><input type="radio" name="readout" value="off"><span class="name">Unmarked<span class="note">The body on the graduated route is the index</span></span></label>
       <label class="row"><input type="radio" name="readout" value="flag"><span class="name">A flag<span class="note">A pennant on a staff from the body, with the minutes</span></span></label>
-      <label class="row"><input type="radio" name="readout" value="counter"><span class="name">Minutes with the hour figure<span class="note">This hour's large figure becomes the time, its minutes beside it in the figures you choose below, as the counters above a control room's board</span></span></label>
-      <label class="row"><input type="radio" name="readout" value="callout"><span class="name">The time in full<span class="note">Hung from a leader beside the body</span></span></label>
-    </div>
+      <label class="row"><input type="radio" name="readout" value="counter"><span class="name">With the hour<span class="note">This hour's large figure becomes the time, its minutes beside it in the figures you choose below, as the counters above a control room's board</span></span></label>
+      <label class="row"><input type="radio" name="readout" value="callout"><span class="name">Time in full<span class="note">Hung from a leader beside the body</span></span></label>
+    </div><p class="seg-note"></p></div>
     <p class="note field" id="readout-fixed"></p>
-    <div class="group" id="transfer-group"><h3>The scale's minutes, brought down to the route</h3>
-      <label class="row"><input type="radio" name="transfer" value="off"><span class="name">None</span></label>
+    <div class="group" id="transfer-group"><h3>The scale's minutes on the route</h3><div class="seg wide">
+      <label class="row"><input type="radio" name="transfer" value="off"><span class="name">None<span class="note">The scale above, the route below, each with its own minutes</span></span></label>
       <label class="row"><input type="radio" name="transfer" value="vernier"><span class="name">Vernier<span class="note">The route's own minutes ticked under the scale's</span></span></label>
       <label class="row"><input type="radio" name="transfer" value="comb"><span class="name">Comb<span class="note">A stroke every five minutes, leaning toward where that minute falls on the route</span></span></label>
       <label class="row"><input type="radio" name="transfer" value="chevrons"><span class="name">Chevrons<span class="note">Pointing in where the route squeezes the minutes, out where it stretches them</span></span></label>
-    </div>
-    <div class="group" id="numerals-group"><h3 id="numerals-title">The time's figures</h3>
-      <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Four figures, minutes outlined</span></label>
-      <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Minutes in the route's ink</span></label>
-      <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Minutes in the chart's lettering</span></label>
-      <label class="row"><input type="radio" name="numerals" value="plain"><span class="name">Smaller minutes</span></label>
-      <label class="row"><input type="radio" name="numerals" value="colon"><span class="name">Smaller minutes, with a colon</span></label>
-    </div>
-  </details>
-  <details class="card" id="sec-time"><summary><span class="title">Time</span><span class="now" id="now-time"></span></summary>
-    <div class="group">
-      <label class="row"><input type="checkbox" name="clock24"><span class="name">24-hour clock<span class="note">The hour figures and the time read 13 to 23, not 1 to 11. Zulu time and home's rise, set and passes are always 24-hour, as on a chart</span></span></label>
-    </div>
-    <div class="group"><h3>Battery and phone</h3>
-      <label class="row"><input type="checkbox" name="fuel"><span class="name">The fuel line<span class="note">The battery as a line along the top edge, ticked at the quarters: in the warning ink at 20% and under, the lettering's while charging, dashed while the phone is out of reach</span></span></label>
-      <label class="row"><input type="checkbox" name="vibe"><span class="name">Vibrate when the phone is out of reach<span class="note">A double pulse when the link drops, except in quiet time. The corner says NO LINK while it is down</span></span></label>
-    </div>
-    <div class="group"><h3>The time in the bottom margin</h3>
-      <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)</span></label>
-      <label class="row"><input type="radio" name="margin" value="body"><span class="name">The nautical zone under the body<span class="note">With its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
-    </div>
+    </div><p class="seg-note"></p></div>
+    <div class="group" id="numerals-group"><h3 id="numerals-title">The time's figures</h3><div class="seg wide">
+      <label class="row"><input type="radio" name="numerals" value="even"><span class="name">Outlined<span class="note">Four figures, the minutes outlined</span></span></label>
+      <label class="row"><input type="radio" name="numerals" value="accent"><span class="name">Route's ink<span class="note">The minutes in the route's ink</span></span></label>
+      <label class="row"><input type="radio" name="numerals" value="mono"><span class="name">Lettering<span class="note">The minutes in the chart's lettering</span></span></label>
+      <label class="row"><input type="radio" name="numerals" value="plain"><span class="name">Small<span class="note">Smaller minutes</span></span></label>
+      <label class="row"><input type="radio" name="numerals" value="colon"><span class="name">Small, colon<span class="note">Smaller minutes, after a colon</span></span></label>
+    </div><p class="seg-note"></p></div>
   </details>
   <details class="card" id="sec-look"><summary><span class="title">Look</span><span class="now" id="now-look"></span></summary>
     <div class="group"><h3>Plate</h3><div id="plates" class="tiles"></div><p class="picked-note" id="plate-note"></p></div>
     <div class="group"><h3>Hour figures</h3><div id="figure-sets" class="tiles"></div><p class="picked-note" id="figures-note"></p></div>
+    <div class="group" id="rim-group" hidden><h3>Round the edge</h3><div class="tiles" id="rims">
+      <label class="tile"><input type="radio" name="rim" value="bezel"><canvas class="round" width="260" height="260" data-thumb="rim:bezel"></canvas><span class="name">Bezel<span class="note">The margins lettered round an octagon's sides, the diagonals turned to match</span></span></label>
+      <label class="tile"><input type="radio" name="rim" value="chords"><canvas class="round" width="260" height="260" data-thumb="rim:chords"></canvas><span class="name">Chords<span class="note">No bezel: the map runs to the glass, the lettering in straight lines over it</span></span></label>
+      <label class="tile"><input type="radio" name="rim" value="instrument"><canvas class="round" width="260" height="260" data-thumb="rim:instrument"></canvas><span class="name">Instrument<span class="note">The bezel with the minutes ticked down its sides and the minute marked at the edge</span></span></label>
+    </div><p class="picked-note" id="rim-note"></p></div>
+    <div class="group"><h3>The bottom right corner</h3><div class="seg">
+      <label class="row"><input type="radio" name="corner" value="day"><span class="name" id="corner-day">Day of year<span class="note">DAY 270</span></span></label>
+      <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
+      <label class="row" id="corner-light"><input type="radio" name="corner" value="light"><span class="name" id="corner-light-name">Moon's light<span class="note">87% WAX</span></span></label>
+    </div><p class="seg-note"></p>
+      <p class="note field">The corner also says when a satellite's orbit data is old (EL OLD).</p>
+    </div>
     <div class="group" id="north-group"><h3>Triangle orientation</h3>
       <label class="row"><input type="checkbox" name="north"><span class="name">True-north arrows<span class="note">A small star-tipped north line, following USGS map convention, at each triangle's centre where visible. North is local to that point; the map bends within each triangle.</span></span></label>
     </div>
     <div class="group" id="legend-group"><h3>In the sheet's open space</h3>
       <label class="row"><input type="checkbox" name="legend"><span class="name">A scale bar<span class="note">A round length of the ground at the sheet's scale, where the net leaves room for it</span></span></label>
     </div>
-    <div class="group" id="rim-group" hidden><h3>Round the edge</h3>
-      <label class="row"><input type="radio" name="rim" value="bezel"><span class="name">Bezel<span class="note">The margins lettered round an octagon's sides, the diagonals turned to match</span></span></label>
-      <label class="row"><input type="radio" name="rim" value="chords"><span class="name">Chords<span class="note">Straight lines over the chart and under it, knocked out of the map</span></span></label>
-      <label class="row"><input type="radio" name="rim" value="instrument"><span class="name">Instrument<span class="note">The bezel with the minutes ticked down its sides and the minute marked at the edge</span></span></label>
-    </div>
-    <div class="group"><h3>The bottom right corner</h3>
-      <label class="row"><input type="radio" name="corner" value="day"><span class="name" id="corner-day">Day of the year<span class="note">DAY 270</span></span></label>
-      <label class="row"><input type="radio" name="corner" value="point"><span class="name">Ground point<span class="note">Where the body stands overhead: 23N 045E</span></span></label>
-      <label class="row" id="corner-light"><input type="radio" name="corner" value="light"><span class="name" id="corner-light-name">The Moon's light<span class="note">87% WAX</span></span></label>
-      <p class="note field">The corner also says when the phone is out of reach (NO LINK) or a satellite's orbit data is old (EL OLD).</p>
-    </div>
   </details>
-  <details class="card" id="sec-fx"><summary><span class="title">Animations</span><span class="now" id="now-fx"></span></summary>
-    <p class="note field">Brief animations drawn over the face, which is left as it was. Each can be turned off; press &#9654; to see it on the preview.</p>
-    <div class="group"><h3>On the face</h3>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="body"><span class="name">The body blinks as it steps<span class="note">Each minute, as the body moves on, it blinks and a ring opens round it</span></span></label><button type="button" class="play" data-fx="4" aria-label="Play The body blinks as it steps">&#9654;</button></div>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="rise"><span class="name">Home pulses as the satellite rises<span class="note">At the minute a satellite comes into view of home, a ring opens round home</span></span></label><button type="button" class="play" data-fx="5" aria-label="Play Home pulses as the satellite rises">&#9654;</button></div>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="hour"><span class="name">A scan as each hour begins<span class="note">When the new hour's chart appears, one of the scans below runs over it</span></span></label></div>
+  <details class="card" id="sec-time"><summary><span class="title">Time</span><span class="now" id="now-time"></span></summary>
+    <div class="group">
+      <label class="row"><input type="checkbox" name="clock24"><span class="name">24-hour clock<span class="note">The hour figures and the time read 13 to 23, not 1 to 11. Zulu time and home's rise, set and passes are always 24-hour, as on a chart</span></span></label>
     </div>
-    <div class="group"><h3>A flick of the wrist</h3>
-      <p class="note field">Following more than one satellite, a flick moves to the next: a box names it while its chart is drawn, and it comes in under a reacquiring sweep. Following one, a flick runs one of the scans below, on any plate.</p>
-      <label class="row"><input type="radio" name="flickMode" value="one"><span class="name">One flick</span></label>
-      <label class="row"><input type="radio" name="flickMode" value="two"><span class="name">Two flicks<span class="note">Two within a second and a half, so a stray movement does nothing</span></span></label>
-      <label class="row"><input type="radio" name="flickMode" value="off"><span class="name">Off</span></label>
-    </div>
-    <div class="group"><h3>The scans</h3>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="refresh"><span class="name">Refresh<span class="note">A bright line runs down the screen with the glow of phosphor behind it</span></span></label><button type="button" class="play" data-fx="0" aria-label="Play Refresh">&#9654;</button></div>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="sort"><span class="name">Pixel sort<span class="note">A band sweeps the screen, each row's light sorted and smeared across it</span></span></label><button type="button" class="play" data-fx="1" aria-label="Play Pixel sort">&#9654;</button></div>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="reacquire"><span class="name">Reacquire<span class="note">The picture breaks into sorted noise and resolves again behind the sweep, as a signal coming back</span></span></label><button type="button" class="play" data-fx="2" aria-label="Play Reacquire">&#9654;</button></div>
-      <div class="row fx-row"><label class="fx-label"><input type="checkbox" name="fx" value="tear"><span class="name">Tear<span class="note">Blocks of rows jump sideways, their red split from the rest, as a picture losing its hold</span></span></label><button type="button" class="play" data-fx="3" aria-label="Play Tear">&#9654;</button></div>
-      <label class="row"><input type="checkbox" name="fx" value="everyplate"><span class="name">On every plate<span class="note">Otherwise the scans run only on the plates that are a screen's: Console, Green CRT, Raster and the like</span></span></label>
-    </div>
-    <div class="group"><h3>How often the scans run</h3>
-      <label class="row"><input type="radio" name="fxRate" value="0"><span class="name">Never of themselves<span class="note">Only as an hour begins or at a flick, if those are on</span></span></label>
-      <label class="row"><input type="radio" name="fxRate" value="1"><span class="name">Once an hour</span></label>
-      <label class="row"><input type="radio" name="fxRate" value="2"><span class="name">Twice an hour</span></label>
-      <label class="row"><input type="radio" name="fxRate" value="3"><span class="name">Four times an hour</span></label>
-      <p class="note field">At minutes chosen at random each hour. Each scan lasts two to three seconds.</p>
-    </div>
+    <div class="group"><h3>The time in the bottom margin</h3><div class="seg">
+      <label class="row"><input type="radio" name="margin" value="utc"><span class="name">Zulu (UTC)<span class="note">Universal time, as charts and mission control keep it</span></span></label>
+      <label class="row"><input type="radio" name="margin" value="body"><span class="name">Zone under body<span class="note">The nautical zone under the body, with its letter: Z at Greenwich, R for US Eastern, I for Japan</span></span></label>
+    </div><p class="seg-note"></p></div>
   </details>
   <details class="card" id="sec-home"><summary><span class="title">Home</span><span class="now" id="now-home"></span></summary>
     <p class="note field">Home is marked on the chart, with its sunrise and sunset, moonrise and moonset, or the satellite's next pass.</p>
-    <label class="row"><input type="radio" name="home" value="custom"><span class="name">A place of my own</span></label>
+    <label class="row" id="preset-row"><input type="radio" name="home" value="preset"><span class="name">The time zone's city<span class="note" id="preset-note"></span></span></label>
+    <label class="row"><input type="radio" name="home" value="custom"><span class="name">A place of my own<span class="note">Found by name, or the phone's own position</span></span></label>
     <div id="place" hidden>
       <p id="place-now"></p>
       <label class="field">Search for a town or city<input id="search" type="search" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Norfolk, Virginia"></label>
@@ -275,8 +290,48 @@
         <p id="status">Kept to 0.01°, about a kilometre, on the phone and the watch.</p>
       </div>
     </div>
-    <label class="row" id="preset-row"><input type="radio" name="home" value="preset"><span class="name">The time zone's city<span class="note" id="preset-note"></span></span></label>
-    <label class="row"><input type="radio" name="home" value="none"><span class="name">None</span></label>
+    <label class="row"><input type="radio" name="home" value="none"><span class="name">None<span class="note">No home on the chart; its line in the margin shows the date instead</span></span></label>
+  </details>
+  <details class="card" id="sec-fx"><summary><span class="title">Animations</span><span class="now" id="now-fx"></span></summary>
+    <p class="note field">Brief animations drawn over the face, which is left as it was. Each has its own switch; &#9654; plays it on the preview above.</p>
+    <div class="group"><h3>On the face</h3>
+      <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="body"><span class="name">The body blinks as it steps<span class="note">Each minute, as the body moves on, it blinks and a ring opens round it</span></span></label><button type="button" class="play" data-fx="4" aria-label="Play The body blinks as it steps">&#9654;</button></div>
+      <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="rise"><span class="name">Home pulses as a satellite rises<span class="note">At the minute a satellite comes into view of home, a ring opens round home</span></span></label><button type="button" class="play" data-fx="5" aria-label="Play Home pulses as a satellite rises">&#9654;</button></div>
+      <label class="row"><input type="checkbox" name="fx" value="hour"><span class="name">A scan as each hour begins<span class="note">When the new hour's chart appears, one of the scans below runs over it</span></span></label>
+    </div>
+    <div class="group"><h3>The scans</h3>
+      <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="refresh"><span class="name">Refresh<span class="note">A bright line runs down the screen with the glow of phosphor behind it</span></span></label><button type="button" class="play" data-fx="0" aria-label="Play Refresh">&#9654;</button></div>
+      <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="sort"><span class="name">Pixel sort<span class="note">A band sweeps the screen, each row's light sorted and smeared across it</span></span></label><button type="button" class="play" data-fx="1" aria-label="Play Pixel sort">&#9654;</button></div>
+      <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="reacquire"><span class="name">Reacquire<span class="note">The picture breaks into sorted noise under LOSS OF SIGNAL and resolves again behind the sweep</span></span></label><button type="button" class="play" data-fx="2" aria-label="Play Reacquire">&#9654;</button></div>
+      <div class="fx-row"><label class="row"><input type="checkbox" name="fx" value="tear"><span class="name">Tear<span class="note">Blocks of rows jump sideways, their red split from the rest, as a picture losing its hold</span></span></label><button type="button" class="play" data-fx="3" aria-label="Play Tear">&#9654;</button></div>
+      <label class="row"><input type="checkbox" name="fx" value="everyplate"><span class="name">On every plate<span class="note">Otherwise the scans run only on the plates that are a screen's: Console, Green CRT, Raster and the like</span></span></label>
+    </div>
+    <div class="group"><h3>How often the scans run</h3><div class="seg">
+      <label class="row"><input type="radio" name="fxRate" value="0"><span class="name">Never<span class="note">Only as an hour begins or at a flick, if those are on</span></span></label>
+      <label class="row"><input type="radio" name="fxRate" value="1"><span class="name">1 an hour<span class="note">Once an hour, at a minute chosen at random</span></span></label>
+      <label class="row"><input type="radio" name="fxRate" value="2"><span class="name">2 an hour<span class="note">Twice an hour, at minutes chosen at random</span></span></label>
+      <label class="row"><input type="radio" name="fxRate" value="3"><span class="name">4 an hour<span class="note">Four times an hour, at minutes chosen at random</span></span></label>
+    </div><p class="seg-note"></p></div>
+    <div class="group"><h3>A flick of the wrist</h3><div class="seg">
+      <label class="row"><input type="radio" name="flickMode" value="one"><span class="name">One flick<span class="note">Following more than one satellite, a flick moves to the next: a track list names it while its chart is drawn, and it comes in under a reacquiring sweep. Following one, a flick runs a scan, on any plate</span></span></label>
+      <label class="row"><input type="radio" name="flickMode" value="two"><span class="name">Two flicks<span class="note">The same at two flicks within a second and a half, so a stray movement does nothing</span></span></label>
+      <label class="row"><input type="radio" name="flickMode" value="off"><span class="name">Off<span class="note">The face takes no notice of a flick</span></span></label>
+    </div><p class="seg-note"></p></div>
+    <div class="group"><h3>Quiet Time</h3>
+      <label class="row"><input type="checkbox" name="quietFx"><span class="name">Hold the animations in Quiet Time<span class="note">While the watch's Quiet Time is on, nothing moves but the minute</span></span></label>
+    </div>
+  </details>
+  <details class="card" id="sec-watch"><summary><span class="title">Watch</span><span class="now" id="now-watch"></span></summary>
+    <div class="group"><h3>Along the top</h3>
+      <label class="row"><input type="checkbox" name="fuel"><span class="name">The battery line<span class="note">The battery along the top edge (on the Round 2 a bar round it), in the warning ink at 20% and under, the lettering's while charging, broken while the phone is out of reach</span></span></label>
+      <label class="row"><input type="checkbox" name="antenna"><span class="name">The phone's antenna<span class="note">Beside the battery: lit while the phone is in reach, dimmed (and on the Round 2 crossed) when it is not</span></span></label>
+    </div>
+    <div class="group"><h3>Vibration</h3>
+      <label class="row"><input type="checkbox" name="vibe"><span class="name">When the phone is out of reach<span class="note">A double pulse when the link drops. The corner says NO LINK while it is down</span></span></label>
+      <label class="row"><input type="checkbox" name="riseBuzz"><span class="name">When a satellite rises<span class="note">A double pulse at the minute the satellite comes into view of home</span></span></label>
+      <label class="row"><input type="checkbox" name="chime"><span class="name">At each hour<span class="note">A short pulse as each hour begins</span></span></label>
+      <p class="note field">None in the watch's Quiet Time.</p>
+    </div>
   </details>
   <details class="card" id="sec-events"><summary><span class="title">Calendar</span><span class="now" id="now-events"></span></summary>
     <p class="note field">Off unless you give it a calendar. With one, each event of the coming week stands on the route at its minute as a reporting point, named with five letters from its title.</p>
@@ -286,8 +341,15 @@
     <p class="note field" id="calendar-status"></p>
     <ul id="events"></ul>
   </details>
+  <details class="card" id="sec-about"><summary><span class="title">About</span><span class="now" id="now-about"></span></summary>
+    <div class="about">
+      <p>The watch draws every chart itself, from its own map and the Sun, Moon and satellite positions the phone sends days or weeks ahead: it runs without the phone. Orbits come from <a href="https://celestrak.org">CelesTrak</a>, at most once every two hours each. Not for navigation.</p>
+      <p>Relief and coastlines from public-domain elevation data. Lettering in Departure Mono by Helena Zhang; figures in Jost, Michroma, Orbitron, B612 and others, all under the SIL Open Font License.</p>
+      <p>Source, notes and the study it came from: <a href="https://github.com/huntrontrakkr/groundtrack-watch-face">github.com/huntrontrakkr/groundtrack-watch-face</a></p>
+    </div>
+  </details>
 </form>
-<div class="actions"><button type="button" id="cancel">Cancel</button><button type="button" id="save">Save</button></div>
+<div class="actions"><button type="button" id="cancel">CANCEL</button><button type="button" id="defaults">DEFAULTS</button><button type="button" id="save">SAVE TO WATCH</button></div>
 <script>
 (function(){
   // Filled in by the phone app: {face ('enroute': Groundtrack, its two
@@ -315,6 +377,8 @@
   if(s.hourFigures!=='0')s.hourFigures='1';
   s.extra=(config.settings.extra||['','']).slice(0,2);s.north=config.settings.north==='1';s.tracks=(config.settings.tracks||[]).slice();
   s.legend=config.settings.legend==='1';s.vibe=config.settings.vibe==='1';s.fuel=config.settings.fuel!=='0';
+  // (The watch's own: its antenna, its pulses, the animations in Quiet Time.)
+  s.antenna=config.settings.antenna!=='0';s.chime=config.settings.chime==='1';s.riseBuzz=config.settings.riseBuzz==='1';s.quietFx=config.settings.quietFx!=='0';
   // (On a Round 2, its rim: round the octagon, across chords, or the instrument.)
   s.rim=['bezel','chords','instrument'].indexOf(config.settings.rim)>=0?config.settings.rim:'bezel';var round=!!config.settings.round;
   s.clock24=config.settings.clock24!=='0';
@@ -345,8 +409,17 @@
     var extra=document.createElement('span');extra.className='note';extra.textContent=note;label.lastChild.appendChild(extra);
     return label;
   }
-  config.plates.forEach(function(p){document.getElementById('plates').appendChild(row('plate',p[0],p[1],p[2]));});
-  (config.figureSets||[]).forEach(function(f){document.getElementById('figure-sets').appendChild(row('figures',f[0],f[1],f[2]));});
+  // A gallery's tile: the choice, its thumbnail (drawn by the core), its name.
+  function tile(name,value,title,note){
+    var label=document.createElement('label');label.className='tile';
+    label.innerHTML='<input type="radio" name="'+name+'"><canvas width="200" height="228"></canvas><span class="name"></span>';
+    label.firstChild.value=value;label.childNodes[1].dataset.thumb=(name==='plate'?'plate':'figures')+':'+value;label.lastChild.textContent=title;
+    label.firstChild.setAttribute('aria-label',title);
+    var extra=document.createElement('span');extra.className='note';extra.textContent=note;label.lastChild.appendChild(extra);
+    return label;
+  }
+  config.plates.forEach(function(p){document.getElementById('plates').appendChild(tile('plate',p[0],p[1],p[2]));});
+  (config.figureSets||[]).forEach(function(f){document.getElementById('figure-sets').appendChild(tile('figures',f[0],f[1],f[2]));});
   // One catalog serves every slot. Checkboxes add companions; role changes
   // are explicit actions on the selected cards. Replacement is cancellable.
   var replacing=null,foundEntries=[];
@@ -483,6 +556,11 @@
     show('flickMode',s.fx.indexOf('flick')<0?'off':s.fx.indexOf('twoflicks')>=0?'two':'one');
     var scans=['refresh','sort','reacquire','tear'].filter(function(k){return s.fx.indexOf(k)>=0;}).length;
     document.getElementById('now-fx').textContent=[s.fx.indexOf('body')>=0?'Blink':null,scans?scans+' scan'+(scans>1?'s':'')+(s.fxRate==='0'?'':' · '+['','once','twice','4×'][Number(s.fxRate)]+' an hour'):null].filter(Boolean).join(' · ')||'Off';
+    ['antenna','chime','riseBuzz','quietFx'].forEach(function(k){form.elements[k].checked=s[k];});
+    {var pulses=[s.vibe?'link':null,s.riseBuzz?'rise':null,s.chime?'hour':null].filter(Boolean);
+    document.getElementById('now-watch').textContent=[s.fuel?'Battery':null,s.antenna?'Antenna':null,pulses.length?'Pulses: '+pulses.join(', '):null].filter(Boolean).join(' · ')||'Plain';}
+    document.getElementById('now-about').textContent=config.version?'Version '+config.version:'';
+    document.getElementById('now-line').textContent=named(config.plates,s.plate)[1]+' · '+info[s.body].name.split(' · ')[0];
     hide('legend-group',!r.legend);form.elements.legend.checked=s.legend;form.elements.vibe.checked=s.vibe;form.elements.fuel.checked=s.fuel;
     hide('bare-group',!r.bare);show('hourFigures',s.hourFigures);
     hide('readout-group',!r.readout.length);show('readout',r.readoutShown,r.readout);
@@ -505,6 +583,10 @@
     document.getElementById('now-chart').textContent=[r.span?label('span'):null,r.tape?label('tape'):null,r.bare&&s.hourFigures==='0'?'No hour figures':null,r.readout.length?label('readout'):null].filter(Boolean).join(' · ')||kind[0];
     document.getElementById('now-time').textContent=(s.clock24?'24-hour':'12-hour')+' · '+(s.margin==='body'?'Zone time':'Zulu');
     document.getElementById('now-look').textContent=named(config.plates,s.plate)[1]+' · '+named(config.figureSets||[],s.figures)[1];
+    // (Each segmented choice's note beneath it, and the rim's: last, once
+    // every group shows its choice.)
+    Array.prototype.forEach.call(form.querySelectorAll('.seg'),function(g){var c=g.querySelector('input:checked'),n=g.nextElementSibling;if(n&&n.classList.contains('seg-note'))n.textContent=c?c.parentNode.querySelector('.note').textContent:'';});
+    {var rc=form.querySelector('input[name=rim]:checked');document.getElementById('rim-note').textContent=rc?rc.parentNode.querySelector('.note').textContent:'';}
   }
   form.addEventListener('change',function(e){
     var t=e.target;
@@ -514,6 +596,7 @@
     else if(t.name==='tracked'){if(t.checked){if(t.dataset.found){var entry=foundEntries.filter(function(x){return 'sat:'+x.norad===t.value;})[0];if(entry)choose(entry);}else chooseKey(t.value);}else removeKey(t.value);return;}
     else if(t.name==='legend')s.legend=t.checked;
     else if(t.name==='vibe')s.vibe=t.checked;
+    else if(t.name==='antenna'||t.name==='chime'||t.name==='riseBuzz'||t.name==='quietFx')s[t.name]=t.checked;
     else if(t.name==='fx'){s.fx=s.fx.filter(function(k){return k!==t.value;});if(t.checked)s.fx.push(t.value);render();return;}
     else if(t.name==='fxRate'){s.fxRate=t.value;render();return;}
     else if(t.name==='flickMode'){s.fx=s.fx.filter(function(k){return k!=='flick'&&k!=='twoflicks';});if(t.value!=='off')s.fx.push('flick');if(t.value==='two')s.fx.push('twoflicks');render();return;}
@@ -676,33 +759,39 @@
   // as the watch's reflective screen shows its colours (Pebble's Sunlight
   // mapping), or as drawn. The minute is kept up while the page is open.
   var PV=__PREVIEW__,W=round?260:200,H=round?260:228,core=null,framePtr=0,GT=null,skew=(PV&&PV.now||Date.now())-Date.now(),screen=true,built=null,drawnMinute=-1,fetching={},failed={};
-  // (A Round 2's preview is its round screen.)
-  if(round){var cv0=document.getElementById('preview');cv0.width=W;cv0.height=H;cv0.className='round';}
+  // (Each watch's core, made when it is first wanted: the Time 2's and the
+  // Round 2's, each with its frame, its thumbnails' frame and what it built.)
+  var all=null,cores={},scrubbed=null;
+  function canvasFor(r){var c=document.getElementById('preview');c.width=r?260:200;c.height=r?260:228;c.className=r?'round':'';document.getElementById('bezel').className='bezel'+(r?' round':'');}
+  canvasFor(round);
   function note(text){document.getElementById('preview-note').textContent=text||'';}
   // (Without a preview the bar stays, saying why.)
-  function blank(on){document.getElementById('preview').style.visibility=on?'hidden':'';document.getElementById('colours').hidden=on;document.getElementById('colours-now').hidden=on;}
+  function blank(on){document.getElementById('preview').style.visibility=on?'hidden':'';document.getElementById('colours').hidden=on;}
   function bytesOf(b64){var bin=atob(b64),out=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
+  function coreFor(r){
+    if(cores[r])return cores[r];
+    var wasm=null;PV.assets.parts.forEach(function(p){if(p[0]===(r?-3:-1))wasm=all.subarray(p[1],p[1]+p[2]);});
+    cores[r]=WebAssembly.instantiate(wasm,{wasi_snapshot_preview1:{fd_close:function(){return 0;},fd_seek:function(){return 0;},fd_write:function(){return 0;}}}).then(function(res){
+      var x=res.instance.exports,w=r?260:200,h=r?260:228;
+      PV.assets.parts.forEach(function(p){if(p[0]<0)return;var at=x.core_alloc(p[2]);new Uint8Array(x.memory.buffer,at,p[2]).set(all.subarray(p[1],p[1]+p[2]));x.core_source(p[0],at,p[2]);});
+      return {x:x,w:w,h:h,frame:x.core_alloc(w*h),thumb:x.core_alloc(w*h),built:null};
+    });
+    return cores[r];
+  }
+  function use(k){core=k.x;framePtr=k.frame;W=k.w;H=k.h;built=k.built;}
   function boot(){
     if(!PV||!window.WebAssembly||!window.DecompressionStream)return Promise.reject(new Error('This phone cannot show the preview.'));
     var gz=new Blob([bytesOf(PV.assets.gz)]).stream().pipeThrough(new DecompressionStream('gzip'));
     return new Response(gz).arrayBuffer().then(function(buf){
-      var all=new Uint8Array(buf),wasm=null;
-      PV.assets.parts.forEach(function(p){
-        // (The core for the watch's screen: the Round 2's its own.)
-        if(p[0]===(round?-3:-1))wasm=all.subarray(p[1],p[1]+p[2]);
-        // (The script that makes the chart inputs: it leaves GroundtrackInput.)
-        if(p[0]===-2)(0,eval)(new TextDecoder().decode(all.subarray(p[1],p[1]+p[2]))+'\n;window.GroundtrackInput=GroundtrackInput;');
-      });
-      return WebAssembly.instantiate(wasm,{wasi_snapshot_preview1:{fd_close:function(){return 0;},fd_seek:function(){return 0;},fd_write:function(){return 0;}}}).then(function(r){
-        core=r.instance.exports;
-        PV.assets.parts.forEach(function(p){if(p[0]<0)return;var at=core.core_alloc(p[2]);new Uint8Array(core.memory.buffer,at,p[2]).set(all.subarray(p[1],p[1]+p[2]));core.core_source(p[0],at,p[2]);});
-        framePtr=core.core_alloc(W*H);
-        // The orbits to hand: GPS's and QZSS's nominal ones, then what the
-        // phone has kept and what this page has found.
-        GT=window.GroundtrackInput;GT.registerNominal();
-        s.sats.forEach(function(e){try{GT.addSatellite(e);}catch(error){}});
-        [PV.tles||{},s.tles].forEach(function(sets){Object.keys(sets).forEach(function(n){try{GT.registerElements(sets[n],'celestrak');}catch(error){}});});
-      });
+      all=new Uint8Array(buf);
+      // (The script that makes the chart inputs: it leaves GroundtrackInput.)
+      PV.assets.parts.forEach(function(p){if(p[0]===-2)(0,eval)(new TextDecoder().decode(all.subarray(p[1],p[1]+p[2]))+'\n;window.GroundtrackInput=GroundtrackInput;');});
+      // The orbits to hand: GPS's and QZSS's nominal ones, then what the
+      // phone has kept and what this page has found.
+      GT=window.GroundtrackInput;GT.registerNominal();
+      s.sats.forEach(function(e){try{GT.addSatellite(e);}catch(error){}});
+      [PV.tles||{},s.tles].forEach(function(sets){Object.keys(sets).forEach(function(n){try{GT.registerElements(sets[n],'celestrak');}catch(error){}});});
+      return coreFor(round).then(use);
     });
   }
   // Home as the form has it (the preview follows it).
@@ -713,10 +802,13 @@
     var lat=parseFloat(form.elements.lat.value.replace(',','.')),lon=parseFloat(form.elements.lon.value.replace(',','.'));
     return lat>=-90&&lat<=90&&lon>=-180&&lon<=180?{code:'HOM',name:'Home',lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100}:null;
   }
-  function inputNow(){
-    var now=Date.now()+skew,minute=Number(GT.clockParts(now,PV.zone).m),start=Math.floor(now/60000)*60000-minute*60000;
-    return {minute:minute,text:GT.chartInput({body:s.body,start:start,plate:s.plate,readout:s.readout==='off'?false:s.readout,numerals:s.numerals,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:s.figures,corner:s.corner,
-      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,north:s.north,extra:s.extra,tracks:s.tracks,rim:s.rim})};
+  // The chart input for the settings as they stand (with `over`'s in place
+  // of theirs: a thumbnail's plate, figures or rim), at the minute shown.
+  function inputNow(over){
+    over=over||{};
+    var now=Date.now()+skew,current=Number(GT.clockParts(now,PV.zone).m),minute=scrubbed===null?current:scrubbed,start=Math.floor(now/60000)*60000-current*60000;
+    return {minute:minute,text:GT.chartInput({body:s.body,start:start,plate:over.plate||s.plate,readout:s.readout==='off'?false:s.readout,numerals:s.numerals,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,figures:over.figures||s.figures,corner:s.corner,
+      events:PV.events||[],clock24:s.clock24,zone:PV.zone,home:homeNow(),projection:fuller?'fuller':'chart',face:fuller?undefined:s.face,also:s.also,bare:s.hourFigures==='0',legend:s.legend,north:s.north,extra:s.extra,tracks:s.tracks,rim:over.rim||s.rim})};
   }
   // A satellite's elements for the preview, asked of CelesTrak once.
   function need(n){
@@ -731,16 +823,20 @@
       .catch(function(){failed[n]=true;})
       .then(function(){clearTimeout(late);delete fetching[n];paint();});
   }
-  function show_(){
-    var frame=new Uint8Array(core.memory.buffer,framePtr,W*H),canvas=document.getElementById('preview'),ctx=canvas.getContext('2d'),img=ctx.createImageData(W,H);
-    for(var i=0;i<W*H;i++){
+  // A frame's GColor8 bytes onto a canvas, as the screen shows them or as drawn.
+  function onto(canvas,x,ptr,w,h){
+    var frame=new Uint8Array(x.memory.buffer,ptr,w*h),ctx=canvas.getContext('2d'),img=ctx.createImageData(w,h);
+    for(var i=0;i<w*h;i++){
       var c=frame[i],r=((c>>4)&3)*85,g=((c>>2)&3)*85,b=(c&3)*85;
       if(screen){var hx='#'+[r,g,b].map(function(v){return (v<16?'0':'')+v.toString(16).toUpperCase();}).join(''),m=PV.sunlight[hx];if(m){r=parseInt(m.slice(1,3),16);g=parseInt(m.slice(3,5),16);b=parseInt(m.slice(5,7),16);}}
       img.data[4*i]=r;img.data[4*i+1]=g;img.data[4*i+2]=b;img.data[4*i+3]=255;
     }
     ctx.putImageData(img,0,0);
+  }
+  function show_(){
+    onto(document.getElementById('preview'),core,framePtr,W,H);
+    var b=document.getElementById('colours');b.textContent=screen?'ON SCREEN':'AS DRAWN';b.title=screen?'As the watch\'s screen shows its colours: touch for the colours as drawn':'The colours as drawn: touch for the watch\'s screen';b.setAttribute('aria-pressed',screen?'true':'false');
     document.getElementById('colours-now').textContent=screen?'As the watch\'s screen shows it.':'In the colours as drawn.';
-    document.getElementById('colours').textContent=screen?'Show as drawn':'Show as on the watch';
   }
   // An animation played over the preview's minute (effects.c, as the watch
   // draws it), a frame each 66 ms.
@@ -750,10 +846,17 @@
     if(!core||drawnMinute<0)return;
     stopPlaying();
     if(!core.core_fx_begin(0,kind,drawnMinute,(Math.random()*4294967295)>>>0)){note(kind===5?'Home is not on this chart.':'');return;}
-    note('');
+    note('');document.getElementById('bezel').scrollIntoView({block:'nearest'});
     playing=setInterval(function(){var more=core.core_fx_frame(framePtr);show_();if(!more){clearInterval(playing);playing=null;}},66);
   }
   Array.prototype.forEach.call(document.querySelectorAll('button.play'),function(b){b.addEventListener('click',function(){play(Number(b.dataset.fx));});});
+  // (An hour built in a core's slot, if its input has changed: false if it can't be.)
+  function buildIn(x,text,slot,held){
+    if(text===held)return true;
+    var bytes=new TextEncoder().encode(text),at=x.core_alloc(bytes.length);
+    new Uint8Array(x.memory.buffer,at,bytes.length).set(bytes);
+    var ok=x.core_build(at,bytes.length,slot);x.core_free(at);return !!ok;
+  }
   function paint(){
     if(!core||!GT)return;
     stopPlaying();
@@ -762,23 +865,88 @@
     var made;try{made=inputNow();}catch(error){blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
     blank(false);
     // (The hour is built again only when its input has changed.)
-    if(made.text!==built){
-      var bytes=new TextEncoder().encode(made.text),at=core.core_alloc(bytes.length);
-      new Uint8Array(core.memory.buffer,at,bytes.length).set(bytes);
-      var ok=core.core_build(at,bytes.length,0);core.core_free(at);
-      if(!ok){built=null;blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
-      built=made.text;
-    }
-    // (A full battery's fuel line, or none.)
-    core.core_power(100,s.fuel?0:4);core.core_render(0,made.minute,framePtr);drawnMinute=made.minute;
+    if(!buildIn(core,made.text,0,built)){built=null;cores[round].then(function(k){k.built=null;});blank(true);window.previewDrawn=null;note('No preview for this hour.');return;}
+    built=made.text;cores[round].then(function(k){k.built=made.text;});
+    // (A full battery's line, or none; the antenna, or none.)
+    core.core_power(100,(s.fuel?0:4)|(s.antenna?0:8));core.core_render(0,made.minute,framePtr);drawnMinute=made.minute;
     show_();
+    var hhmm=GT.clockParts(Date.now()+skew,PV.zone);document.getElementById('scrub-time').textContent=String(hhmm.h).padStart(2,'0')+':'+String(made.minute).padStart(2,'0');
+    document.getElementById('scrub').value=String(made.minute);
     // (What was drawn, for tests to draw again.)
-    window.previewDrawn={input:made.text,minute:made.minute,screen:screen};
+    window.previewDrawn={input:made.text,minute:made.minute,screen:screen,round:round};
     note('');
+    thumbsSoon();
   }
-  document.getElementById('colours').addEventListener('click',function(){screen=!screen;if(core&&drawnMinute>=0){show_();if(window.previewDrawn)window.previewDrawn.screen=screen;}});
-  // The minute moves on, and home with what is typed.
-  setInterval(function(){if(core&&GT&&Number(GT.clockParts(Date.now()+skew,PV.zone).m)!==drawnMinute)paint();},5000);
+  // ---- The galleries: each plate, figure set and rim drawn by the core in
+  // the settings as they stand, a thumbnail at a time while the page is idle
+  // (the Look section open), each kept until its input changes.
+  var thumbTimer=null,thumbGen=0;
+  function thumbsSoon(){clearTimeout(thumbTimer);thumbTimer=setTimeout(thumbs,300);}
+  function thumbs(){
+    if(!GT||!all)return;
+    var look=document.getElementById('sec-look');if(!look||!look.open)return;
+    var queue=[].slice.call(look.querySelectorAll('canvas[data-thumb]')).filter(function(c){return !c.closest('[hidden]');}),gen=++thumbGen;
+    (function next(){
+      if(gen!==thumbGen||!queue.length)return;
+      var c=queue.shift(),part=c.dataset.thumb.split(':'),rim=part[0]==='rim',r=rim?true:round,over={};over[part[0]]=part[1];
+      coreFor(r).then(function(k){
+        var made;try{made=inputNow(over);}catch(error){return;}
+        var key=made.text+'|'+made.minute+'|'+screen+'|'+s.fuel+s.antenna;if(c.dataset.key===key)return;
+        if(!buildIn(k.x,made.text,1,null))return;
+        k.x.core_power(100,(s.fuel?0:4)|(s.antenna?0:8));k.x.core_render(1,made.minute,k.thumb);
+        if(part[0]==='figures'){figureFrame(c,k);c.dataset.key=key;return;}
+        c.width=k.w;c.height=k.h;c.className=r?'round':'';onto(c,k.x,k.thumb,k.w,k.h);c.dataset.key=key;
+      }).then(function(){setTimeout(next,0);},function(){setTimeout(next,0);});
+      if(!queue.length)setTimeout(figureCrops,0);
+    })();
+  }
+  // The figure sets' tiles show the figures alone: each set's frame differs
+  // from the preview's only where its figures are, so the box round those
+  // differences, over all the sets, is where to look.
+  function figureFrame(c,k){
+    var f=new Uint8Array(k.x.memory.buffer,k.thumb,k.w*k.h).slice(),p=new Uint8Array(core.memory.buffer,framePtr,W*H),diff=null;
+    if(k.w===W&&k.h===H){diff=new Uint8Array(k.w*k.h);for(var i=0;i<k.w*k.h;i++)diff[i]=f[i]!==p[i]?1:0;}
+    c._frame={f:f,w:k.w,h:k.h,x:k.x};c._diff=diff;
+  }
+  function figureCrops(){
+    var cs=[].slice.call(document.querySelectorAll('#figure-sets canvas')),u=null,w0=0,h0=0,acc=null;
+    // (The differences summed over the sets; the band of rows round the most
+    // of them, gaps of two rows bridged; the columns that differ in it.)
+    cs.forEach(function(c){if(!c._diff)return;w0=c._frame.w;h0=c._frame.h;if(!acc)acc=new Uint16Array(w0*h0);for(var i=0;i<acc.length;i++)acc[i]+=c._diff[i];});
+    if(acc){
+      var rows=new Uint32Array(h0);for(var y=0;y<h0;y++)for(var x=0;x<w0;x++)rows[y]+=acc[y*w0+x];
+      var peak=0;for(var y2=1;y2<h0;y2++)if(rows[y2]>rows[peak])peak=y2;
+      if(rows[peak]){
+        var top=peak,bottom=peak;
+        while(top>0&&(rows[top-1]||(top>2&&(rows[top-2]||rows[top-3]))))top--;
+        while(bottom<h0-1&&(rows[bottom+1]||(bottom<h0-3&&(rows[bottom+2]||rows[bottom+3]))))bottom++;
+        var left=w0,right=-1;for(var yy=top;yy<=bottom;yy++)for(var xx=0;xx<w0;xx++)if(acc[yy*w0+xx]){if(xx<left)left=xx;if(xx>right)right=xx;}
+        if(right>=left)u=[left,top,right,bottom];
+      }
+    }
+    cs.forEach(function(c){
+      var fr=c._frame;if(!fr)return;
+      var b=u?[Math.max(0,u[0]-3),Math.max(0,u[1]-3),Math.min(fr.w-1,u[2]+3),Math.min(fr.h-1,u[3]+3)]:[0,0,fr.w-1,fr.h-1],w=b[2]-b[0]+1,h=b[3]-b[1]+1;
+      var whole=document.createElement('canvas');whole.width=fr.w;whole.height=fr.h;
+      var at=fr.x.core_alloc(fr.w*fr.h);new Uint8Array(fr.x.memory.buffer,at,fr.w*fr.h).set(fr.f);onto(whole,fr.x,at,fr.w,fr.h);fr.x.core_free(at);
+      c.width=w;c.height=h;c.className='crop';c.getContext('2d').drawImage(whole,b[0],b[1],w,h,0,0,w,h);
+    });
+  }
+  document.getElementById('sec-look').addEventListener('toggle',thumbsSoon);
+  document.getElementById('colours').addEventListener('click',function(){screen=!screen;if(core&&drawnMinute>=0){show_();if(window.previewDrawn)window.previewDrawn.screen=screen;thumbsSoon();}});
+  // The minute shown: now (kept up while the page is open), or any of the hour's.
+  document.getElementById('scrub').addEventListener('input',function(e){scrubbed=Number(e.target.value);paint();});
+  document.getElementById('now-btn').addEventListener('click',function(){scrubbed=null;paint();});
+  setInterval(function(){if(scrubbed===null&&core&&GT&&Number(GT.clockParts(Date.now()+skew,PV.zone).m)!==drawnMinute)paint();},5000);
+  // The watch shown: this phone's own first, either at a touch.
+  function screenTo(r){
+    if(!all){return;}
+    round=r;document.getElementById('screen-t2').setAttribute('aria-pressed',r?'false':'true');document.getElementById('screen-r2').setAttribute('aria-pressed',r?'true':'false');
+    canvasFor(r);coreFor(r).then(function(k){use(k);render();paint();});
+  }
+  document.getElementById('screen-t2').addEventListener('click',function(){screenTo(false);});
+  document.getElementById('screen-r2').addEventListener('click',function(){screenTo(true);});
+  document.getElementById('screen-t2').setAttribute('aria-pressed',round?'false':'true');document.getElementById('screen-r2').setAttribute('aria-pressed',round?'true':'false');
   ['lat','lon'].forEach(function(k){form.elements[k].addEventListener('input',paint);});
   bodies();render();
   // (Whatever stops the preview, a throw included, stops only the preview:
@@ -786,6 +954,15 @@
   new Promise(function(done){done(boot());}).then(paint).catch(function(error){blank(true);note('This phone cannot show the preview.');console.log(error&&error.message);});
   form.addEventListener('change',paint);
   document.getElementById('cancel').addEventListener('click',function(){close('CANCELLED');});
+  // Defaults: the face's look and behaviour as a new watch has them; what
+  // you follow, home and the calendar are kept.
+  document.getElementById('defaults').addEventListener('click',function(){
+    var d={plate:'console',figures:'michroma',readout:'flag',numerals:'even',corner:'day',margin:'utc',span:'day',tape:'fixed',transfer:'off',hourFigures:'1',rim:'bezel',fxRate:'2'};
+    Object.keys(d).forEach(function(k){s[k]=d[k];});
+    s.clock24=true;s.fuel=true;s.antenna=true;s.vibe=false;s.chime=false;s.riseBuzz=false;s.quietFx=true;s.legend=false;s.north=false;
+    s.fx=['body','rise','hour','flick','refresh','sort','reacquire','tear'];
+    render();paint();sayTracking('Look and behaviour back to the defaults: what you follow, home and the calendar kept.');
+  });
   document.getElementById('save').addEventListener('click',function(){
     var mode=picked('home'),homeValue='';
     if(mode==='none')homeValue=JSON.stringify({none:true});
@@ -799,7 +976,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',rim:s.rim,fx:s.fx.join(','),fxRate:s.fxRate,vibe:s.vibe?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',rim:s.rim,fx:s.fx.join(','),fxRate:s.fxRate,vibe:s.vibe?'1':'0',antenna:s.antenna?'1':'0',chime:s.chime?'1':'0',riseBuzz:s.riseBuzz?'1':'0',quietFx:s.quietFx?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();
