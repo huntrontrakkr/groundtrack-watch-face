@@ -523,8 +523,6 @@ static void update(Layer *layer,GContext *ctx){
 }
 
 static void tick(struct tm *when,TimeUnits changed){
-  // (A pulse at the hour, if asked, but in Quiet Time.)
-  if(when->tm_min==0&&(s_settings.watch&8)&&!quiet_time_is_active())vibes_short_pulse();
   // (The stack's deepest, logged when it has grown: a minute's drawing too.)
   {static unsigned logged;const unsigned d=stack_deepest();if(d>logged){logged=d;app_note("stack",d);}}
   check(time(NULL));

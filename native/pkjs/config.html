@@ -327,9 +327,8 @@
       <label class="row"><input type="checkbox" name="antenna"><span class="name">The phone's antenna<span class="note">Beside the battery: lit while the phone is in reach, dimmed (and on the Round 2 crossed) when it is not</span></span></label>
     </div>
     <div class="group"><h3>Vibration</h3>
-      <label class="row"><input type="checkbox" name="vibe"><span class="name">When the phone is out of reach<span class="note">A double pulse when the link drops. The corner says NO LINK while it is down</span></span></label>
-      <label class="row"><input type="checkbox" name="riseBuzz"><span class="name">When a satellite rises<span class="note">A double pulse at the minute the satellite comes into view of home</span></span></label>
-      <label class="row"><input type="checkbox" name="chime"><span class="name">At each hour<span class="note">A short pulse as each hour begins</span></span></label>
+      <label class="row"><input type="checkbox" name="vibe"><span class="name">When the phone disconnects<span class="note">A double pulse when the watch loses the phone. The antenna dims and the corner says NO LINK until it is back</span></span></label>
+      <label class="row"><input type="checkbox" name="riseBuzz"><span class="name">When a satellite rises<span class="note">A double pulse as the satellite comes up over home's horizon, the start of a pass you could see from home (the margin's AOS becomes IN VIEW)</span></span></label>
       <p class="note field">None in the watch's Quiet Time.</p>
     </div>
   </details>
@@ -378,7 +377,7 @@
   s.extra=(config.settings.extra||['','']).slice(0,2);s.north=config.settings.north==='1';s.tracks=(config.settings.tracks||[]).slice();
   s.legend=config.settings.legend==='1';s.vibe=config.settings.vibe==='1';s.fuel=config.settings.fuel!=='0';
   // (The watch's own: its antenna, its pulses, the animations in Quiet Time.)
-  s.antenna=config.settings.antenna!=='0';s.chime=config.settings.chime==='1';s.riseBuzz=config.settings.riseBuzz==='1';s.quietFx=config.settings.quietFx!=='0';
+  s.antenna=config.settings.antenna!=='0';s.riseBuzz=config.settings.riseBuzz==='1';s.quietFx=config.settings.quietFx!=='0';
   // (On a Round 2, its rim: round the octagon, across chords, or the instrument.)
   s.rim=['bezel','chords','instrument'].indexOf(config.settings.rim)>=0?config.settings.rim:'bezel';var round=!!config.settings.round;
   s.clock24=config.settings.clock24!=='0';
@@ -556,8 +555,8 @@
     show('flickMode',s.fx.indexOf('flick')<0?'off':s.fx.indexOf('twoflicks')>=0?'two':'one');
     var scans=['refresh','sort','reacquire','tear'].filter(function(k){return s.fx.indexOf(k)>=0;}).length;
     document.getElementById('now-fx').textContent=[s.fx.indexOf('body')>=0?'Blink':null,scans?scans+' scan'+(scans>1?'s':'')+(s.fxRate==='0'?'':' · '+['','once','twice','4×'][Number(s.fxRate)]+' an hour'):null].filter(Boolean).join(' · ')||'Off';
-    ['antenna','chime','riseBuzz','quietFx'].forEach(function(k){form.elements[k].checked=s[k];});
-    {var pulses=[s.vibe?'link':null,s.riseBuzz?'rise':null,s.chime?'hour':null].filter(Boolean);
+    ['antenna','riseBuzz','quietFx'].forEach(function(k){form.elements[k].checked=s[k];});
+    {var pulses=[s.vibe?'disconnect':null,s.riseBuzz?'rise':null].filter(Boolean);
     document.getElementById('now-watch').textContent=[s.fuel?'Battery':null,s.antenna?'Antenna':null,pulses.length?'Pulses: '+pulses.join(', '):null].filter(Boolean).join(' · ')||'Plain';}
     document.getElementById('now-about').textContent=config.version?'Version '+config.version:'';
     document.getElementById('now-line').textContent=named(config.plates,s.plate)[1]+' · '+info[s.body].name.split(' · ')[0];
@@ -596,7 +595,7 @@
     else if(t.name==='tracked'){if(t.checked){if(t.dataset.found){var entry=foundEntries.filter(function(x){return 'sat:'+x.norad===t.value;})[0];if(entry)choose(entry);}else chooseKey(t.value);}else removeKey(t.value);return;}
     else if(t.name==='legend')s.legend=t.checked;
     else if(t.name==='vibe')s.vibe=t.checked;
-    else if(t.name==='antenna'||t.name==='chime'||t.name==='riseBuzz'||t.name==='quietFx')s[t.name]=t.checked;
+    else if(t.name==='antenna'||t.name==='riseBuzz'||t.name==='quietFx')s[t.name]=t.checked;
     else if(t.name==='fx'){s.fx=s.fx.filter(function(k){return k!==t.value;});if(t.checked)s.fx.push(t.value);render();return;}
     else if(t.name==='fxRate'){s.fxRate=t.value;render();return;}
     else if(t.name==='flickMode'){s.fx=s.fx.filter(function(k){return k!=='flick'&&k!=='twoflicks';});if(t.value!=='off')s.fx.push('flick');if(t.value==='two')s.fx.push('twoflicks');render();return;}
@@ -959,7 +958,7 @@
   document.getElementById('defaults').addEventListener('click',function(){
     var d={plate:'console',figures:'michroma',readout:'flag',numerals:'even',corner:'day',margin:'utc',span:'day',tape:'fixed',transfer:'off',hourFigures:'1',rim:'bezel',fxRate:'2'};
     Object.keys(d).forEach(function(k){s[k]=d[k];});
-    s.clock24=true;s.fuel=true;s.antenna=true;s.vibe=false;s.chime=false;s.riseBuzz=false;s.quietFx=true;s.legend=false;s.north=false;
+    s.clock24=true;s.fuel=true;s.antenna=true;s.vibe=false;s.riseBuzz=false;s.quietFx=true;s.legend=false;s.north=false;
     s.fx=['body','rise','hour','flick','refresh','sort','reacquire','tear'];
     render();paint();sayTracking('Look and behaviour back to the defaults: what you follow, home and the calendar kept.');
   });
@@ -976,7 +975,7 @@
     if(link&&!/^(https?|webcal):\/\/\S+$/i.test(link)){document.getElementById('sec-events').open=true;document.getElementById('calendar-status').textContent='A calendar link starts with https:// or webcal://.';form.elements.calendar.focus();return;}
     // (The elements this page fetched, with the satellites added here and
     // for the previews, go with them: the phone need not ask again.)
-    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',rim:s.rim,fx:s.fx.join(','),fxRate:s.fxRate,vibe:s.vibe?'1':'0',antenna:s.antenna?'1':'0',chime:s.chime?'1':'0',riseBuzz:s.riseBuzz?'1':'0',quietFx:s.quietFx?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
+    close(JSON.stringify({body:s.body,face:fuller?undefined:s.face,also:s.also,extra:s.extra,tracks:s.tracks,north:s.north?'1':'0',hourFigures:s.hourFigures,legend:s.legend?'1':'0',rim:s.rim,fx:s.fx.join(','),fxRate:s.fxRate,vibe:s.vibe?'1':'0',antenna:s.antenna?'1':'0',riseBuzz:s.riseBuzz?'1':'0',quietFx:s.quietFx?'1':'0',fuel:s.fuel?'1':'0',sats:s.sats,tles:s.tles,plate:s.plate,readout:s.readout,numerals:s.numerals,figures:s.figures,corner:s.corner,margin:s.margin,span:s.span,tape:s.tape,transfer:s.transfer,
       clock24:s.clock24?'1':'0',home:homeValue,calendar:link}));
   });
 })();

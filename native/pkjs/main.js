@@ -14,7 +14,7 @@
 //   body), hourFigures ('1' or '0': the hour chart with or without its hour
 //   figures), legend ('1': a Fuller sheet's scale bar), vibe ('1': a double
 //   pulse when the phone goes out of reach), fuel ('0': no fuel line),
-//   antenna ('0': no link antenna), chime ('1': a pulse each hour), riseBuzz
+//   antenna ('0': no link antenna), riseBuzz
 //   ('1': a pulse as a satellite rises into home's view), quietFx ('0': the
 //   animations run in Quiet Time too), fx
 //   and fxRate (the animations: src/settings-rules.js EFFECTS), sats (JSON [{norad, name, code, period, ecc, still}]: satellites added
@@ -158,7 +158,7 @@ function watchSettings(){
   var figures=FIGURES.indexOf(setting('figures','michroma')),corner=CORNERS.indexOf(setting('corner','day'));
   bytes.push(numerals<0?2:numerals,setting('margin','utc')==='body'?1:0,tape<0?0:tape,transfer<0?0:transfer,figures<0?FIGURES.indexOf('michroma'):figures,corner<0?0:corner,
     (also().indexOf('sun')>=0?1:0)|(also().indexOf('moon')>=0?2:0),bare()?1:0,(setting('legend','0')==='1'?1:0)|(FACE==='fuller'&&setting('north','0')==='1'?2:0)|(companions[0]&&shownTracks.indexOf(companions[0])>=0?4:0)|(companions[1]&&shownTracks.indexOf(companions[1])>=0?8:0)|Math.max(0,RIMS.indexOf(setting('rim','bezel')))<<4,
-    (setting('vibe','0')==='1'?1:0)|(setting('fuel','1')==='0'?2:0)|(setting('antenna','1')==='0'?4:0)|(setting('chime','0')==='1'?8:0)|(setting('riseBuzz','0')==='1'?16:0)|(setting('quietFx','1')==='1'?32:0));
+    (setting('vibe','0')==='1'?1:0)|(setting('fuel','1')==='0'?2:0)|(setting('antenna','1')==='0'?4:0)|(setting('riseBuzz','0')==='1'?16:0)|(setting('quietFx','1')==='1'?32:0));
   for(var j=0;j<2;j++)i32(companions[j]?Number(companions[j].slice(4)):0);
   for(var j=0;j<2;j++){var c=companions[j]?catalogEntry(companions[j]).code:'';for(var k=0;k<3;k++)bytes.push(k<c.length?c.charCodeAt(k):0);}
   // The animations (src/settings-rules.js EFFECTS): their bits, and how
@@ -426,7 +426,7 @@ Pebble.addEventListener('showConfiguration',function(){
   var timeZone=zone(),preset=HOMES[timeZone],opened=false;
   function open(position){
     if(opened)return;opened=true;
-    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),extra:extra(),tracks:tracks(),north:setting('north','0'),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),rim:setting('rim','bezel'),round:round(),fx:setting('fx',EFFECTS_DEFAULT),fxRate:setting('fxRate','2'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),antenna:setting('antenna','1'),chime:setting('chime','0'),riseBuzz:setting('riseBuzz','0'),quietFx:setting('quietFx','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
+    var config={settings:{body:currentBody(),face:face(currentBody()),also:also(),extra:extra(),tracks:tracks(),north:setting('north','0'),hourFigures:setting('hourFigures','1'),legend:setting('legend','0'),rim:setting('rim','bezel'),round:round(),fx:setting('fx',EFFECTS_DEFAULT),fxRate:setting('fxRate','2'),vibe:setting('vibe','0'),fuel:setting('fuel','1'),antenna:setting('antenna','1'),riseBuzz:setting('riseBuzz','0'),quietFx:setting('quietFx','1'),calendar:setting('calendar',''),plate:setting('plate',DEFAULT_PLATE),readout:readout(),numerals:setting('numerals','even'),figures:setting('figures','michroma'),corner:setting('corner','day'),
       margin:setting('margin','utc'),span:setting('span','day'),tape:setting('tape','fixed'),transfer:setting('transfer','off'),clock24:setting('clock24','1'),home:setting('home',''),timeZone:timeZone},
       // (The calendar's events as last read, and how that went.)
       events:calendarLink()?storedEvents():[],calendarStatus:calendarLink()?setting('calendar-status',''):'',
@@ -469,7 +469,7 @@ Pebble.addEventListener('webviewclosed',function(e){
   if(chosen.face==='enroute'||chosen.face==='plotboard')localStorage.setItem('face',chosen.face);
   if(chosen.vibe==='1'||chosen.vibe==='0')localStorage.setItem('vibe',chosen.vibe);
   if(chosen.fuel==='1'||chosen.fuel==='0')localStorage.setItem('fuel',chosen.fuel);
-  ['antenna','chime','riseBuzz','quietFx'].forEach(function(k){if(chosen[k]==='1'||chosen[k]==='0')localStorage.setItem(k,chosen[k]);});
+  ['antenna','riseBuzz','quietFx'].forEach(function(k){if(chosen[k]==='1'||chosen[k]==='0')localStorage.setItem(k,chosen[k]);});
   if(chosen.north==='1'||chosen.north==='0')localStorage.setItem('north',chosen.north);
   if(Array.isArray(chosen.extra))localStorage.setItem('extra',chosen.extra.slice(0,2).map(function(b){return typeof b==='string'&&b.indexOf('sat:')===0&&known(b)?b:'';}).join(','));
   if(Array.isArray(chosen.tracks))localStorage.setItem('tracks',chosen.tracks.filter(function(b){return typeof b==='string'&&b.indexOf('sat:')===0&&known(b);}).slice(0,3).join(','));

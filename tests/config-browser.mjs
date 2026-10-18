@@ -309,9 +309,9 @@ try{
   await page.locator('input[name=fx][value=sort]').uncheck();await page.locator('input[name=fx][value=everyplate]').check();
   await page.locator('input[name=fxRate][value="3"]').check();
   assert.equal(await page.locator('#now-fx').textContent(),'Blink · 3 scans · 4× an hour');
-  // The watch: no antenna, a pulse each hour.
-  await page.locator('input[name=antenna]').uncheck();await page.locator('input[name=chime]').check();
-  assert.equal(await page.locator('#now-watch').textContent(),'Battery · Pulses: link, hour');
+  // The watch: no antenna, a pulse as a satellite rises.
+  await page.locator('input[name=antenna]').uncheck();await page.locator('input[name=riseBuzz]').check();
+  assert.equal(await page.locator('#now-watch').textContent(),'Battery · Pulses: disconnect, rise');
   // The phone's own fix, rounded to 0.01°.
   await page.click('#locate');
   assert.deepEqual([await page.inputValue('input[name=lat]'),await page.inputValue('input[name=lon]')],['48.86','2.35']);
@@ -334,8 +334,8 @@ try{
   assert.deepEqual({body:stored.body,plate:stored.plate,readout:stored.readout,numerals:stored.numerals,figures:stored.figures,corner:stored.corner,margin:stored.margin,clock24:stored.clock24,home:JSON.parse(stored.home)},
     {body:'moon',plate:'sectional',readout:'callout',numerals:'accent',figures:'orbitron',corner:'point',margin:'body',clock24:'0',home:{lat:48.86,lon:2.35}});
   const i32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
-  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1|4|8|32,...Array(14).fill(0),(255&~32)|256&255,256>>8,3,0,0]));
-  assert.deepEqual([stored.antenna,stored.chime,stored.riseBuzz,stored.quietFx],['0','1','0','1']);
+  assert.equal(JSON.stringify(messages.find(m=>m.Settings).Settings),JSON.stringify([1,1,2,0,1,...i32(4886),...i32(235),...i32(0),0,0,0,0,4,1,0,0,3,1,1,1,0,1|4|16|32,...Array(14).fill(0),(255&~32)|256&255,256>>8,3,0,0]));
+  assert.deepEqual([stored.antenna,stored.riseBuzz,stored.quietFx],['0','1','1']);
   assert.deepEqual([stored.fx,stored.fxRate],['body,rise,hour,flick,refresh,reacquire,tear,everyplate','3']);
   assert.equal(stored.vibe,'1');
   assert.equal(stored.hourFigures,'0');
