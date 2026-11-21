@@ -49,7 +49,7 @@ jobs:
       - name: Install pinned build tools
         run: |
           npm ci
-          pip install pebble-tool==5.0.40
+          pip install pebble-tool==5.0.40 pypkjs==2.0.7 stpyv8==13.1.201.22
           pebble sdk install 4.33.1
       - name: Tests
         run: npm test
@@ -148,7 +148,7 @@ jobs:
         env:
           PEBBLE_FIREBASE_REFRESH_TOKEN: ${{ secrets.PEBBLE_FIREBASE_REFRESH_TOKEN }}
         run: |
-          pip install pebble-tool==5.0.40
+          pip install pebble-tool==5.0.40 pypkjs==2.0.7 stpyv8==13.1.201.22
           python tools/release.py publish --tag "$RELEASE_TAG"
       - name: Publish GitHub release downloads
         env:

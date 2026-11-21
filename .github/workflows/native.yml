@@ -27,7 +27,7 @@ jobs:
       - name: Install pinned build tools
         run: |
           npm ci
-          pip install pebble-tool==5.0.40
+          pip install pebble-tool==5.0.40 pypkjs==2.0.7 stpyv8==13.1.201.22
           pebble sdk install 4.33.1
       - name: Build the watch app
         run: npm run build:native
@@ -61,7 +61,7 @@ jobs:
       - name: Install pinned build tools
         run: |
           npm ci
-          pip install pebble-tool==5.0.40
+          pip install pebble-tool==5.0.40 pypkjs==2.0.7 stpyv8==13.1.201.22
           pebble sdk install 4.33.1
           sudo apt-get install -y --no-install-recommends libsdl2-2.0-0 libpixman-1-0 libfdt1
       - name: Build the watch app

@@ -142,7 +142,7 @@ int32_t civil_date(int y,int m,int d){
 // the Moon), with ---- for a rise or set that doesn't happen that day.
 static void rise_text(const uint8_t *r,bool moon,char *left,char *right){
   const int a=moon?2:0;
-  static const char labels[4][2]={"SR","SS","MR","MS"};
+  static const char labels[4][2]={{'S','R'},{'S','S'},{'M','R'},{'M','S'}};
   for(int k=0;k<2;k++){
     const unsigned v=(unsigned)(r[4+2*(a+k)]|r[5+2*(a+k)]<<8);char *p=k?right:left;
     if(!k){memcpy(p,"HOM ",4);p+=4;}

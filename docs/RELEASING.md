@@ -9,6 +9,8 @@ The *Release watch faces* workflow (`.github/workflows/release.yml`) runs the te
 - `python tools/release.py package` copies each face's build to `release-artifacts/groundtrack-enroute.pbw` (Groundtrack) and `groundtrack-fuller.pbw`, deflated (every member stays byte-identical), with `SHA256SUMS` and the release notes.
 - `python tools/release.py check` verifies the package: the UUID and version, an Emery-only watchface, the `configurable` and `location` capabilities (the settings page and the phone's position), resources within the store's 256 KB and the app within 64 KB, and a store description of at most 1,600 characters.
 
+The workflows pin the phone simulator as well as the Pebble tool: `pebble-tool==5.0.40`, `pypkjs==2.0.7`, and `stpyv8==13.1.201.22`, the versions used by the successful v0.8.1 native build and emulator checks. Pebble tool's open-ended simulator dependency otherwise now selects pypkjs 3.0.4, whose QuickJS runtime lacks the `Intl` support used by the phone-side rise/set calculations. Keep these pins together until a newer runtime passes the same emulator comparison; `tools/emulator.sh` retains the STPyV8 ICU workaround.
+
 ## A release
 
 1. Write `releases/vX.Y.Z.md`, the notes for the store and GitHub.
