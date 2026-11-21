@@ -17,6 +17,62 @@ async function replacePrimary(page,body){
   await row.locator('.use-body').click();
 }
 const primary=page=>page.locator('[data-slot="0"]').getAttribute('data-key');
+
+// Home is optional. A phone zone without one of the study's four presets
+// must still be able to save an unrelated setting, even without a preview.
+async function homeDefaults(browser,bundle){
+  const cases=[
+    {zone:'America/Denver',mode:'none'},
+    {zone:'America/Los_Angeles',mode:'none'},
+    {zone:'Europe/Paris',mode:'none'},
+    {zone:'UTC',mode:'preset'},
+    {zone:'America/New_York',mode:'preset'},
+    {zone:'America/Denver',home:JSON.stringify({lat:39.74,lon:-104.99}),mode:'custom'},
+    {zone:'America/Denver',home:JSON.stringify({none:true}),mode:'none'},
+    {zone:'UTC',mode:'preset',invalid:true},
+    {zone:'America/Denver',mode:'none',body:'sat:25544'}
+  ];
+  for(const c of cases){
+    const stored={timeZone:c.zone,...(c.home?{home:c.home}:{}),...(c.body?{body:c.body}:{})},listeners={},messages=[];
+    let opened=null;
+    const context=vm.createContext({console:{log:()=>{}},navigator:{},clearTimeout,
+      setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);timer.unref();return timer;},
+      localStorage:{getItem:k=>stored[k]??null,setItem:(k,v)=>{stored[k]=String(v);},removeItem:k=>{delete stored[k];}},
+      Pebble:{addEventListener:(name,fn)=>{listeners[name]=fn;},openURL:url=>{opened=url;},sendAppMessage:(m,ok)=>{messages.push(m);setTimeout(ok,0);}}});
+    vm.runInContext(bundle,context);
+    const open=async()=>{opened=null;listeners.showConfiguration({});for(let i=0;i<100&&!opened;i++)await new Promise(r=>setTimeout(r,20));assert.ok(opened?.startsWith('data:text/html;charset=utf-8,'));return decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length));};
+    const bc=await browser.newContext({viewport:{width:320,height:640},timezoneId:c.zone});
+    try{
+      const page=await bc.newPage(),closes=[],errors=[];
+      page.on('pageerror',e=>errors.push(e.message));
+      await page.evaluate(()=>{window.WebAssembly=undefined;});
+      const cdp=await bc.newCDPSession(page);await cdp.send('Page.enable');cdp.on('Page.frameRequestedNavigation',e=>closes.push(e.url));
+      await page.setContent(await open());
+      assert.equal(await page.locator('input[name=home]:checked').inputValue(),c.mode);
+      assert.equal(await page.locator('#sec-home').evaluate(e=>e.open),false);
+      await page.locator('#sec-time summary').click();await page.uncheck('input[name=clock24]');
+      if(c.body)await replacePrimary(page,'sun');
+      if(c.invalid){await page.locator('#sec-home summary').click();await page.check('input[name=home][value=custom]');await page.locator('#sec-home summary').click();}
+      await page.click('#save');
+      if(c.invalid){
+        assert.equal(closes.length,0);assert.equal(await page.locator('#sec-home').evaluate(e=>e.open),true);
+        assert.ok(await page.locator('#status').isVisible());assert.match(await page.locator('#status').textContent(),/Latitude runs/);
+        assert.equal(messages.length,0);
+      }else{
+        for(let i=0;i<50&&!closes.length;i++)await page.waitForTimeout(20);
+        assert.ok(closes[0]?.startsWith('pebblejs://close#'));
+        listeners.webviewclosed({response:closes[0].slice('pebblejs://close#'.length)});
+        assert.equal(stored.clock24,'0');assert.ok(messages.some(m=>m.Settings));
+        assert.equal(stored.home,c.home??(c.mode==='none'?'{"none":true}':''));
+        if(c.body)assert.equal(stored.body,'sun');
+        await page.setContent(await open());
+        assert.equal(await page.locator('input[name=home]:checked').inputValue(),c.mode);
+        assert.equal(await page.locator('input[name=clock24]').isChecked(),false);
+      }
+      assert.deepEqual(errors,[]);
+    }finally{await bc.close();}
+  }
+}
 const dir=mkdtempSync(join(tmpdir(),'groundtrack-config-'));
 let browser;
 try{
@@ -45,6 +101,7 @@ try{
   const html=decodeURIComponent(opened.slice('data:text/html;charset=utf-8,'.length));
 
   browser=await chromium.launch();
+  await homeDefaults(browser,readFileSync(out,'utf8'));
   const browserContext=await browser.newContext({viewport:{width:320,height:640},timezoneId:zone});
   const page=await browserContext.newPage();
   const errors=[],closes=[];
