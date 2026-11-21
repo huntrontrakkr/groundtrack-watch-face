@@ -11,6 +11,8 @@ The *Release watch faces* workflow (`.github/workflows/release.yml`) runs the te
 
 The workflows pin the phone simulator as well as the Pebble tool: `pebble-tool==5.0.40`, `pypkjs==2.0.7`, and `stpyv8==13.1.201.22`, the versions used by the successful v0.8.1 native build and emulator checks. Pebble tool's open-ended simulator dependency otherwise now selects pypkjs 3.0.4, whose QuickJS runtime lacks the `Intl` support used by the phone-side rise/set calculations. Keep these pins together until a newer runtime passes the same emulator comparison; `tools/emulator.sh` retains the STPyV8 ICU workaround.
 
+All verification jobs use Ubuntu 24.04. Playwright 1.55.1 does not support installing Chromium on Ubuntu 26.04, which `ubuntu-latest` now selects; keep the runner pinned until a browser dependency update is verified.
+
 ## A release
 
 1. Write `releases/vX.Y.Z.md`, the notes for the store and GitHub.
