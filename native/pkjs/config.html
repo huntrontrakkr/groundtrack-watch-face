@@ -684,8 +684,9 @@
   document.getElementById('preset-note').textContent=config.preset?config.preset+' ('+config.settings.timeZone+')':'';
   hide('preset-row',!config.preset);
   if(home&&home.none)show('home','none');
-  else if(home||!config.preset){show('home','custom');if(home){form.elements.lat.value=home.lat;form.elements.lon.value=home.lon;}}
-  else show('home','preset');
+  else if(home){show('home','custom');form.elements.lat.value=home.lat;form.elements.lon.value=home.lon;}
+  // An optional home must not require empty coordinates in zones with no preset.
+  else show('home',config.preset?'preset':'none');
   var status=document.getElementById('status');
   function place(){
     document.getElementById('place').hidden=picked('home')!=='custom';
@@ -973,7 +974,7 @@
     if(mode==='custom'){
       // (A decimal comma, as many keypads give, is a decimal point.)
       var lat=parseFloat(form.elements.lat.value.replace(',','.')),lon=parseFloat(form.elements.lon.value.replace(',','.'));
-      if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
+      if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){document.getElementById('sec-home').open=true;status.textContent='Latitude runs from -90 to 90, longitude from -180 to 180.';form.elements.lat.focus();return;}
       homeValue=JSON.stringify(placeName?{lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100,name:placeName.slice(0,60)}:{lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100});
     }
     var link=form.elements.calendar.value.trim();
